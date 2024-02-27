@@ -1,0 +1,10 @@
+*.swp
+*.swo
+bin
+*.log
+*.log.err
+data
+var
+usr
+.idea
+.DS_Store

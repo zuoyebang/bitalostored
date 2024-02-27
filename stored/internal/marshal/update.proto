@@ -1,0 +1,9 @@
+syntax="proto2";
+option go_package = "common/marshal/update;update";
+
+message ByteSlice {
+    required uint64 NodeId = 1;
+    required bool IsMigrate = 2;
+    repeated bytes Data = 3;
+    required uint32 KeyHash = 4;
+}

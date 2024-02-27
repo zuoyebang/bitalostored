@@ -1,0 +1,25 @@
+##################################################
+#                                                #
+#                  Bitalos-Dashboard               #
+#                                                #
+##################################################
+
+# Set Coordinator, only accept "db" & "sqlite".
+# Quick Start
+coordinator_name = "sqlite"
+coordinator_addr = "bitalos-demo.db"
+
+# Set Stored Product Name/Auth.
+product_name = "bitalos-demo"
+product_auth = ""
+
+# Set bind address for admin(rpc), tcp only.
+admin_addr = "0.0.0.0:18080"
+# Set Stored raft
+admin_model  = "raft"
+
+[database]
+username = "admin"
+password = "admin"
+hostport = "127.0.0.1:13306"
+dbname = "bitalos-demo"

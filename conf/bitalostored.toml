@@ -1,0 +1,84 @@
+[server]
+product_name = "bitalostored-demo"
+address = ":19091"
+max_client = 15000
+keep_alive = "600s"
+max_procs = 12
+db_path = "bitalostored-data"
+slow_time = "30ms"
+slow_key_window_time = "2000ms"
+slow_shield = true
+slow_ttl  = "1s"
+slow_maxexec = 100
+slow_topn = 100
+token = "token"
+degrade_signle_node = false
+open_distributed_tx = false
+
+[plugin]
+open_raft = false
+open_panic = true
+open_pprof = false
+pprof_addr = ":26770"
+open_gops = false
+
+[log]
+is_debug = false
+rotation_time = "Daily"
+
+[bitalos]
+write_buffer_size = "256mb" # default
+enable_wal = true
+compact_start_time = 1
+compact_end_time = 6
+compact_interval = 300        
+bithash_gc_threshold = 0.5
+bithash_compression_type = 0            
+enable_expired_deletion = true       
+expired_deletion_interval = 60 
+expired_deletion_qps_threshold = 20000 # default
+io_write_qps_threshold = 20000 # default
+max_field_size = 10240 # default
+max_value_size = 6291456 # default
+enable_raftlog_restore = false # default
+enable_page_block_compression = false # default
+enable_clock_cache = false # default
+cache_size = 0 # default
+
+[raft_queue]
+workers = 60             
+length = 10000           
+
+[raft_cluster]
+cluster_id = 1
+election_rtt = 35
+preelection_rtt = 10
+heartbeat_rtt = 1
+check_quorm = true
+snapshot_entries = 6000000
+compaction_overhead = 500000
+snapshot_compression_type = 1
+entry_compression_type = 1
+disable_auto_compactions = false
+timeout = "2s"
+retry_times = 1
+async_propose = true
+
+[raft_nodehost]
+node_id = 1
+raft_address = "127.0.0.1:19081"
+init_raft_addrlist = ["127.0.0.1:19081"]
+join = false
+snapshot_timeout = "10s"
+rtt = 200
+deployment_id = 0
+max_snapshot_send_bytes_persecod = "60mb"
+max_snapshot_recv_bytes_persecod = "60mb"
+
+[raft_state]
+interval = "3s"
+allow_max_offset = 100000
+
+[dynamic_deadline]
+client_ratio_threshold = [0,20,50,80,90]
+deadline_threshold = ["1800s","600s","180s","60s","10s"]

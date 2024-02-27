@@ -1,0 +1,68 @@
+product_name = "bitalosproxy-demo"
+product_auth = ""
+
+proxy_auth_enabled = false
+proxy_auth_password = "bitalosproxy.clustername"
+proxy_auth_admin = "bitalosproxy.clustername.admin"
+
+dashboard_proto_type = "http"
+dashboard_username = "username"
+dashboard_password = "password"
+
+proto_type = "tcp4"
+proxy_addr = "0.0.0.0:8790"
+admin_addr = "0.0.0.0:8791"
+
+proxy_cloudtype = "txcloud"
+read_cross_cloud = 1
+proxy_max_clients = 1000
+max_procs = 4
+conn_read_buffersize = "4kb"
+conn_write_buffersize = "4kb"
+conn_keepalive = "180s"
+
+local_cache_expiretime = "2m"
+local_cache_cleanuptime = "5m"
+local_cache_bucketnum  = 16
+
+pprof_switch = 0
+pprof_address = ":8113"
+
+metrics_report_log_switch = 1
+metrics_report_log_period = "5s"
+metrics_exporter_switch = 1
+metrics_exporter_period = "5s"
+metrics_reset_cycle = 2
+
+open_distributed_tx = false
+
+breaker_stop_timeout = "200ms"
+breaker_open_fail_rate = 0.05
+breaker_restore_request = 50
+
+[log]
+is_debug = false
+rotation_time = "Hourly"
+log_file = "/tmp/bitalosproxy/proxy.log"
+stats_log_file = "/tmp/bitalosproxy/proxy-stats.log"
+access_log = false
+access_log_file = "/tmp/bitalosproxy/proxy.access.log"
+slow_log = true
+slow_log_cost = "30ms"
+slow_log_file = "/tmp/bitalosproxy/proxy.slow.log"
+
+[redis_default_conf]
+max_idle = 100
+max_active = 600
+idle_timeout = "3600s"
+conn_lifetime = "3600s"
+password = ""
+database = 0
+conn_timeout = "500ms" 
+read_timeout = "1s"
+write_timeout = "1s"
+total_connection = 40
+
+[dynamic_deadline]
+client_ratio_threshold = [0,30,60,80,90]
+deadline_threshold = ["180s","100s","30s","6s","2s"]

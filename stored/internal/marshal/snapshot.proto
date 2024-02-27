@@ -1,0 +1,12 @@
+syntax="proto2";
+option go_package = "common/marshal/snapshot;snapshot";
+
+message Record {
+    optional int64 Expire = 1;
+    required bytes Key = 2;
+    optional bytes Val = 3;
+}
+message Records {
+    repeated Record List = 1;
+}
+

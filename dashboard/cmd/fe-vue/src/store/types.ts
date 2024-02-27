@@ -1,0 +1,5 @@
+export const SET_ROLE = 'SET_ROLE'
+export const SET_BITALOSPROXY = 'SET_BITALOSPROXY'
+export const ADD_ITEM = 'ADD_ITEM'
+export const SET_OPEN = 'SET_OPEN'
+export const SET_CLOSE = 'SET_CLOSE'
