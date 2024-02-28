@@ -11,8 +11,6 @@ slow_shield = true
 slow_ttl  = "1s"
 slow_maxexec = 100
 slow_topn = 100
-token = "token"
-degrade_signle_node = false
 open_distributed_tx = false
 
 [plugin]
