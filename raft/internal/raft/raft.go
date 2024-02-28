@@ -267,7 +267,6 @@ func newRaft(c config.Config, logdb ILogDB, initAddress ...PeerAddress) *raft {
 	}
 	plog.Infof("%s raft log rate limit enabled: %t, %d",
 		dn(r.clusterID, r.nodeID), r.rl.Enabled(), c.MaxInMemLogSize)
-	//从snapshot中加载membership为空，默认用初始化的initAddress
 	st, members := logdb.NodeState()
 	plog.Infof("nodestate from snapshot raft state:%v, members:%v", st, members)
 	if len(members.Addresses) <= 0 {
