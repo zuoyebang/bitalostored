@@ -40,8 +40,8 @@ var nilIterOptions = &IterOptions{
 	KeyHash:    0,
 }
 
-var newBitableKVStrore = kv_bitable.NewKVStore
-var newBitalosdbKVStrore = kv_bitalosdb.NewKVStore
+var newBitableKVStore = kv_bitable.NewKVStore
+var newBitalosdbKVStore = kv_bitalosdb.NewKVStore
 
 type DB struct {
 	DebugInfo DBDebugInfo
@@ -65,13 +65,13 @@ func NewBaseDB(cfg *dbconfig.Config) (*DB, error) {
 	}
 
 	metaDbPath := filepath.Join(pdb.sPath, kv.DB_TYPE_DIR_META)
-	pdb.metaDb, err = newBitalosdbKVStrore(metaDbPath, pdb.cfg, btools.NoneType, kv.DB_TYPE_META)
+	pdb.metaDb, err = newBitalosdbKVStore(metaDbPath, pdb.cfg, btools.NoneType, kv.DB_TYPE_META)
 	if err != nil {
 		return nil, err
 	}
 
 	expireDbPath := filepath.Join(pdb.sPath, kv.DB_TYPE_DIR_EXPIRE)
-	pdb.expireDb, err = newBitableKVStrore(expireDbPath, pdb.cfg, btools.NoneType, kv.DB_TYPE_EXPIRE)
+	pdb.expireDb, err = newBitableKVStore(expireDbPath, pdb.cfg, btools.NoneType, kv.DB_TYPE_EXPIRE)
 	if err != nil {
 		return nil, err
 	}
@@ -93,14 +93,14 @@ func NewDataDB(sPath string, dataType btools.DataType, cfg *dbconfig.Config) (*D
 	}
 
 	dataDbPath := filepath.Join(sPath, dataType.String())
-	pdb.dataDb, err = newBitalosdbKVStrore(dataDbPath, pdb.cfg, dataType, kv.DB_TYPE_DATA)
+	pdb.dataDb, err = newBitalosdbKVStore(dataDbPath, pdb.cfg, dataType, kv.DB_TYPE_DATA)
 	if err != nil {
 		return nil, err
 	}
 
 	if dataType == btools.ZSET {
 		indexDbPath := filepath.Join(sPath, dataType.String()) + kv.DB_TYPE_DIR_INDEX
-		pdb.indexDb, err = newBitalosdbKVStrore(indexDbPath, pdb.cfg, dataType, kv.DB_TYPE_INDEX)
+		pdb.indexDb, err = newBitalosdbKVStore(indexDbPath, pdb.cfg, dataType, kv.DB_TYPE_INDEX)
 		if err != nil {
 			return nil, err
 		}
