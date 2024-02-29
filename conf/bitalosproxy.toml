@@ -19,15 +19,12 @@ proxy_max_clients = 1000
 max_procs = 4
 conn_read_buffersize = "4kb"
 conn_write_buffersize = "4kb"
-conn_keepalive = "180s"
 
 pprof_switch = 0
 pprof_address = ":8113"
 
 metrics_report_log_switch = 1
 metrics_report_log_period = "5s"
-metrics_exporter_switch = 1
-metrics_exporter_period = "5s"
 metrics_reset_cycle = 2
 
 open_distributed_tx = false

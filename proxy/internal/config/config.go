@@ -50,7 +50,6 @@ proxy_cloudtype = "baidu"
 proxy_max_clients = 1000
 conn_read_buffersize = "4kb"
 conn_write_buffersize = "4kb"
-conn_keepalive = "180s"
 
 pprof_switch = 0
 pprof_address = ":8113"
@@ -141,28 +140,27 @@ func (l LogConfig) Validate() error {
 }
 
 type Config struct {
-	ProductName           string            `toml:"product_name" json:"product_name"`
-	ProductAuth           string            `toml:"product_auth" json:"-"`
-	ProxyAuthEnabled      bool              `toml:"proxy_auth_enabled" json:"proxy_auth_enabled"`
-	ProxyAuthPassword     string            `toml:"proxy_auth_password" json:"proxy_auth_password"`
-	ProxyAuthAdmin        string            `toml:"proxy_auth_admin" json:"proxy_auth_admin"`
-	ProtoType             string            `toml:"proto_type" json:"proto_type"`
-	ProxyAddr             string            `toml:"proxy_addr" json:"proxy_addr"`
-	AdminAddr             string            `toml:"admin_addr" json:"admin_addr"`
-	DashboardProtoType    string            `toml:"dashboard_proto_type" json:"dashboard_proto_type"`
-	DashboardUsername     string            `toml:"dashboard_username" json:"dashboard_username"`
-	DashboardPassword     string            `toml:"dashboard_password" json:"dashboard_password"`
-	HostProxy             string            `toml:"-" json:"-"`
-	HostAdmin             string            `toml:"-" json:"-"`
-	ProxyMaxClients       int               `toml:"proxy_max_clients" json:"proxy_max_clients"`
-	MaxProcs              int               `toml:"max_procs" json:"max_procs"`
-	ConnReadBufferSize    bytesize.Int64    `toml:"conn_read_buffersize" json:"conn_read_buffersize"`
-	ConnWriteBufferSize   bytesize.Int64    `toml:"conn_write_buffersize" json:"conn_write_buffersize"`
-	ConnKeepaliveInterval timesize.Duration `toml:"conn_keepalive" json:"conn_keepalive"`
-	ReadOnlyProxy         bool              `toml:"proxy_read_only" json:"proxy_read_only"`
-	ProxyCloudType        string            `toml:"proxy_cloudtype" json:"proxy_cloudtype"`
-	ReadCrossCloud        int               `toml:"read_cross_cloud" json:"read_cross_cloud"`
-	OpenDistributedTx     bool              `toml:"open_distributed_tx" json:"open_distributed_tx"`
+	ProductName         string         `toml:"product_name" json:"product_name"`
+	ProductAuth         string         `toml:"product_auth" json:"-"`
+	ProxyAuthEnabled    bool           `toml:"proxy_auth_enabled" json:"proxy_auth_enabled"`
+	ProxyAuthPassword   string         `toml:"proxy_auth_password" json:"proxy_auth_password"`
+	ProxyAuthAdmin      string         `toml:"proxy_auth_admin" json:"proxy_auth_admin"`
+	ProtoType           string         `toml:"proto_type" json:"proto_type"`
+	ProxyAddr           string         `toml:"proxy_addr" json:"proxy_addr"`
+	AdminAddr           string         `toml:"admin_addr" json:"admin_addr"`
+	DashboardProtoType  string         `toml:"dashboard_proto_type" json:"dashboard_proto_type"`
+	DashboardUsername   string         `toml:"dashboard_username" json:"dashboard_username"`
+	DashboardPassword   string         `toml:"dashboard_password" json:"dashboard_password"`
+	HostProxy           string         `toml:"-" json:"-"`
+	HostAdmin           string         `toml:"-" json:"-"`
+	ProxyMaxClients     int            `toml:"proxy_max_clients" json:"proxy_max_clients"`
+	MaxProcs            int            `toml:"max_procs" json:"max_procs"`
+	ConnReadBufferSize  bytesize.Int64 `toml:"conn_read_buffersize" json:"conn_read_buffersize"`
+	ConnWriteBufferSize bytesize.Int64 `toml:"conn_write_buffersize" json:"conn_write_buffersize"`
+	ReadOnlyProxy       bool           `toml:"proxy_read_only" json:"proxy_read_only"`
+	ProxyCloudType      string         `toml:"proxy_cloudtype" json:"proxy_cloudtype"`
+	ReadCrossCloud      int            `toml:"read_cross_cloud" json:"read_cross_cloud"`
+	OpenDistributedTx   bool           `toml:"open_distributed_tx" json:"open_distributed_tx"`
 
 	PprofSwitch  int    `toml:"pprof_switch" json:"pprof_switch"`
 	PprofAddress string `toml:"pprof_address" json:"pprof_address"`
@@ -242,10 +240,6 @@ func (c *Config) Validate() error {
 	}
 	if c := c.ConnWriteBufferSize; c < 0 || c > MaxInt {
 		return errors.New("invalid conn_write_buffersize")
-	}
-
-	if c := c.ConnKeepaliveInterval; c < 0 {
-		return errors.New("invalid conn_keepalive")
 	}
 
 	if c.MetricsReportLogPeriod.Int64() < 0 {
