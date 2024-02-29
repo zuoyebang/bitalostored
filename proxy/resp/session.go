@@ -50,8 +50,6 @@ type Session struct {
 	Cmd  string
 	Args [][]byte
 
-	keepalive time.Duration
-
 	authEnabled   bool
 	userPassword  string
 	adminPassword string
@@ -126,7 +124,7 @@ type InternalServerConn struct {
 	HostPort string
 }
 
-func NewSession(conn net.Conn, keepalive time.Duration, connReaderBufferSize int, connWriteBufferSize int, openDistributedTx bool) *Session {
+func NewSession(conn net.Conn, connReaderBufferSize int, connWriteBufferSize int, openDistributedTx bool) *Session {
 	if tcpConn, ok := conn.(*net.TCPConn); ok {
 		tcpConn.SetReadBuffer(connWriteBufferSize)
 		tcpConn.SetWriteBuffer(connWriteBufferSize)
@@ -136,7 +134,6 @@ func NewSession(conn net.Conn, keepalive time.Duration, connReaderBufferSize int
 		conn:              conn,
 		Cmd:               "",
 		Args:              nil,
-		keepalive:         keepalive,
 		isAuthed:          false,
 		RespReader:        NewRespReader(conn, connReaderBufferSize),
 		RespWriter:        NewRespWriter(conn, connWriteBufferSize),
@@ -155,9 +152,7 @@ func NewSession(conn net.Conn, keepalive time.Duration, connReaderBufferSize int
 }
 
 func (s *Session) SetReadDeadline() {
-	if s.keepalive > 0 {
-		s.conn.SetReadDeadline(anticc.GetConfigDeadline())
-	}
+	s.conn.SetReadDeadline(anticc.GetConfigDeadline())
 }
 
 func (s *Session) SetLastQueryTime() {

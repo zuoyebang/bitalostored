@@ -67,7 +67,7 @@ func newClientRESP(conn net.Conn, p *Proxy, cfg *config.Config) {
 	c := &sessionClient{}
 	c.rqc = newGlobalRequestClient()
 	c.session = resp.NewSession(
-		conn, cfg.ConnKeepaliveInterval.Duration(),
+		conn,
 		cfg.ConnReadBufferSize.AsInt(),
 		cfg.ConnWriteBufferSize.AsInt(),
 		cfg.OpenDistributedTx)
