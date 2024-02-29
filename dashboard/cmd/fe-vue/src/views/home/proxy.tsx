@@ -3,12 +3,11 @@ import { CLOUD_TYPE_LIST } from '@/constant'
 import { addProxy, deleteProxy, syncProxy, forceDel, hotkeys, slowkeys, crossCloud } from '@/api'
 import AppMenu from '@/components/app-menu'
 import AppModal from '@/components/app-modal'
-import LogModal from '@/components/log-modal'
 import { ProxyModels } from '@/interfaces/home'
 
 export default Vue.extend({
   props: ['modelsList', 'statsList', 'readCrossCloud'],
-  components: { DeleteMenu: AppMenu, AppModal: AppModal, LogModal },
+  components: { DeleteMenu: AppMenu, AppModal: AppModal },
   data() {
     return {
       address: '',

@@ -2,10 +2,9 @@ import { Vue, Component, Prop, Emit } from 'vue-property-decorator'
 import { GMC, GroupModels, GroupModelsComputed, GroupModelsServer, GroupStats } from '@/interfaces/home'
 import { deleteGroup, deleteServerToGroup, compact, logCompact, handleNode, pendingGroupServer, promoteGroup, replicaGroups, syncGroup, degradeGroup, enableGroup, showMembership } from '@/api'
 import AppMenu from '@/components/app-menu'
-import LogModal from '@/components/log-modal'
 
 
-@Component({ components: { DeleteMenu: AppMenu, LogModal } })
+@Component({ components: { DeleteMenu: AppMenu } })
 export default class GroupView extends Vue {
   @Prop()
   host
@@ -32,7 +31,6 @@ export default class GroupView extends Vue {
     return <v-card-text class='pt-0 mt-0'>
       <v-snackbar vModel={this.snackbar} timeout={2000} top={true} color={'success'}  >Copy successful</v-snackbar>
       {this.list.map((i, index) => this.genGroupTable2(i, index))}
-      {this.getLog()}
     </v-card-text>
   }
 
@@ -334,12 +332,6 @@ export default class GroupView extends Vue {
         },
         [attr])
     )
-  }
-  getLog() {
-    return this.isShowLog && <v-dialog
-      v-model={this.isShowLog} width="80%">
-      <log-modal logProxy={this.logProxy}></log-modal>
-    </v-dialog>
   }
   async onChangeItemReplica(s: GroupModelsServer & GMC & GroupStats, g: GroupModels, index) {
     this.loading.index = index
