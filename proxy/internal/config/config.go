@@ -52,10 +52,6 @@ conn_read_buffersize = "4kb"
 conn_write_buffersize = "4kb"
 conn_keepalive = "180s"
 
-local_cache_expiretime = "2m"
-local_cache_cleanuptime = "5m"
-local_cache_bucketnum  = 16
-
 pprof_switch = 0
 pprof_address = ":8113"
 
