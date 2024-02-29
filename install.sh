@@ -187,7 +187,6 @@ length = 10000
 [raft_cluster]
 cluster_id = $3
 election_rtt = 35
-preelection_rtt = 10
 heartbeat_rtt = 1
 check_quorm = true
 snapshot_entries = 6000000

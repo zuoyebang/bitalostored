@@ -195,7 +195,6 @@ type RaftStateConfig struct {
 type RaftClusterConfig struct {
 	ClusterId               uint64            `toml:"cluster_id" mapstructure:"cluster_id"`
 	ElectionRTT             uint64            `toml:"election_rtt" mapstructure:"election_rtt"`
-	PreElectionRTT          uint64            `toml:"preelection_rtt" mapstructure:"preelection_rtt"`
 	HeartbeatRTT            uint64            `toml:"heartbeat_rtt" mapstructure:"heartbeat_rtt"`
 	CheckQuorum             bool              `toml:"check_quorm" mapstructure:"check_quorm"`
 	SnapshotEntries         uint64            `toml:"snapshot_entries" mapstructure:"snapshot_entries"`
