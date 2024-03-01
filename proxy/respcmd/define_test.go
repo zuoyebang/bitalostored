@@ -21,10 +21,10 @@ import (
 )
 
 func init() {
-	addr := "172.29.210.249:8781"
+	addr := "127.0.0.1:8781"
 	initRedisPool(addr, 150)
 
-	baseAddr := "172.29.210.249:8779"
+	baseAddr := "127.0.0.1:8779"
 	initBaseRedisPool(baseAddr, 150)
 }
 
