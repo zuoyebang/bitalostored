@@ -114,7 +114,7 @@ Cache：disable
 
 ## 文档
 
-- 技术架构和文档，参考官网：[bitalos.zuoyebang.com](https://bitalos.zuoyebang.com "BITALOS")（建设中...）
+- 技术架构和文档，参考官网：[bitalos.zuoyebang.com](https://bitalos.zuoyebang.com)
 
 ## 技术积累(bitalosearch)
 
