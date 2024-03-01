@@ -127,7 +127,7 @@ Cache：disable
 
 ## Document
 
-Technical architecture and documentation, refer to the official website: [bitalos.zuoyebang.com](https://bitalos.zuoyebang.com "BITALOS") (Building...)
+Technical architecture and documentation, refer to the official website: [bitalos.zuoyebang.com](https://bitalos.zuoyebang.com)
 
 ## Technology accumulation(bitalosearch)
 
