@@ -33,13 +33,13 @@ require (
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.8.4
 	github.com/yuin/gopher-lua v1.1.1
-	github.com/zuoyebang/bitalosdb v1.0.0
+	github.com/zuoyebang/bitalosdb v1.0.1
 	github.com/zuoyebang/bitalostable v1.0.0
 	go.uber.org/atomic v1.7.0
 	go.uber.org/zap v1.26.0
 	golang.org/x/net v0.20.0
 	golang.org/x/sys v0.16.0
-	google.golang.org/protobuf v1.28.1
+	google.golang.org/protobuf v1.33.0
 	gorm.io/driver/mysql v1.5.2
 	gorm.io/driver/sqlite v1.5.4
 	gorm.io/gorm v1.25.6
