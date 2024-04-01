@@ -13,7 +13,6 @@ require (
 	github.com/go-martini/martini v0.0.0-20170121215854-22fa46961aab
 	github.com/go-sql-driver/mysql v1.7.0
 	github.com/goccy/go-json v0.10.2
-	github.com/golang/protobuf v1.5.2
 	github.com/golang/snappy v0.0.4
 	github.com/gomodule/redigo v2.0.0+incompatible
 	github.com/google/gops v0.3.28
@@ -33,7 +32,7 @@ require (
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.8.4
 	github.com/yuin/gopher-lua v1.1.1
-	github.com/zuoyebang/bitalosdb v1.0.1
+	github.com/zuoyebang/bitalosdb v1.0.2
 	github.com/zuoyebang/bitalostable v1.0.0
 	go.uber.org/atomic v1.7.0
 	go.uber.org/zap v1.26.0

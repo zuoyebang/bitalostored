@@ -25,15 +25,14 @@ import (
 	"strings"
 	"time"
 
+	jsoniter "github.com/json-iterator/go"
 	braft "github.com/zuoyebang/bitalostored/raft"
 	"github.com/zuoyebang/bitalostored/stored/internal/config"
 	"github.com/zuoyebang/bitalostored/stored/internal/errn"
 	"github.com/zuoyebang/bitalostored/stored/internal/log"
 	"github.com/zuoyebang/bitalostored/stored/internal/marshal/update"
 	"github.com/zuoyebang/bitalostored/stored/server"
-
-	"github.com/golang/protobuf/proto"
-	jsoniter "github.com/json-iterator/go"
+	"google.golang.org/protobuf/proto"
 )
 
 func (p *StartRun) AddNode(nodeId uint64, address string, retryTime int) (RetType, error) {

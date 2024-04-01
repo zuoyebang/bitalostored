@@ -12,13 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-GOPATH ?= $(shell go env GOPATH)
-ifeq "$(GOPATH)" ""
-  $(error Please set the environment variable GOPATH before running `make`)
-endif
-
-GO      := GO111MODULE=on CGO_ENABLED=1 go
-GOBUILD := $(GO) build
+CGO_LDFLAGS=CGO_LDFLAGS="-lstdc++ -O2"
+GOBUILD=go build
+GOCGOBUILD=CGO_ENABLED=1 $(CGO_LDFLAGS) $(GOBUILD)
 
 .PHONY: bitalosproxy bitalostored clean buildsucc bitalosdashboard bitalosfe
 
@@ -33,16 +29,16 @@ bitalos-deps:
 	@mkdir -p bin && bash version
 
 bitalosproxy: bitalos-deps
-	$(GOBUILD) -o bin/bitalosproxy ./proxy/cmd
+	$(GOCGOBUILD) -o bin/bitalosproxy ./proxy/cmd
 
 bitalostored: bitalos-deps
-	GOEXPERIMENT=arenas $(GOBUILD) -o bin/bitalostored ./stored/cmd
+	GOEXPERIMENT=arenas $(GOCGOBUILD) -o bin/bitalostored ./stored/cmd
 
 bitalosdashboard: bitalos-deps
-	$(GOBUILD) -o bin/bitalosdashboard ./dashboard/cmd/dashboard
+	$(GOCGOBUILD) -o bin/bitalosdashboard ./dashboard/cmd/dashboard
 
 bitalosfe: bitalos-deps
-	$(GOBUILD) -o bin/bitalosfe ./dashboard/cmd/fe
+	$(GOCGOBUILD) -o bin/bitalosfe ./dashboard/cmd/fe
 	@cp -rf dashboard/cmd/fe-vue/dist bin/
 
 clean:

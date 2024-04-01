@@ -1,5 +1,5 @@
 syntax="proto2";
-option go_package = "common/marshal/update;update";
+option go_package = "internal/marshal/update;update";
 
 message ByteSlice {
     required uint64 NodeId = 1;
