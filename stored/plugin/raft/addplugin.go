@@ -24,8 +24,7 @@ import (
 	"github.com/zuoyebang/bitalostored/stored/internal/log"
 	"github.com/zuoyebang/bitalostored/stored/internal/marshal/update"
 	"github.com/zuoyebang/bitalostored/stored/server"
-
-	"github.com/golang/protobuf/proto"
+	"google.golang.org/protobuf/proto"
 )
 
 func addPluginStartInitRaft(raft *StartRun) {
