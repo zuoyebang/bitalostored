@@ -12,15 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-CGO_LDFLAGS=CGO_LDFLAGS="-lstdc++ -O2"
+CGOLDFLAGS=CGO_LDFLAGS="-lstdc++ -lm -lz -lbz2 -lsnappy -llz4 -ljemalloc -O2"
+GOARENAS=GOEXPERIMENT=arenas
 GOBUILD=go build
-GOCGOBUILD=CGO_ENABLED=1 $(CGO_LDFLAGS) $(GOBUILD)
 
-.PHONY: bitalosproxy bitalostored clean buildsucc bitalosdashboard bitalosfe
+.PHONY: bitalosdashboard bitalosfe bitalosproxy bitalostored clean buildsucc
 
 .DEFAULT_GOAL := all
 
-all: bitalosproxy bitalostored bitalosdashboard bitalosfe buildsucc
+all: bitalosdashboard bitalosfe bitalosproxy bitalostored buildsucc
 
 buildsucc:
 	@echo Build Bitalos successfully!
@@ -28,18 +28,18 @@ buildsucc:
 bitalos-deps:
 	@mkdir -p bin && bash version
 
-bitalosproxy: bitalos-deps
-	$(GOCGOBUILD) -o bin/bitalosproxy ./proxy/cmd
-
-bitalostored: bitalos-deps
-	GOEXPERIMENT=arenas $(GOCGOBUILD) -o bin/bitalostored ./stored/cmd
-
 bitalosdashboard: bitalos-deps
-	$(GOCGOBUILD) -o bin/bitalosdashboard ./dashboard/cmd/dashboard
+	$(GOBUILD) -o bin/bitalosdashboard ./dashboard/cmd/dashboard
 
 bitalosfe: bitalos-deps
-	$(GOCGOBUILD) -o bin/bitalosfe ./dashboard/cmd/fe
+	$(GOBUILD) -o bin/bitalosfe ./dashboard/cmd/fe
 	@cp -rf dashboard/cmd/fe-vue/dist bin/
+
+bitalosproxy: bitalos-deps
+	CGO_ENABLED=1 $(CGOLDFLAGS) $(GOBUILD) -o bin/bitalosproxy ./proxy/cmd
+
+bitalostored: bitalos-deps
+	CGO_ENABLED=1 $(GOARENAS) $(CGOLDFLAGS) $(GOBUILD) -o bin/bitalostored ./stored/cmd
 
 clean:
 	@rm -rf bin

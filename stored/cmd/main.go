@@ -67,7 +67,7 @@ func main() {
 
 	log.Info("server is working ...")
 
-	server.InitLuaPool()
+	server.InitLuaPool(s)
 	info.Init()
 	catch_panic.Init()
 	pprof.Init()
