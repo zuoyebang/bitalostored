@@ -126,7 +126,7 @@ Cache：20GB
 
 ## Document
 
-Technical architecture and documentation, refer to the official website: bitalos.zuoyebang.com (Building...)
+Technical architecture and documentation, refer to the official website: bitalos.zuoyebang.com
 
 ## Technology accumulation(bitalosearch)
 
