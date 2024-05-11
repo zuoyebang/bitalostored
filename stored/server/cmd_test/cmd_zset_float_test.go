@@ -42,16 +42,18 @@ func TestZSetFloat(t *testing.T) {
 		t.Fatal(n)
 	}
 
-	if n, err := redis.Int(c.Do("zkeyexists", key)); err != nil {
-		t.Fatal(err)
-	} else if n != 1 {
-		t.Fatal(n)
-	}
+	for i := 0; i < readNum; i++ {
+		if n, err := redis.Int(c.Do("zkeyexists", key)); err != nil {
+			t.Fatal(err)
+		} else if n != 1 {
+			t.Fatal(n)
+		}
 
-	if n, err := redis.Int(c.Do("zcard", key)); err != nil {
-		t.Fatal(n)
-	} else if n != 2 {
-		t.Fatal(n)
+		if n, err := redis.Int(c.Do("zcard", key)); err != nil {
+			t.Fatal(n)
+		} else if n != 2 {
+			t.Fatal(n)
+		}
 	}
 
 	if n, err := redis.Int(c.Do("zadd", key, -1.0, "a", -2.0, "b")); err != nil {
@@ -60,10 +62,12 @@ func TestZSetFloat(t *testing.T) {
 		t.Fatal(n)
 	}
 
-	if n, err := redis.Int(c.Do("zcard", key)); err != nil {
-		t.Fatal(n)
-	} else if n != 2 {
-		t.Fatal(n)
+	for i := 0; i < readNum; i++ {
+		if n, err := redis.Int(c.Do("zcard", key)); err != nil {
+			t.Fatal(n)
+		} else if n != 2 {
+			t.Fatal(n)
+		}
 	}
 
 	if n, err := redis.Int(c.Do("zadd", key, 3.0, "c", 4.0, "d")); err != nil {
@@ -72,16 +76,18 @@ func TestZSetFloat(t *testing.T) {
 		t.Fatal(n)
 	}
 
-	if n, err := redis.Int(c.Do("zcard", key)); err != nil {
-		t.Fatal(err)
-	} else if n != 4 {
-		t.Fatal(n)
-	}
+	for i := 0; i < readNum; i++ {
+		if n, err := redis.Int(c.Do("zcard", key)); err != nil {
+			t.Fatal(err)
+		} else if n != 4 {
+			t.Fatal(n)
+		}
 
-	if s, err := redis.Float64(c.Do("zscore", key, "c")); err != nil {
-		t.Fatal(err)
-	} else if math.Abs(s-3.0) > math.SmallestNonzeroFloat64 {
-		t.Fatal(s)
+		if s, err := redis.Float64(c.Do("zscore", key, "c")); err != nil {
+			t.Fatal(err)
+		} else if math.Abs(s-3.0) > math.SmallestNonzeroFloat64 {
+			t.Fatal(s)
+		}
 	}
 
 	if n, err := redis.Int(c.Do("zrem", key, "d", "e")); err != nil {
@@ -90,10 +96,12 @@ func TestZSetFloat(t *testing.T) {
 		t.Fatal(n)
 	}
 
-	if n, err := redis.Int(c.Do("zcard", key)); err != nil {
-		t.Fatal(err)
-	} else if n != 3 {
-		t.Fatal(n)
+	for i := 0; i < readNum; i++ {
+		if n, err := redis.Int(c.Do("zcard", key)); err != nil {
+			t.Fatal(err)
+		} else if n != 3 {
+			t.Fatal(n)
+		}
 	}
 
 	if n, err := redis.Float64(c.Do("zincrby", key, 4.0, "c")); err != nil {
@@ -114,10 +122,12 @@ func TestZSetFloat(t *testing.T) {
 		t.Fatal(n)
 	}
 
-	if n, err := redis.Int(c.Do("zcard", key)); err != nil {
-		t.Fatal(err)
-	} else if n != 4 {
-		t.Fatal(n)
+	for i := 0; i < readNum; i++ {
+		if n, err := redis.Int(c.Do("zcard", key)); err != nil {
+			t.Fatal(err)
+		} else if n != 4 {
+			t.Fatal(n)
+		}
 	}
 
 	if n, err := redis.Int(c.Do("zrem", key, "a", "b", "c", "d")); err != nil {
@@ -126,10 +136,12 @@ func TestZSetFloat(t *testing.T) {
 		t.Fatal(n)
 	}
 
-	if n, err := redis.Int(c.Do("zcard", key)); err != nil {
-		t.Fatal(err)
-	} else if n != 0 {
-		t.Fatal(n)
+	for i := 0; i < readNum; i++ {
+		if n, err := redis.Int(c.Do("zcard", key)); err != nil {
+			t.Fatal(err)
+		} else if n != 0 {
+			t.Fatal(n)
+		}
 	}
 
 }

@@ -15,28 +15,33 @@
 package base
 
 import (
+	"fmt"
 	"sync/atomic"
+	"time"
 
+	"github.com/panjf2000/ants/v2"
+	"github.com/zuoyebang/bitalostored/butils/vectormap"
 	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/bitsdb/locker"
 	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/bitskv"
 	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/bitskv/kv"
 	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/btools"
 	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/dbconfig"
 	"github.com/zuoyebang/bitalostored/stored/internal/errn"
+	"github.com/zuoyebang/bitalostored/stored/internal/log"
+)
 
-	"github.com/panjf2000/ants/v2"
+const (
+	cacheBucketNum   int = 1024
+	eliminateThreads int = 1
 )
 
 type BaseDB struct {
-	DB             *bitskv.DB
-	DelExpirePool  *ants.PoolWithFunc
-	IsKeyScan      atomic.Int32
-	DelExpireDbNum atomic.Uint64
-	DelMetaDbNum   atomic.Uint64
-	DelDataDbNum   atomic.Uint64
-	DelIndexDbNum  atomic.Uint64
-	Ready          atomic.Bool
-	KeyLocker      *locker.ScopeLocker
+	DB            *bitskv.DB
+	MetaCache     *vectormap.VectorMap
+	DelExpirePool *ants.PoolWithFunc
+	IsKeyScan     atomic.Int32
+	Ready         atomic.Bool
+	KeyLocker     *locker.ScopeLocker
 }
 
 func NewBaseDB(cfg *dbconfig.Config) (*BaseDB, error) {
@@ -48,6 +53,14 @@ func NewBaseDB(cfg *dbconfig.Config) (*BaseDB, error) {
 	baseDb := &BaseDB{
 		DB:        db,
 		KeyLocker: locker.NewScopeLocker(btools.KeyLockerPoolCap),
+		MetaCache: nil,
+	}
+
+	if cfg.CacheSize > 0 {
+		baseDb.MetaCache = vectormap.NewVectorMap(uint32(cfg.CacheHashSize),
+			vectormap.WithBuckets(cacheBucketNum),
+			vectormap.WithLogger(log.GetLogger()),
+			vectormap.WithEliminate(vectormap.Byte(cfg.CacheSize), eliminateThreads, 180*time.Second))
 	}
 
 	return baseDb, nil
@@ -68,12 +81,32 @@ func (b *BaseDB) IsReady() bool {
 func (b *BaseDB) Close() {
 	b.SetNoReady()
 	b.DB.Close()
+	if b.MetaCache != nil {
+		b.MetaCache = nil
+	}
+}
+
+func (b *BaseDB) ClearCache() {
+	if b.MetaCache != nil {
+		b.MetaCache.Clear()
+	}
 }
 
 func (b *BaseDB) GetMeta(key []byte) ([]byte, func(), error) {
+	if b.MetaCache != nil {
+		v, closer, ok := b.MetaCache.Get(key)
+		if ok {
+			return v, closer, nil
+		}
+	}
+
 	val, closer, err := b.DB.GetMeta(key)
 	if b.DB.IsNotFound(err) {
 		return nil, nil, nil
+	}
+
+	if b.MetaCache != nil && len(val) > 0 {
+		b.MetaCache.RePut(key, val)
 	}
 	return val, closer, err
 }
@@ -120,6 +153,7 @@ func (b *BaseDB) getMetaWithValue(ek []byte, dt btools.DataType) (mkv *MetaData,
 	}
 
 	if dt != btools.NoneType && dt != mkv.dt {
+		log.Errorf("getMetaWithValue dataType notmatch ek:%s exp:%d act:%d mkv:%v", string(ek), dt, mkv.dt, mkv)
 		PutMkvToPool(mkv)
 		return nil, nil, errn.ErrWrongType
 	}
@@ -178,7 +212,11 @@ func (b *BaseDB) DeleteMetaKey(key []byte) error {
 	defer b.DB.PutWriteBatchToPool(wb)
 
 	_ = wb.Delete(key)
-	return wb.Commit()
+	err := wb.Commit()
+	if err == nil && b.MetaCache != nil {
+		b.MetaCache.Delete(key)
+	}
+	return err
 }
 
 func (b *BaseDB) DeleteExpireKey(key []byte) error {
@@ -195,4 +233,22 @@ func (b *BaseDB) SetDelExpireDataPool(pool *ants.PoolWithFunc) {
 
 func (b *BaseDB) GetAllDB() []kv.IKVStore {
 	return b.DB.GetAllDB()
+}
+
+func (b *BaseDB) CacheInfo() string {
+	if b.MetaCache == nil {
+		return ""
+	}
+	maxMem := b.MetaCache.MaxMem()
+	usedMem := b.MetaCache.UsedMem()
+	effectiveMem := b.MetaCache.EffectiveMem()
+	remainItemNum := b.MetaCache.Capacity()
+	itemNum := b.MetaCache.Count()
+	missCount := b.MetaCache.MissCount()
+	queryCount := b.MetaCache.QueryCount()
+	var hitRate float64
+	if queryCount > 0 {
+		hitRate = float64(queryCount-missCount) / float64(queryCount)
+	}
+	return fmt.Sprintf("maxmem:%d usedMem:%d effectiveMem:%d remainItem:%d items:%d queryCount:%d missCount:%d hitRate:%.4f", maxMem, usedMem, effectiveMem, remainItemNum, itemNum, queryCount, missCount, hitRate)
 }

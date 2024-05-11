@@ -236,12 +236,20 @@ func (zo *ZSetObject) ZIncrBy(key []byte, khash uint32, delta float64, member []
 	keyKind := mkv.Kind()
 	base.EncodeZsetDataKey(ekf[:], keyVersion, khash, member)
 
+	var updateCache func() = nil
+
 	if !kexist {
 		mkv.IncrSize(1)
 		newScore = delta
 		var meta [base.MetaMixValueLen]byte
 		base.EncodeMetaDbValueForMix(meta[:], mkv)
 		_ = metaWb.Put(mk, meta[:])
+		updateCache = func() {
+			if zo.BaseDb.MetaCache != nil {
+				zo.BaseDb.MetaCache.Put(mk, meta[:])
+			}
+		}
+
 		_ = wb.Put(ekf[:], numeric.Float64ToByteSort(delta, scoreBuf[:]))
 		_ = zo.setZsetIndexValue(indexWb, keyVersion, keyKind, khash, newScore, member)
 	} else {
@@ -265,6 +273,11 @@ func (zo *ZSetObject) ZIncrBy(key []byte, khash uint32, delta float64, member []
 			var meta [base.MetaMixValueLen]byte
 			base.EncodeMetaDbValueForMix(meta[:], mkv)
 			_ = metaWb.Put(mk, meta[:])
+			updateCache = func() {
+				if zo.BaseDb.MetaCache != nil {
+					zo.BaseDb.MetaCache.Put(mk, meta[:])
+				}
+			}
 		}
 		_ = zo.deleteZsetIndexKey(indexWb, keyVersion, keyKind, khash, oldScore, member)
 		newScore = oldScore + delta
@@ -280,6 +293,8 @@ func (zo *ZSetObject) ZIncrBy(key []byte, khash uint32, delta float64, member []
 	}
 	if err = metaWb.Commit(); err != nil {
 		return 0, err
+	} else if updateCache != nil {
+		updateCache()
 	}
 
 	return newScore, nil

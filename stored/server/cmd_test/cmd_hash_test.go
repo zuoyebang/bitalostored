@@ -22,10 +22,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/zuoyebang/bitalostored/stored/internal/resp"
-
 	"github.com/gomodule/redigo/redis"
 	"github.com/stretchr/testify/require"
+	"github.com/zuoyebang/bitalostored/stored/internal/resp"
 )
 
 func TestHash(t *testing.T) {
@@ -35,10 +34,12 @@ func TestHash(t *testing.T) {
 	key := []byte("a")
 	c.Do("hclear", key)
 
-	if n, err := redis.Int(c.Do("hkeyexists", key)); err != nil {
-		t.Fatal(err)
-	} else if n != 0 {
-		t.Fatal(n)
+	for i := 0; i < readNum; i++ {
+		if n, err := redis.Int(c.Do("hkeyexists", key)); err != nil {
+			t.Fatal(err)
+		} else if n != 0 {
+			t.Fatal(n)
+		}
 	}
 
 	if n, err := redis.Int(c.Do("hset", key, 1, 0)); err != nil {
@@ -46,28 +47,30 @@ func TestHash(t *testing.T) {
 	} else if n != 1 {
 		t.Fatal(n)
 	}
-	if n, err := redis.Int(c.Do("hkeyexists", key)); err != nil {
-		t.Fatal(err)
-	} else if n != 1 {
-		t.Fatal(n)
-	}
+	for i := 0; i < readNum; i++ {
+		if n, err := redis.Int(c.Do("hkeyexists", key)); err != nil {
+			t.Fatal(err)
+		} else if n != 1 {
+			t.Fatal(n)
+		}
 
-	if n, err := redis.Int(c.Do("hexists", key, 1)); err != nil {
-		t.Fatal(err)
-	} else if n != 1 {
-		t.Fatal(n)
-	}
+		if n, err := redis.Int(c.Do("hexists", key, 1)); err != nil {
+			t.Fatal(err)
+		} else if n != 1 {
+			t.Fatal(n)
+		}
 
-	if n, err := redis.Int(c.Do("hexists", key, -1)); err != nil {
-		t.Fatal(err)
-	} else if n != 0 {
-		t.Fatal(n)
-	}
+		if n, err := redis.Int(c.Do("hexists", key, -1)); err != nil {
+			t.Fatal(err)
+		} else if n != 0 {
+			t.Fatal(n)
+		}
 
-	if n, err := redis.Int(c.Do("hget", key, 1)); err != nil {
-		t.Fatal(err)
-	} else if n != 0 {
-		t.Fatal(n)
+		if n, err := redis.Int(c.Do("hget", key, 1)); err != nil {
+			t.Fatal(err)
+		} else if n != 0 {
+			t.Fatal(n)
+		}
 	}
 
 	if n, err := redis.Int(c.Do("hset", key, 1, 1)); err != nil {
@@ -76,16 +79,18 @@ func TestHash(t *testing.T) {
 		t.Fatal(n)
 	}
 
-	if n, err := redis.Int(c.Do("hget", key, 1)); err != nil {
-		t.Fatal(err)
-	} else if n != 1 {
-		t.Fatal(n)
-	}
+	for i := 0; i < readNum; i++ {
+		if n, err := redis.Int(c.Do("hget", key, 1)); err != nil {
+			t.Fatal(err)
+		} else if n != 1 {
+			t.Fatal(n)
+		}
 
-	if n, err := redis.Int(c.Do("hlen", key)); err != nil {
-		t.Fatal(err)
-	} else if n != 1 {
-		t.Fatal(n)
+		if n, err := redis.Int(c.Do("hlen", key)); err != nil {
+			t.Fatal(err)
+		} else if n != 1 {
+			t.Fatal(n)
+		}
 	}
 }
 
@@ -125,17 +130,19 @@ func TestHashM(t *testing.T) {
 		t.Fatal(ok)
 	}
 
-	if n, err := redis.Int(c.Do("hlen", key)); err != nil {
-		t.Fatal(err)
-	} else if n != 3 {
-		t.Fatal(n)
-	}
-
-	if v, err := redis.Values(c.Do("hmget", key, 1, 2, 3, 4)); err != nil {
-		t.Fatal(err)
-	} else {
-		if err := testHashArray(v, 1, 2, 3, 0); err != nil {
+	for i := 0; i < readNum; i++ {
+		if n, err := redis.Int(c.Do("hlen", key)); err != nil {
 			t.Fatal(err)
+		} else if n != 3 {
+			t.Fatal(n)
+		}
+
+		if v, err := redis.Values(c.Do("hmget", key, 1, 2, 3, 4)); err != nil {
+			t.Fatal(err)
+		} else {
+			if err := testHashArray(v, 1, 2, 3, 0); err != nil {
+				t.Fatal(err)
+			}
 		}
 	}
 
@@ -145,24 +152,26 @@ func TestHashM(t *testing.T) {
 		t.Fatal(n)
 	}
 
-	if n, err := redis.Int(c.Do("hlen", key)); err != nil {
-		t.Fatal(err)
-	} else if n != 0 {
-		t.Fatal(n)
-	}
-
-	if v, err := redis.Values(c.Do("hmget", key, 1, 2, 3, 4)); err != nil {
-		t.Fatal(err)
-	} else {
-		if err := testHashArray(v, 0, 0, 0, 0); err != nil {
+	for i := 0; i < readNum; i++ {
+		if n, err := redis.Int(c.Do("hlen", key)); err != nil {
 			t.Fatal(err)
+		} else if n != 0 {
+			t.Fatal(n)
 		}
-	}
 
-	if n, err := redis.Int(c.Do("hlen", key)); err != nil {
-		t.Fatal(err)
-	} else if n != 0 {
-		t.Fatal(n)
+		if v, err := redis.Values(c.Do("hmget", key, 1, 2, 3, 4)); err != nil {
+			t.Fatal(err)
+		} else {
+			if err := testHashArray(v, 0, 0, 0, 0); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		if n, err := redis.Int(c.Do("hlen", key)); err != nil {
+			t.Fatal(err)
+		} else if n != 0 {
+			t.Fatal(n)
+		}
 	}
 }
 
@@ -190,10 +199,12 @@ func TestHashMulitIncr(t *testing.T) {
 		}()
 	}
 	wg.Wait()
-	if n, err := redis.Int(c.Do("hget", key, field)); err != nil {
-		t.Fatal(err)
-	} else if n != 5000 {
-		t.Fatal(n)
+	for i := 0; i < readNum; i++ {
+		if n, err := redis.Int(c.Do("hget", key, field)); err != nil {
+			t.Fatal(err)
+		} else if n != 5000 {
+			t.Fatal(n)
+		}
 	}
 }
 
@@ -210,10 +221,12 @@ func TestHashIncr(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if n, err := redis.Int(c.Do("hlen", key)); err != nil {
-		t.Fatal(err)
-	} else if n != 1 {
-		t.Fatal(n)
+	for i := 0; i < readNum; i++ {
+		if n, err := redis.Int(c.Do("hlen", key)); err != nil {
+			t.Fatal(err)
+		} else if n != 1 {
+			t.Fatal(n)
+		}
 	}
 
 	if n, err := redis.Int(c.Do("hincrby", key, 1, 10)); err != nil {
@@ -222,10 +235,12 @@ func TestHashIncr(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if n, err := redis.Int(c.Do("hlen", key)); err != nil {
-		t.Fatal(err)
-	} else if n != 1 {
-		t.Fatal(n)
+	for i := 0; i < readNum; i++ {
+		if n, err := redis.Int(c.Do("hlen", key)); err != nil {
+			t.Fatal(err)
+		} else if n != 1 {
+			t.Fatal(n)
+		}
 	}
 
 	if n, err := redis.Int(c.Do("hincrby", key, 1, -11)); err != nil {
@@ -274,18 +289,20 @@ func TestHashMulitIncrby(t *testing.T) {
 		}
 
 		if j%10 == 0 {
-			if v, err := redis.Values(c.Do("hgetall", key1)); err != nil {
-				t.Fatal(err)
-			} else {
-				if err := testHashArray(v, 4, key14n, 6, key16n); err != nil {
+			for i := 0; i < readNum; i++ {
+				if v, err := redis.Values(c.Do("hgetall", key1)); err != nil {
 					t.Fatal(err)
+				} else {
+					if err := testHashArray(v, 4, key14n, 6, key16n); err != nil {
+						t.Fatal(err)
+					}
 				}
-			}
-			if v, err := redis.Values(c.Do("hgetall", key2)); err != nil {
-				t.Fatal(err)
-			} else {
-				if err := testHashArray(v, 4, key24n, 6, key26n); err != nil {
+				if v, err := redis.Values(c.Do("hgetall", key2)); err != nil {
 					t.Fatal(err)
+				} else {
+					if err := testHashArray(v, 4, key24n, 6, key26n); err != nil {
+						t.Fatal(err)
+					}
 				}
 			}
 		}
@@ -305,27 +322,29 @@ func TestHashGetAll(t *testing.T) {
 		t.Fatal(ok)
 	}
 
-	if v, err := redis.Values(c.Do("hgetall", key)); err != nil {
-		t.Fatal(err)
-	} else {
-		if err := testHashArray(v, 1, 1, 2, 2, 3, 3); err != nil {
+	for i := 0; i < readNum; i++ {
+		if v, err := redis.Values(c.Do("hgetall", key)); err != nil {
 			t.Fatal(err)
+		} else {
+			if err := testHashArray(v, 1, 1, 2, 2, 3, 3); err != nil {
+				t.Fatal(err)
+			}
 		}
-	}
 
-	if v, err := redis.Values(c.Do("hkeys", key)); err != nil {
-		t.Fatal(err)
-	} else {
-		if err := testHashArray(v, 1, 2, 3); err != nil {
+		if v, err := redis.Values(c.Do("hkeys", key)); err != nil {
 			t.Fatal(err)
+		} else {
+			if err := testHashArray(v, 1, 2, 3); err != nil {
+				t.Fatal(err)
+			}
 		}
-	}
 
-	if v, err := redis.Values(c.Do("hvals", key)); err != nil {
-		t.Fatal(err)
-	} else {
-		if err := testHashArray(v, 1, 2, 3); err != nil {
+		if v, err := redis.Values(c.Do("hvals", key)); err != nil {
 			t.Fatal(err)
+		} else {
+			if err := testHashArray(v, 1, 2, 3); err != nil {
+				t.Fatal(err)
+			}
 		}
 	}
 
@@ -335,10 +354,12 @@ func TestHashGetAll(t *testing.T) {
 		t.Fatal(n)
 	}
 
-	if n, err := redis.Int(c.Do("hlen", key)); err != nil {
-		t.Fatal(err)
-	} else if n != 0 {
-		t.Fatal(n)
+	for i := 0; i < readNum; i++ {
+		if n, err := redis.Int(c.Do("hlen", key)); err != nil {
+			t.Fatal(err)
+		} else if n != 0 {
+			t.Fatal(n)
+		}
 	}
 }
 
@@ -361,28 +382,32 @@ func TestHashExpireAtAndTTL(t *testing.T) {
 	if _, err := c.Do("hexpireAt", key, ts+int64(expireAt)); err != nil {
 		t.Fatal(err)
 	}
-	if ttl, err := c.Do("httl", key); err != nil {
-		t.Fatal(err)
-	} else {
-		ttlValue, ok := ttl.(int64)
-		if !ok {
-			t.Fatal(ok)
-		}
-		if ttlValue < 0 || ttlValue > int64(expireAt+1) {
-			t.Fatalf("hash ttl error, (0-%d) vs %d", expireAt, ttlValue)
+	for i := 0; i < readNum; i++ {
+		if ttl, err := c.Do("httl", key); err != nil {
+			t.Fatal(err)
+		} else {
+			ttlValue, ok := ttl.(int64)
+			if !ok {
+				t.Fatal(ok)
+			}
+			if ttlValue < 0 || ttlValue > int64(expireAt+1) {
+				t.Fatalf("hash ttl error, (0-%d) vs %d", expireAt, ttlValue)
+			}
 		}
 	}
 	time.Sleep(time.Duration(expireAt+1) * time.Second)
 
-	if v, err := c.Do("hkeyexists", key); err != nil {
-		t.Fatal(err)
-	} else {
-		exist, ok := v.(int64)
-		if !ok {
-			t.Fatal(ok)
-		}
-		if exist != 0 {
-			t.Fatal("hash exist error")
+	for i := 0; i < readNum; i++ {
+		if v, err := c.Do("hkeyexists", key); err != nil {
+			t.Fatal(err)
+		} else {
+			exist, ok := v.(int64)
+			if !ok {
+				t.Fatal(ok)
+			}
+			if exist != 0 {
+				t.Fatal("hash exist error")
+			}
 		}
 	}
 
@@ -478,12 +503,13 @@ func TestHashExpire(t *testing.T) {
 	} else if ok != resp.ReplyOK {
 		t.Fatal(ok)
 	}
-
-	if v, err := redis.Values(c.Do("hmget", key, "kddrainage", "kdstrategytwo", "kddrainagelandingpage", "kddrainagemarket")); err != nil {
-		t.Fatal(err)
-	} else {
-		if err := testHashArray(v, 2, 1, 1, 1); err != nil {
+	for i := 0; i < readNum; i++ {
+		if v, err := redis.Values(c.Do("hmget", key, "kddrainage", "kdstrategytwo", "kddrainagelandingpage", "kddrainagemarket")); err != nil {
 			t.Fatal(err)
+		} else {
+			if err := testHashArray(v, 2, 1, 1, 1); err != nil {
+				t.Fatal(err)
+			}
 		}
 	}
 
@@ -524,11 +550,13 @@ func TestHashConcurrencySet(t *testing.T) {
 	c := getTestConn()
 	defer c.Close()
 	for i := 1; i <= 100000; i++ {
-		key := fmt.Sprintf("TestHashConcurrencySet_%d", i)
-		if v, err := redis.String(c.Do("hget", key, "hash_field")); err != nil {
-			t.Fatal(err)
-		} else if v != key {
-			t.Fatalf("get fail exp:%s act:%s", key, v)
+		for j := 0; j < readNum; j++ {
+			key := fmt.Sprintf("TestHashConcurrencySet_%d", i)
+			if v, err := redis.String(c.Do("hget", key, "hash_field")); err != nil {
+				t.Fatal(err)
+			} else if v != key {
+				t.Fatalf("get fail exp:%s act:%s", key, v)
+			}
 		}
 	}
 }

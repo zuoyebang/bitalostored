@@ -20,9 +20,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/zuoyebang/bitalostored/stored/internal/resp"
-
 	"github.com/gomodule/redigo/redis"
+	"github.com/zuoyebang/bitalostored/stored/internal/resp"
 )
 
 func TestExpireKey(t *testing.T) {

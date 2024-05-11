@@ -34,6 +34,7 @@ type Config struct {
 	CompactInterval            int
 	BithashCompressionType     int
 	EnablePageBlockCompression bool
+	PageBlockCacheSize         int
 	EnableRaftlogRestore       bool
 	KvCheckExpireFunc          func(int, []byte, []byte) bool
 	KvTimestampFunc            func([]byte, uint8) (bool, uint64)

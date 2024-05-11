@@ -73,6 +73,10 @@ func (wb *WriteBatch) PutMultiValue(key []byte, vals ...[]byte) error {
 	return wb.wb.PutMultiValue(key, vals...)
 }
 
+func (wb *WriteBatch) PutPrefixDeleteKey(key []byte) error {
+	return wb.wb.PutPrefixDeleteKey(key)
+}
+
 func (wb *WriteBatch) Delete(key []byte) error {
 	return wb.wb.Delete(key)
 }

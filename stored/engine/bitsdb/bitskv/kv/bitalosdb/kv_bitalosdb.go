@@ -29,7 +29,7 @@ import (
 var ErrNotFound = bitalosdb.ErrNotFound
 
 type bitalosdbWriteBatch struct {
-	wb *bitalosdb.Batch
+	wb *bitalosdb.BatchBitower
 	db *bitalosdb.DB
 	wo *bitalosdb.WriteOptions
 }
@@ -44,6 +44,10 @@ func (w *bitalosdbWriteBatch) Put(key []byte, val []byte) error {
 
 func (w *bitalosdbWriteBatch) PutMultiValue(key []byte, vals ...[]byte) error {
 	return w.wb.SetMultiValue(key, vals...)
+}
+
+func (w *bitalosdbWriteBatch) PutPrefixDeleteKey(key []byte) error {
+	return w.wb.PrefixDeleteKeySet(key, w.wo)
 }
 
 func (w *bitalosdbWriteBatch) Delete(key []byte) error {
@@ -102,11 +106,13 @@ func openBitalosDB(dirname string, cfg *dbconfig.Config, dataType btools.DataTyp
 		Id:                          kv.GetDbId(dataType, dbType),
 		UsePrefixCompress:           true,
 		UseBlockCompress:            cfg.EnablePageBlockCompression,
-		KvCheckExpireFunc:           nil,
-		KvTimestampFunc:             nil,
+		BlockCacheSize:              int64(cfg.PageBlockCacheSize),
 		IOWriteLoadThresholdFunc:    cfg.IOWriteLoadThresholdFunc,
 		BytesPerSync:                1 << 20,
-		DeleteFileInternal:          4,
+		DeleteFileInternal:          8,
+		KvCheckExpireFunc:           nil,
+		KvTimestampFunc:             nil,
+		KeyPrefixDeleteFunc:         nil,
 	}
 
 	if dataType == btools.ZSET && dbType == kv.DB_TYPE_INDEX {
@@ -122,13 +128,9 @@ func openBitalosDB(dirname string, cfg *dbconfig.Config, dataType btools.DataTyp
 
 	if dbType == kv.DB_TYPE_META {
 		opts.UseBithash = true
-		opts.CacheType = 1
-		opts.CacheSize = int64(cfg.CacheSize)
-		opts.CacheHashSize = cfg.CacheHashSize
 		opts.KvTimestampFunc = cfg.KvTimestampFunc
 		opts.KvCheckExpireFunc = cfg.KvCheckExpireFunc
 	} else {
-		opts.MemTableSize = opts.MemTableSize / 2
 		if dataType == btools.HASH || dataType == btools.LIST {
 			opts.UseBithash = true
 		}
@@ -137,6 +139,13 @@ func openBitalosDB(dirname string, cfg *dbconfig.Config, dataType btools.DataTyp
 		}
 		if dataType == btools.ZSET && dbType == kv.DB_TYPE_DATA {
 			opts.UsePrefixCompress = false
+		} else {
+			opts.KeyPrefixDeleteFunc = func(k []byte) uint64 {
+				if len(k) < 10 {
+					return 0
+				}
+				return binary.LittleEndian.Uint64(k[2:10])
+			}
 		}
 	}
 
@@ -261,14 +270,14 @@ func (r *KV) Compact(jobId int) {
 
 func (r *KV) GetWriteBatch() kv.IWriteBatch {
 	return &bitalosdbWriteBatch{
-		wb: r.db.NewBatch(),
+		wb: r.db.NewBatchBitower(),
 		db: r.db,
 		wo: r.wo,
 	}
 }
 
-func (r *KV) ForestInfo() kv.ForestInfo {
-	return kv.ForestInfo(r.db.ForestInfo())
+func (r *KV) MetricsInfo() kv.MetricsInfo {
+	return kv.MetricsInfo(r.db.MetricsInfo())
 }
 
 func (r *KV) DebugInfo() string {
@@ -281,6 +290,10 @@ func (r *KV) CacheInfo() string {
 
 func (r *KV) Id() int {
 	return r.db.Id()
+}
+
+func (r *KV) SetAutoCompact(val bool) {
+	r.db.SetAutoCompact(val)
 }
 
 func (r *KV) SetCheckpointLock(v bool) {

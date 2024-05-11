@@ -17,12 +17,11 @@ package rstring
 import (
 	"math"
 
+	"github.com/zuoyebang/bitalostored/butils/hash"
 	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/bitsdb/base"
 	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/btools"
 	"github.com/zuoyebang/bitalostored/stored/internal/errn"
 	"github.com/zuoyebang/bitalostored/stored/internal/tclock"
-
-	"github.com/zuoyebang/bitalostored/butils/hash"
 )
 
 func (so *StringObject) Incr(key []byte, khash uint32) (int64, error) {

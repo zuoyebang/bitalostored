@@ -45,6 +45,11 @@ func (w *bitableWriteBatch) PutMultiValue(key []byte, vals ...[]byte) error {
 	return w.wb.SetMultiValue(key, vals...)
 }
 
+func (w *bitableWriteBatch) PutPrefixDeleteKey(key []byte) error {
+	// TODO implement
+	panic("not implement")
+}
+
 func (w *bitableWriteBatch) Delete(key []byte) error {
 	return w.wb.Delete(key, w.wo)
 }
@@ -244,8 +249,8 @@ func (r *KV) GetWriteBatch() kv.IWriteBatch {
 	}
 }
 
-func (r *KV) ForestInfo() kv.ForestInfo {
-	return kv.ForestInfo{}
+func (r *KV) MetricsInfo() kv.MetricsInfo {
+	return kv.MetricsInfo{}
 }
 
 func (r *KV) DebugInfo() string {
@@ -258,6 +263,9 @@ func (r *KV) CacheInfo() string {
 
 func (r *KV) Id() int {
 	return r.db.Id()
+}
+
+func (r *KV) SetAutoCompact(val bool) {
 }
 
 func (r *KV) SetCheckpointLock(v bool) {

@@ -17,11 +17,10 @@ package bitsdb
 import (
 	"sync"
 
+	"github.com/zuoyebang/bitalostored/butils"
 	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/bitskv"
 	"github.com/zuoyebang/bitalostored/stored/internal/bytepools"
 	"github.com/zuoyebang/bitalostored/stored/internal/utils"
-
-	"github.com/zuoyebang/bitalostored/butils"
 )
 
 type BitsDBUsage struct {
@@ -37,18 +36,18 @@ type BitsDBUsage struct {
 	ExpireDiskSize         int64 `json:"expire_disk_size"`
 }
 
-func (u *BitsDBUsage) SetDataStats(stat bitskv.ForestInfo) {
+func (u *BitsDBUsage) SetDataStats(stat bitskv.MetricsInfo) {
 	u.DataFlushMemTime = stat.FlushMemTime
 	u.DataBithashFileTotal = stat.BithashFileTotal
 	u.DataBithashKeyTotal = stat.BithashKeyTotal
 	u.DataBithashDelKeyTotal = stat.BithashDelKeyTotal
 }
 
-func (u *BitsDBUsage) SetMetaStats(stat bitskv.ForestInfo) {
+func (u *BitsDBUsage) SetMetaStats(stat bitskv.MetricsInfo) {
 	u.MetaFlushMemTime = stat.FlushMemTime
 }
 
-func (u *BitsDBUsage) SetIndexStats(stat bitskv.ForestInfo) {
+func (u *BitsDBUsage) SetIndexStats(stat bitskv.MetricsInfo) {
 	u.IndexFlushMemTime = stat.FlushMemTime
 }
 

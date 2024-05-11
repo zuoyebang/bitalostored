@@ -77,7 +77,9 @@ func TestDoCheckpoint(t *testing.T) {
 		} else if string(v) != "1" {
 			t.Fatalf("get error. Expect: %s, actual: %s %d", "1", v, len(v))
 		} else {
-			closer()
+			if closer != nil {
+				closer()
+			}
 		}
 
 		if v, vCloser, err := db.HGet([]byte("test-hash"), hash.Fnv32([]byte("test-hash")), []byte("member")); err != nil {

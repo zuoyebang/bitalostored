@@ -19,10 +19,9 @@ import (
 	"os"
 	"path"
 
+	"github.com/BurntSushi/toml"
 	"github.com/zuoyebang/bitalostored/butils/bytesize"
 	"github.com/zuoyebang/bitalostored/butils/timesize"
-
-	"github.com/BurntSushi/toml"
 )
 
 type Config struct {
@@ -166,6 +165,7 @@ type BitalosConfig struct {
 	MaxValueSize                    int            `toml:"max_value_size" mapstructure:"max_value_size"`
 	EnableRaftlogRestore            bool           `toml:"enable_raftlog_restore" mapstructure:"enable_raftlog_restore"`
 	EnablePageBlockCompression      bool           `toml:"enable_page_block_compression" mapstructure:"enable_page_block_compression"`
+	PageBlockCacheSize              bytesize.Int64 `toml:"page_block_cache_size" mapstructure:"page_block_cache_size"`
 	EnableClockCache                bool           `toml:"enable_clock_cache" mapstructure:"enable_clock_cache"`
 }
 

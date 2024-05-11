@@ -17,9 +17,8 @@ package btools
 import (
 	"math"
 
-	"github.com/zuoyebang/bitalostored/stored/internal/config"
-
 	"github.com/zuoyebang/bitalostored/butils/numeric"
+	"github.com/zuoyebang/bitalostored/stored/internal/config"
 )
 
 const (

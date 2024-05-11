@@ -5,11 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/zuoyebang/bitalostored/stored/internal/utils"
-
-	"github.com/zuoyebang/bitalostored/stored/internal/log"
-
 	"github.com/gomodule/redigo/redis"
+	"github.com/zuoyebang/bitalostored/stored/internal/log"
+	"github.com/zuoyebang/bitalostored/stored/internal/utils"
 )
 
 func testMigrateExpire(t *testing.T) {

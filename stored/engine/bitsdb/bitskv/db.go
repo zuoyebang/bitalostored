@@ -25,9 +25,8 @@ import (
 	kv_bitalosdb "github.com/zuoyebang/bitalostored/stored/engine/bitsdb/bitskv/kv/bitalosdb"
 	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/btools"
 	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/dbconfig"
-	"github.com/zuoyebang/bitalostored/stored/internal/utils"
-
 	"github.com/zuoyebang/bitalostored/stored/internal/log"
+	"github.com/zuoyebang/bitalostored/stored/internal/utils"
 )
 
 type IterOptions = kv.IteratorOptions
@@ -360,37 +359,37 @@ func (db *DB) Checkpoint(sDir string) error {
 	return nil
 }
 
-func (db *DB) DataStats() ForestInfo {
+func (db *DB) DataStats() MetricsInfo {
 	if db.dataDb == nil {
-		return ForestInfo{}
+		return MetricsInfo{}
 	}
-	return ForestInfo(db.dataDb.ForestInfo())
+	return MetricsInfo(db.dataDb.MetricsInfo())
 }
 
-func (db *DB) MetaStats() ForestInfo {
+func (db *DB) MetaStats() MetricsInfo {
 	if db.metaDb == nil {
-		return ForestInfo{}
+		return MetricsInfo{}
 	}
-	return ForestInfo(db.metaDb.ForestInfo())
+	return MetricsInfo(db.metaDb.MetricsInfo())
 }
 
-func (db *DB) ExpireStats() ForestInfo {
+func (db *DB) ExpireStats() MetricsInfo {
 	if db.expireDb == nil {
-		return ForestInfo{}
+		return MetricsInfo{}
 	}
-	return ForestInfo(db.expireDb.ForestInfo())
+	return MetricsInfo(db.expireDb.MetricsInfo())
 }
 
-func (db *DB) IndexStats() ForestInfo {
+func (db *DB) IndexStats() MetricsInfo {
 	if db.indexDb == nil {
-		return ForestInfo{}
+		return MetricsInfo{}
 	}
-	return ForestInfo(db.indexDb.ForestInfo())
+	return MetricsInfo(db.indexDb.MetricsInfo())
 }
 
-type ForestInfo kv.ForestInfo
+type MetricsInfo kv.MetricsInfo
 
-func (i ForestInfo) String() string {
+func (i MetricsInfo) String() string {
 	s, err := json.Marshal(i)
 	if err != nil {
 		return ""

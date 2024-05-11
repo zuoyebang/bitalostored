@@ -31,10 +31,9 @@ import (
 	"github.com/zuoyebang/bitalostored/stored/internal/task"
 	"github.com/zuoyebang/bitalostored/stored/internal/utils"
 
+	"github.com/gomodule/redigo/redis"
 	"github.com/zuoyebang/bitalostored/butils/hash"
 	"github.com/zuoyebang/bitalostored/butils/unsafe2"
-
-	"github.com/gomodule/redigo/redis"
 )
 
 var MigrateLuaScript = "redis.call(KEYS)"

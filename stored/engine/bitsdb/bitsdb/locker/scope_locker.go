@@ -42,7 +42,6 @@ type ScopeLocker struct {
 }
 
 func NewScopeLocker(num uint32) *ScopeLocker {
-
 	lockers := make([]*locker, 0, num)
 	for i := 0; i < int(num); i++ {
 		lockers = append(lockers, &locker{})

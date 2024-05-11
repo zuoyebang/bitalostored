@@ -41,16 +41,18 @@ func TestZSet(t *testing.T) {
 		t.Fatal(n)
 	}
 
-	if n, err := redis.Int(c.Do("zkeyexists", key)); err != nil {
-		t.Fatal(err)
-	} else if n != 1 {
-		t.Fatal(n)
-	}
+	for i := 0; i < readNum; i++ {
+		if n, err := redis.Int(c.Do("zkeyexists", key)); err != nil {
+			t.Fatal(err)
+		} else if n != 1 {
+			t.Fatal(n)
+		}
 
-	if n, err := redis.Int(c.Do("zcard", key)); err != nil {
-		t.Fatal(n)
-	} else if n != 2 {
-		t.Fatal(n)
+		if n, err := redis.Int(c.Do("zcard", key)); err != nil {
+			t.Fatal(n)
+		} else if n != 2 {
+			t.Fatal(n)
+		}
 	}
 
 	if n, err := redis.Int(c.Do("zadd", key, 1, "a", 2, "b")); err != nil {
@@ -59,10 +61,12 @@ func TestZSet(t *testing.T) {
 		t.Fatal(n)
 	}
 
-	if n, err := redis.Int(c.Do("zcard", key)); err != nil {
-		t.Fatal(n)
-	} else if n != 2 {
-		t.Fatal(n)
+	for i := 0; i < readNum; i++ {
+		if n, err := redis.Int(c.Do("zcard", key)); err != nil {
+			t.Fatal(n)
+		} else if n != 2 {
+			t.Fatal(n)
+		}
 	}
 
 	if n, err := redis.Int(c.Do("zadd", key, 3, "c", 4, "d")); err != nil {
@@ -71,16 +75,18 @@ func TestZSet(t *testing.T) {
 		t.Fatal(n)
 	}
 
-	if n, err := redis.Int(c.Do("zcard", key)); err != nil {
-		t.Fatal(err)
-	} else if n != 4 {
-		t.Fatal(n)
-	}
+	for i := 0; i < readNum; i++ {
+		if n, err := redis.Int(c.Do("zcard", key)); err != nil {
+			t.Fatal(err)
+		} else if n != 4 {
+			t.Fatal(n)
+		}
 
-	if s, err := redis.Int(c.Do("zscore", key, "c")); err != nil {
-		t.Fatal(err)
-	} else if s != 3 {
-		t.Fatal(s)
+		if s, err := redis.Int(c.Do("zscore", key, "c")); err != nil {
+			t.Fatal(err)
+		} else if s != 3 {
+			t.Fatal(s)
+		}
 	}
 
 	if n, err := redis.Int(c.Do("zrem", key, "d", "e")); err != nil {
@@ -89,10 +95,12 @@ func TestZSet(t *testing.T) {
 		t.Fatal(n)
 	}
 
-	if n, err := redis.Int(c.Do("zcard", key)); err != nil {
-		t.Fatal(err)
-	} else if n != 3 {
-		t.Fatal(n)
+	for i := 0; i < readNum; i++ {
+		if n, err := redis.Int(c.Do("zcard", key)); err != nil {
+			t.Fatal(err)
+		} else if n != 3 {
+			t.Fatal(n)
+		}
 	}
 
 	if n, err := redis.Int(c.Do("zincrby", key, 4, "c")); err != nil {
@@ -113,10 +121,12 @@ func TestZSet(t *testing.T) {
 		t.Fatal(n)
 	}
 
-	if n, err := redis.Int(c.Do("zcard", key)); err != nil {
-		t.Fatal(err)
-	} else if n != 4 {
-		t.Fatal(n)
+	for i := 0; i < readNum; i++ {
+		if n, err := redis.Int(c.Do("zcard", key)); err != nil {
+			t.Fatal(err)
+		} else if n != 4 {
+			t.Fatal(n)
+		}
 	}
 
 	if n, err := redis.Int(c.Do("zrem", key, "a", "b", "c", "d")); err != nil {
@@ -125,10 +135,12 @@ func TestZSet(t *testing.T) {
 		t.Fatal(n)
 	}
 
-	if n, err := redis.Int(c.Do("zcard", key)); err != nil {
-		t.Fatal(err)
-	} else if n != 0 {
-		t.Fatal(n)
+	for i := 0; i < readNum; i++ {
+		if n, err := redis.Int(c.Do("zcard", key)); err != nil {
+			t.Fatal(err)
+		} else if n != 0 {
+			t.Fatal(n)
+		}
 	}
 
 }
@@ -143,54 +155,58 @@ func TestZSetCount(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if n, err := redis.Int(c.Do("zcount", key, 2, 4)); err != nil {
-		t.Fatal(err)
-	} else if n != 3 {
-		t.Fatal(n)
-	}
+	for i := 0; i < readNum; i++ {
+		if n, err := redis.Int(c.Do("zcount", key, 2, 4)); err != nil {
+			t.Fatal(err)
+		} else if n != 3 {
+			t.Fatal(n)
+		}
 
-	if n, err := redis.Int(c.Do("zcount", key, 4, 4)); err != nil {
-		t.Fatal(err)
-	} else if n != 1 {
-		t.Fatal(n)
-	}
+		if n, err := redis.Int(c.Do("zcount", key, 4, 4)); err != nil {
+			t.Fatal(err)
+		} else if n != 1 {
+			t.Fatal(n)
+		}
 
-	if n, err := redis.Int(c.Do("zcount", key, 4, 3)); err != nil {
-		t.Fatal(err)
-	} else if n != 0 {
-		t.Fatal(n)
-	}
+		if n, err := redis.Int(c.Do("zcount", key, 4, 3)); err != nil {
+			t.Fatal(err)
+		} else if n != 0 {
+			t.Fatal(n)
+		}
 
-	if n, err := redis.Int(c.Do("zcount", key, "(2", 4)); err != nil {
-		t.Fatal(err)
-	} else if n != 2 {
-		t.Fatal(n)
-	}
+		if n, err := redis.Int(c.Do("zcount", key, "(2", 4)); err != nil {
+			t.Fatal(err)
+		} else if n != 2 {
+			t.Fatal(n)
+		}
 
-	if n, err := redis.Int(c.Do("zcount", key, "2", "(4")); err != nil {
-		t.Fatal(err)
-	} else if n != 2 {
-		t.Fatal(n)
-	}
+		if n, err := redis.Int(c.Do("zcount", key, "2", "(4")); err != nil {
+			t.Fatal(err)
+		} else if n != 2 {
+			t.Fatal(n)
+		}
 
-	if n, err := redis.Int(c.Do("zcount", key, "(2", "(4")); err != nil {
-		t.Fatal(err)
-	} else if n != 1 {
-		t.Fatal(n)
-	}
+		if n, err := redis.Int(c.Do("zcount", key, "(2", "(4")); err != nil {
+			t.Fatal(err)
+		} else if n != 1 {
+			t.Fatal(n)
+		}
 
-	if n, err := redis.Int(c.Do("zcount", key, "-inf", "+inf")); err != nil {
-		t.Fatal(err)
-	} else if n != 4 {
-		t.Fatal(n)
+		if n, err := redis.Int(c.Do("zcount", key, "-inf", "+inf")); err != nil {
+			t.Fatal(err)
+		} else if n != 4 {
+			t.Fatal(n)
+		}
 	}
 
 	c.Do("zadd", key, 3, "e")
 
-	if n, err := redis.Int(c.Do("zcount", key, "(2", "(4")); err != nil {
-		t.Fatal(err)
-	} else if n != 2 {
-		t.Fatal(n)
+	for i := 0; i < readNum; i++ {
+		if n, err := redis.Int(c.Do("zcount", key, "(2", "(4")); err != nil {
+			t.Fatal(err)
+		} else if n != 2 {
+			t.Fatal(n)
+		}
 	}
 
 	c.Do("zrem", key, "a", "b", "c", "d", "e")
@@ -206,24 +222,26 @@ func TestZSetRank(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if n, err := redis.Int(c.Do("zrank", key, "c")); err != nil {
-		t.Fatal(err)
-	} else if n != 2 {
-		t.Fatal(n)
-	}
+	for i := 0; i < readNum; i++ {
+		if n, err := redis.Int(c.Do("zrank", key, "c")); err != nil {
+			t.Fatal(err)
+		} else if n != 2 {
+			t.Fatal(n)
+		}
 
-	if _, err := redis.Int(c.Do("zrank", key, "e")); err != redis.ErrNil {
-		t.Fatal(err)
-	}
+		if _, err := redis.Int(c.Do("zrank", key, "e")); err != redis.ErrNil {
+			t.Fatal(err)
+		}
 
-	if n, err := redis.Int(c.Do("zrevrank", key, "c")); err != nil {
-		t.Fatal(err)
-	} else if n != 1 {
-		t.Fatal(n)
-	}
+		if n, err := redis.Int(c.Do("zrevrank", key, "c")); err != nil {
+			t.Fatal(err)
+		} else if n != 1 {
+			t.Fatal(n)
+		}
 
-	if _, err := redis.Int(c.Do("zrevrank", key, "e")); err != redis.ErrNil {
-		t.Fatal(err)
+		if _, err := redis.Int(c.Do("zrevrank", key, "e")); err != redis.ErrNil {
+			t.Fatal(err)
+		}
 	}
 }
 

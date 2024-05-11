@@ -275,10 +275,10 @@ func (c *Client) HandleRequest(plugin bool, reqData [][]byte, isHashTag bool) (e
 	}
 	defer runPluginHandled(c, execCmd, c.Cmd)
 
-	if isHashTag {
-		c.KeyHash = utils.GetHashTagFnv(c.Keys)
-	} else {
+	if !isHashTag {
 		c.KeyHash = hash.Fnv32(c.Keys)
+	} else {
+		c.KeyHash = utils.GetHashTagFnv(c.Keys)
 	}
 
 	var isRedirect bool

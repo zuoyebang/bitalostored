@@ -34,13 +34,11 @@ import (
 	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/dbconfig"
 	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/dbmeta"
 	"github.com/zuoyebang/bitalostored/stored/internal/config"
+	"github.com/zuoyebang/bitalostored/stored/internal/log"
 	"github.com/zuoyebang/bitalostored/stored/internal/tclock"
 
-	"github.com/zuoyebang/bitalostored/stored/internal/log"
-
-	"github.com/zuoyebang/bitalostored/butils"
-
 	"github.com/panjf2000/ants/v2"
+	"github.com/zuoyebang/bitalostored/butils"
 )
 
 type BitsDB struct {
@@ -57,6 +55,14 @@ type BitsDB struct {
 	flushTask      *FlushTask
 	isRaftRestore  bool
 	statQPS        atomic.Uint64
+
+	delExpireStat struct {
+		expireDbKeys     atomic.Uint64
+		metaDbKeys       atomic.Uint64
+		zsetDataDbKeys   atomic.Uint64
+		zsetIndexDbKeys  atomic.Uint64
+		prefixDeleteKeys atomic.Uint64
+	}
 }
 
 func NewBitsDB(cfg *dbconfig.Config, meta *dbmeta.Meta) (*BitsDB, error) {
@@ -139,9 +145,14 @@ func (bdb *BitsDB) FlushAllDB() {
 			waitChs = append(waitChs, ch)
 		}
 	}
+
 	for i := range waitChs {
 		<-waitChs[i]
 	}
+}
+
+func (bdb *BitsDB) ClearCache() {
+	bdb.baseDb.ClearCache()
 }
 
 func (bdb *BitsDB) Close() {
@@ -155,6 +166,13 @@ func (bdb *BitsDB) Close() {
 	bdb.ZsetObj.Close()
 	bdb.baseDb.Close()
 	log.Infof("bitsDB Close finish")
+}
+
+func (bdb *BitsDB) SetAutoCompact(val bool) {
+	dbs := bdb.GetAllDB()
+	for _, db := range dbs {
+		db.SetAutoCompact(val)
+	}
 }
 
 func (bdb *BitsDB) GetAllDB() []kv.IKVStore {
@@ -199,7 +217,7 @@ func (bdb *BitsDB) DebugInfo() []byte {
 }
 
 func (bdb *BitsDB) CacheInfo() []byte {
-	lruCacheInfo := bdb.baseDb.DB.GetCacheInfo()
+	lruCacheInfo := bdb.baseDb.CacheInfo()
 
 	var buf bytes.Buffer
 	buf.WriteString(lruCacheInfo)

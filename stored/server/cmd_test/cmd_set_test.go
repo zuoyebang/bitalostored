@@ -17,9 +17,8 @@ package cmd_test
 import (
 	"testing"
 
-	"github.com/zuoyebang/bitalostored/stored/internal/resp"
-
 	"github.com/gomodule/redigo/redis"
+	"github.com/zuoyebang/bitalostored/stored/internal/resp"
 )
 
 func TestSet(t *testing.T) {
@@ -48,10 +47,12 @@ func TestSet(t *testing.T) {
 		t.Fatal(n)
 	}
 
-	if n, err := redis.Int(c.Do("skeyexists", key1)); err != nil {
-		t.Fatal(err)
-	} else if n != 1 {
-		t.Fatal(n)
+	for i := 0; i < readNum; i++ {
+		if n, err := redis.Int(c.Do("skeyexists", key1)); err != nil {
+			t.Fatal(err)
+		} else if n != 1 {
+			t.Fatal(n)
+		}
 	}
 
 	if n, err := redis.Int(c.Do("sadd", key2, 0, 1, 2, 3)); err != nil {
@@ -60,10 +61,12 @@ func TestSet(t *testing.T) {
 		t.Fatal(n)
 	}
 
-	if n, err := redis.Int(c.Do("scard", key1)); err != nil {
-		t.Fatal(err)
-	} else if n != 2 {
-		t.Fatal(n)
+	for i := 0; i < readNum; i++ {
+		if n, err := redis.Int(c.Do("scard", key1)); err != nil {
+			t.Fatal(err)
+		} else if n != 2 {
+			t.Fatal(n)
+		}
 	}
 
 	if n, err := redis.Int(c.Do("srem", key1, 0, 1)); err != nil {
@@ -72,22 +75,24 @@ func TestSet(t *testing.T) {
 		t.Fatal(n)
 	}
 
-	if n, err := redis.Int(c.Do("scard", key1)); err != nil {
-		t.Fatal(err)
-	} else if n != 0 {
-		t.Fatal(n)
-	}
+	for i := 0; i < readNum; i++ {
+		if n, err := redis.Int(c.Do("scard", key1)); err != nil {
+			t.Fatal(err)
+		} else if n != 0 {
+			t.Fatal(n)
+		}
 
-	if n, err := redis.Int(c.Do("sismember", key2, 0)); err != nil {
-		t.Fatal(err)
-	} else if n != 1 {
-		t.Fatal(n)
-	}
+		if n, err := redis.Int(c.Do("sismember", key2, 0)); err != nil {
+			t.Fatal(err)
+		} else if n != 1 {
+			t.Fatal(n)
+		}
 
-	if n, err := redis.Values(c.Do("smembers", key2)); err != nil {
-		t.Fatal(err)
-	} else if len(n) != 4 {
-		t.Fatal(n)
+		if n, err := redis.Values(c.Do("smembers", key2)); err != nil {
+			t.Fatal(err)
+		} else if len(n) != 4 {
+			t.Fatal(n)
+		}
 	}
 
 	if n, err := redis.Int(c.Do("sclear", key2)); err != nil {
@@ -135,13 +140,16 @@ func TestSaddAndSclearAndSadd(t *testing.T) {
 		t.Fatal(n)
 	}
 
-	if n, err := redis.Int(c.Do("sismember", key2, 1)); err != nil {
-		t.Fatal(err)
-	} else if n != 0 {
-		t.Fatal(n)
+	for i := 0; i < readNum; i++ {
+		if n, err := redis.Int(c.Do("sismember", key2, 1)); err != nil {
+			t.Fatal(err)
+		} else if n != 0 {
+			t.Fatal(n)
+		}
 	}
 
 	//time.Sleep(time.Second)
+
 	if n, err := redis.Int(c.Do("sadd", key2, 1)); err != nil {
 		t.Fatal(err)
 	} else if n != 1 {
@@ -266,49 +274,51 @@ func TestSetRandMember(t *testing.T) {
 		t.Fatal(n)
 	}
 
-	if _, err := redis.Values(c.Do("srandmember", key, 2, -1)); err == nil {
-		t.Fatal(" err should not nil")
-	} else if err.Error() != resp.ErrSyntax.Error() {
-		t.Fatal(err)
-	}
+	for i := 0; i < readNum; i++ {
+		if _, err := redis.Values(c.Do("srandmember", key, 2, -1)); err == nil {
+			t.Fatal(" err should not nil")
+		} else if err.Error() != resp.ErrSyntax.Error() {
+			t.Fatal(err)
+		}
 
-	if _, err := redis.Values(c.Do("srandmember", key, 1.3)); err == nil {
-		t.Fatal(" err should not nil")
-	} else if err.Error() != resp.ErrValue.Error() {
-		t.Fatal(err)
-	}
+		if _, err := redis.Values(c.Do("srandmember", key, 1.3)); err == nil {
+			t.Fatal(" err should not nil")
+		} else if err.Error() != resp.ErrValue.Error() {
+			t.Fatal(err)
+		}
 
-	if _, err := redis.String(c.Do("srandmember", key)); err != nil {
-		t.Fatal(err)
-	}
+		if _, err := redis.String(c.Do("srandmember", key)); err != nil {
+			t.Fatal(err)
+		}
 
-	if v, err := redis.Values(c.Do("srandmember", key, 0)); err != nil {
-		t.Fatal(err)
-	} else if len(v) != 0 {
-		t.Fatal(len(v))
-	}
+		if v, err := redis.Values(c.Do("srandmember", key, 0)); err != nil {
+			t.Fatal(err)
+		} else if len(v) != 0 {
+			t.Fatal(len(v))
+		}
 
-	if v, err := redis.Values(c.Do("srandmember", key, 2)); err != nil {
-		t.Fatal(err)
-	} else if len(v) != 2 {
-		t.Fatal(len(v))
-	}
+		if v, err := redis.Values(c.Do("srandmember", key, 2)); err != nil {
+			t.Fatal(err)
+		} else if len(v) != 2 {
+			t.Fatal(len(v))
+		}
 
-	if v, err := redis.Values(c.Do("srandmember", key, 7)); err != nil {
-		t.Fatal(err)
-	} else if len(v) != 4 {
-		t.Fatal(len(v))
-	}
+		if v, err := redis.Values(c.Do("srandmember", key, 7)); err != nil {
+			t.Fatal(err)
+		} else if len(v) != 4 {
+			t.Fatal(len(v))
+		}
 
-	if v, err := redis.Values(c.Do("srandmember", key, -7)); err != nil {
-		t.Fatal(err)
-	} else if len(v) != 7 {
-		t.Fatal(len(v))
-	}
+		if v, err := redis.Values(c.Do("srandmember", key, -7)); err != nil {
+			t.Fatal(err)
+		} else if len(v) != 7 {
+			t.Fatal(len(v))
+		}
 
-	if v, err := redis.Values(c.Do("srandmember", nilkey, 2)); err != nil {
-		t.Fatal(err)
-	} else if len(v) != 0 {
-		t.Fatal(len(v))
+		if v, err := redis.Values(c.Do("srandmember", nilkey, 2)); err != nil {
+			t.Fatal(err)
+		} else if len(v) != 0 {
+			t.Fatal(len(v))
+		}
 	}
 }

@@ -16,6 +16,7 @@ package bitsdb
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"runtime/debug"
 	"sync"
@@ -26,9 +27,8 @@ import (
 	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/bitskv/kv"
 	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/btools"
 	"github.com/zuoyebang/bitalostored/stored/internal/errn"
-	"github.com/zuoyebang/bitalostored/stored/internal/tclock"
-
 	"github.com/zuoyebang/bitalostored/stored/internal/log"
+	"github.com/zuoyebang/bitalostored/stored/internal/tclock"
 
 	"github.com/zuoyebang/bitalostored/butils/hash"
 	"github.com/zuoyebang/bitalostored/butils/unsafe2"
@@ -78,13 +78,14 @@ func (bdb *BitsDB) ScanDeleteExpireDb(jobId uint64) {
 			return
 		}
 
-		log.Infof("%s end delKey:%d delExpire:%d delMeta:%d delData:%d delIndex:%d cost:%.3fs",
+		log.Infof("%s end delKeys:%d expireDbKeys:%d metaDbKeys:%d prefixDeleteKeys:%d zsetDataDbKeys:%d zsetIndexDbKeys:%d cost:%.3fs",
 			logTag,
 			delKeyNum,
-			bdb.baseDb.DelExpireDbNum.Load(),
-			bdb.baseDb.DelMetaDbNum.Load(),
-			bdb.baseDb.DelDataDbNum.Load(),
-			bdb.baseDb.DelIndexDbNum.Load(),
+			bdb.delExpireStat.expireDbKeys.Load(),
+			bdb.delExpireStat.metaDbKeys.Load(),
+			bdb.delExpireStat.prefixDeleteKeys.Load(),
+			bdb.delExpireStat.zsetDataDbKeys.Load(),
+			bdb.delExpireStat.zsetIndexDbKeys.Load(),
 			time.Now().Sub(start).Seconds())
 	}()
 
@@ -95,19 +96,18 @@ func (bdb *BitsDB) ScanDeleteExpireDb(jobId uint64) {
 	bdb.CheckpointExpireLock(true)
 	defer bdb.CheckpointExpireLock(false)
 
-	bdb.baseDb.DelExpireDbNum.Store(0)
-	bdb.baseDb.DelMetaDbNum.Store(0)
-	bdb.baseDb.DelDataDbNum.Store(0)
-	bdb.baseDb.DelIndexDbNum.Store(0)
+	bdb.delExpireStat.expireDbKeys.Store(0)
+	bdb.delExpireStat.metaDbKeys.Store(0)
+	bdb.delExpireStat.prefixDeleteKeys.Store(0)
+	bdb.delExpireStat.zsetDataDbKeys.Store(0)
+	bdb.delExpireStat.zsetIndexDbKeys.Store(0)
 
-	var yesterdayTime, todayTime [8]byte
+	var nowTimeBuf [8]byte
 	nowTime := uint64(tclock.GetTimestampMilli())
-	yesterdayZero := tclock.GetYesterdayZeroTime()
-	binary.BigEndian.PutUint64(yesterdayTime[:], uint64(yesterdayZero))
-	binary.BigEndian.PutUint64(todayTime[:], nowTime+1)
+	binary.BigEndian.PutUint64(nowTimeBuf[:], nowTime+1)
 	iterOpts := &bitskv.IterOptions{
 		IsAll:      true,
-		UpperBound: todayTime[:],
+		UpperBound: nowTimeBuf[:],
 	}
 	it := bdb.baseDb.DB.NewIteratorExpire(iterOpts)
 	defer it.Close()
@@ -161,42 +161,64 @@ func (bdb *BitsDB) deleteExpireDataFunc(args interface{}) {
 		}
 	}()
 
-	var err error
-	var finished bool
-
 	expireKey := ep.expireKey
 	expireTime := ep.expireTime
 	keyVersion := ep.version
 	keyKind := ep.kind
-	key := ep.key
 	dataType := ep.dt
-	khash := hash.Fnv32(key)
+	key := ep.key
+	keyHash := hash.Fnv32(key)
 
-	switch dataType {
-	case btools.SET:
-		finished, err = bdb.SetObj.DeleteDataKeyByExpire(keyVersion, khash)
-	case btools.LIST:
-		finished, err = bdb.ListObj.DeleteDataKeyByExpire(keyVersion, khash)
-	case btools.HASH:
-		finished, err = bdb.HashObj.DeleteDataKeyByExpire(keyVersion, khash)
-	case btools.ZSET:
-		finished, err = bdb.ZsetObj.DeleteZsetKeyByExpire(keyVersion, keyKind, khash)
-	}
-	if err != nil || !finished {
-		return
+	var retErr error
+	defer func() {
+		if retErr != nil {
+			log.Errorf("deleteExpireDataFunc fail dt:%s key:%s err:%s", dataType, unsafe2.String(key), retErr)
+		}
+	}()
+
+	if dataType == btools.ZSET {
+		var finished bool
+		var zetDelCnt uint64
+		finished, zetDelCnt, retErr = bdb.ZsetObj.DeleteZsetKeyByExpire(keyVersion, keyKind, keyHash)
+		if retErr != nil {
+			return
+		}
+
+		bdb.delExpireStat.zsetDataDbKeys.Add(zetDelCnt)
+		bdb.delExpireStat.zsetIndexDbKeys.Add(zetDelCnt)
+
+		if !finished {
+			return
+		}
+	} else {
+		switch dataType {
+		case btools.SET:
+			retErr = bdb.SetObj.DeleteDataKeyByExpire(keyVersion, keyHash)
+		case btools.LIST:
+			retErr = bdb.ListObj.DeleteDataKeyByExpire(keyVersion, keyHash)
+		case btools.HASH:
+			retErr = bdb.HashObj.DeleteDataKeyByExpire(keyVersion, keyHash)
+		default:
+			retErr = errors.New("not support dataType")
+		}
+		if retErr != nil {
+			return
+		}
+
+		bdb.delExpireStat.prefixDeleteKeys.Add(1)
 	}
 
-	var isDelMetaKey bool
-	isDelMetaKey, err = bdb.baseDb.DeleteMetaKeyByExpire(dataType, key, khash, keyVersion, expireTime)
-	if err != nil && err != errn.ErrWrongType {
+	isDelMetaKey, err := bdb.baseDb.DeleteMetaKeyByExpire(dataType, key, keyHash, keyVersion, expireTime)
+	if err != nil && !errors.Is(err, errn.ErrWrongType) {
 		log.Errorf("delete metaKey fail dt:%s key:%s err:%s", dataType, unsafe2.String(key), err)
-	} else if isDelMetaKey {
-		bdb.baseDb.DelMetaDbNum.Add(1)
 	}
 
 	if err = bdb.baseDb.DeleteExpireKey(expireKey); err != nil {
 		log.Errorf("delete expireKey fail dt:%s key:%s err:%s", dataType, unsafe2.String(key), err)
 	}
 
-	bdb.baseDb.DelExpireDbNum.Add(1)
+	bdb.delExpireStat.expireDbKeys.Add(1)
+	if isDelMetaKey {
+		bdb.delExpireStat.metaDbKeys.Add(1)
+	}
 }
