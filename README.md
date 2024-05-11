@@ -111,7 +111,7 @@ Threads:8
 Memtable：512MB
 WAL：enable
 Raftlog：disable
-Cache：20GB
+Cache：2GB~40GB
 ```
 
 ### Result
