@@ -17,9 +17,8 @@ package server
 import (
 	"time"
 
-	"github.com/zuoyebang/bitalostored/stored/internal/resp"
-
 	"github.com/zuoyebang/bitalostored/butils/extend"
+	"github.com/zuoyebang/bitalostored/stored/internal/resp"
 )
 
 func init() {

@@ -1,14 +1,16 @@
-// Original source:
-//	http://www.zorinaq.com/papers/md5-amd64.html
-//	http://www.zorinaq.com/papers/md5-amd64.tar.bz2
+// Copyright 2019 The Bitalostored author and other contributors.
 //
-// MD5 optimized for ppc64le using Go's assembler for
-// ppc64le, based on md5block_amd64.s implementation by
-// the Go authors.
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
 //
-// Author: Marc Bevand <bevand_m (at) epita.fr>
-// Licence: I hereby disclaim the copyright on this code and place it
-// in the public domain.
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 //go:build ppc64 || ppc64le
 

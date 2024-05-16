@@ -25,16 +25,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
+	"github.com/zuoyebang/bitalostored/butils/hash"
 	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/bitsdb/base"
 	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/btools"
 	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/dbconfig"
 	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/dbmeta"
 	"github.com/zuoyebang/bitalostored/stored/internal/config"
 	"github.com/zuoyebang/bitalostored/stored/internal/tclock"
-
-	"github.com/zuoyebang/bitalostored/butils/hash"
-
-	"github.com/stretchr/testify/require"
 )
 
 type BitalosDBMinCore struct {

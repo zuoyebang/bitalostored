@@ -15,11 +15,10 @@
 package base
 
 import (
+	"github.com/zuoyebang/bitalostored/butils/hash"
 	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/btools"
 	"github.com/zuoyebang/bitalostored/stored/internal/tclock"
 	"github.com/zuoyebang/bitalostored/stored/internal/utils"
-
-	"github.com/zuoyebang/bitalostored/butils/hash"
 )
 
 func (bo *BaseObject) Del(khash uint32, keys ...[]byte) (n int64, err error) {

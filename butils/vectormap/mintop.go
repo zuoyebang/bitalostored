@@ -14,25 +14,25 @@
 
 package vectormap
 
-type Item struct {
-	g     uint32 // group id
-	s     uint8  // slot id
-	value uint8  // 元素值
+type Item[V uint8 | uint16] struct {
+	g     uint32
+	s     uint8
+	value V
 }
 
-type minTop struct {
-	items []*Item
+type minTop[V uint8 | uint16] struct {
+	items []*Item[V]
 	len   int
 	cap   int
 }
 
-func (h *minTop) Len() int { return h.len }
+func (h *minTop[V]) Len() int { return h.len }
 
-func (h *minTop) Less(i, j int) bool { return h.items[i].value > h.items[j].value }
+func (h *minTop[V]) Less(i, j int) bool { return h.items[i].value > h.items[j].value }
 
-func (h *minTop) Swap(i, j int) { h.items[i], h.items[j] = h.items[j], h.items[i] }
+func (h *minTop[V]) Swap(i, j int) { h.items[i], h.items[j] = h.items[j], h.items[i] }
 
-func (h *minTop) Push(x *Item) {
+func (h *minTop[V]) Push(x *Item[V]) {
 	if h.len == h.cap {
 		h.items[0] = x
 	} else {
@@ -41,7 +41,7 @@ func (h *minTop) Push(x *Item) {
 	}
 }
 
-func Push(h *minTop, x *Item) (bre bool) {
+func Push[V uint8 | uint16](h *minTop[V], x *Item[V]) (bre bool) {
 	if h.len == h.cap {
 		if h.items[0].value == 0 {
 			return true
@@ -61,7 +61,7 @@ func Push(h *minTop, x *Item) (bre bool) {
 	return
 }
 
-func up(h *minTop, j int) {
+func up[V uint8 | uint16](h *minTop[V], j int) {
 	for {
 		i := (j - 1) / 2 // parent
 		if i == j || !h.Less(j, i) {
@@ -72,7 +72,7 @@ func up(h *minTop, j int) {
 	}
 }
 
-func down(h *minTop, i0, n int) bool {
+func down[V uint8 | uint16](h *minTop[V], i0, n int) bool {
 	i := i0
 	for {
 		j1 := 2*i + 1
@@ -92,12 +92,12 @@ func down(h *minTop, i0, n int) bool {
 	return i > i0
 }
 
-func BuildMinTop(ctrl []metadata, counters []counter, l int) ([]*Item, uint8) {
+func BuildMinTopCounter[V uint8 | uint16](ctrl []metadata, counters []counter, l int) ([]*Item[V], uint8) {
 	if l == 0 {
 		return nil, 0
 	}
-	h := &minTop{cap: l}
-	h.items = make([]*Item, l)
+	h := &minTop[V]{cap: l}
+	h.items = make([]*Item[V], l)
 	for g, _ := range counters {
 		left := groupSize
 		for i := 0; h.len < h.cap && i < groupSize; i++ {
@@ -105,7 +105,7 @@ func BuildMinTop(ctrl []metadata, counters []counter, l int) ([]*Item, uint8) {
 				left--
 				continue
 			}
-			h.items[h.len] = &Item{value: counters[g][i], g: uint32(g), s: uint8(i)}
+			h.items[h.len] = &Item[V]{value: V(counters[g][i]), g: uint32(g), s: uint8(i)}
 			h.len++
 			left--
 			n := h.Len()
@@ -119,11 +119,47 @@ func BuildMinTop(ctrl []metadata, counters []counter, l int) ([]*Item, uint8) {
 			if ctrl[g][s] == empty || ctrl[g][s] == tombstone {
 				continue
 			}
-			Push(h, &Item{value: counters[g][s], g: uint32(g), s: uint8(s)})
+			Push(h, &Item[V]{value: V(counters[g][s]), g: uint32(g), s: uint8(s)})
 		}
 	}
 	if h.len == 0 {
 		return nil, 0
 	}
-	return h.items[:h.len], h.items[0].value
+	return h.items[:h.len], uint8(h.items[0].value)
+}
+
+func BuildMinTopSince[V uint8 | uint16](ctrl []metadata, counters []since, l int) ([]*Item[V], uint16) {
+	if l == 0 {
+		return nil, 0
+	}
+	h := &minTop[V]{cap: l}
+	h.items = make([]*Item[V], l)
+	for g, _ := range counters {
+		left := groupSize
+		for i := 0; h.len < h.cap && i < groupSize; i++ {
+			if ctrl[g][i] == empty || ctrl[g][i] == tombstone {
+				left--
+				continue
+			}
+			h.items[h.len] = &Item[V]{value: V(counters[g][i]), g: uint32(g), s: uint8(i)}
+			h.len++
+			left--
+			n := h.Len()
+			for i := n/2 - 1; i >= 0; i-- {
+				down(h, i, n)
+			}
+		}
+
+		for s := 0; left > 0; left-- {
+			s = groupSize - left
+			if ctrl[g][s] == empty || ctrl[g][s] == tombstone {
+				continue
+			}
+			Push(h, &Item[V]{value: V(counters[g][s]), g: uint32(g), s: uint8(s)})
+		}
+	}
+	if h.len == 0 {
+		return nil, 0
+	}
+	return h.items[:h.len], uint16(h.items[0].value)
 }

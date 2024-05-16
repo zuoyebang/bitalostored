@@ -20,13 +20,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
+	"github.com/zuoyebang/bitalostored/butils/hash"
 	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/bitsdb/base"
 	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/bitskv"
 	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/btools"
-
-	"github.com/zuoyebang/bitalostored/butils/hash"
-
-	"github.com/stretchr/testify/require"
 )
 
 func TestHashVersionIter(t *testing.T) {

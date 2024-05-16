@@ -21,14 +21,13 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/cockroachdb/errors"
 	"github.com/zuoyebang/bitalostored/stored/engine"
 	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/btools"
 	"github.com/zuoyebang/bitalostored/stored/internal/config"
 	"github.com/zuoyebang/bitalostored/stored/internal/log"
 	"github.com/zuoyebang/bitalostored/stored/internal/slowshield"
 	"github.com/zuoyebang/bitalostored/stored/internal/utils"
-
-	"github.com/cockroachdb/errors"
 	"golang.org/x/net/netutil"
 )
 

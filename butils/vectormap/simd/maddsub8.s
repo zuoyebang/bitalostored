@@ -172,3 +172,18 @@ TEXT ·MSubs256epu8(SB), $0-32
 	BYTE $0x5d               // popq	%rbp
 	WORD $0xf8c5; BYTE $0x77 // vzeroupper
 	BYTE $0xc3               // retq
+
+TEXT ·MSubs256epu16(SB), $0-32
+	MOVQ a+0(FP), DI
+	MOVQ b+8(FP), SI
+	MOVQ out+16(FP), DX
+	BYTE $0x55               // pushq	%rbp
+	WORD $0x8948; BYTE $0xe5 // movq	%rsp, %rbp
+	LONG $0xf8e48348         // andq	$-8, %rsp
+	LONG $0x076ffec5         // vmovdqu	(%rdi), %ymm0
+	LONG $0x06d9fdc5         // vpsubusw	(%rsi), %ymm0, %ymm0
+	LONG $0x027ffec5         // vmovdqu	%ymm0, (%rdx)
+	WORD $0x8948; BYTE $0xec // movq	%rbp, %rsp
+	BYTE $0x5d               // popq	%rbp
+	WORD $0xf8c5; BYTE $0x77 // vzeroupper
+	BYTE $0xc3               // retq

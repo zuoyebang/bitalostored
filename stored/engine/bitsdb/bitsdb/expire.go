@@ -22,6 +22,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/zuoyebang/bitalostored/butils/hash"
+	"github.com/zuoyebang/bitalostored/butils/unsafe2"
 	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/bitsdb/base"
 	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/bitskv"
 	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/bitskv/kv"
@@ -29,9 +31,6 @@ import (
 	"github.com/zuoyebang/bitalostored/stored/internal/errn"
 	"github.com/zuoyebang/bitalostored/stored/internal/log"
 	"github.com/zuoyebang/bitalostored/stored/internal/tclock"
-
-	"github.com/zuoyebang/bitalostored/butils/hash"
-	"github.com/zuoyebang/bitalostored/butils/unsafe2"
 )
 
 type expirePoolArgs struct {

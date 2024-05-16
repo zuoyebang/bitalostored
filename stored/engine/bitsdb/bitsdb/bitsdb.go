@@ -22,6 +22,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/panjf2000/ants/v2"
+	"github.com/zuoyebang/bitalostored/butils"
 	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/bitsdb/base"
 	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/bitsdb/hash"
 	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/bitsdb/list"
@@ -36,9 +38,6 @@ import (
 	"github.com/zuoyebang/bitalostored/stored/internal/config"
 	"github.com/zuoyebang/bitalostored/stored/internal/log"
 	"github.com/zuoyebang/bitalostored/stored/internal/tclock"
-
-	"github.com/panjf2000/ants/v2"
-	"github.com/zuoyebang/bitalostored/butils"
 )
 
 type BitsDB struct {

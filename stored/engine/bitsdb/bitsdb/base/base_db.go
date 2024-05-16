@@ -31,8 +31,9 @@ import (
 )
 
 const (
-	cacheBucketNum   int = 1024
-	eliminateThreads int = 1
+	cacheBucketNum          int           = 1024
+	cacheEliminateThreadNum int           = 1
+	cacheCircleDuration     time.Duration = 600 * time.Second
 )
 
 type BaseDB struct {
@@ -58,9 +59,10 @@ func NewBaseDB(cfg *dbconfig.Config) (*BaseDB, error) {
 
 	if cfg.CacheSize > 0 {
 		baseDb.MetaCache = vectormap.NewVectorMap(uint32(cfg.CacheHashSize),
+			vectormap.WithType(vectormap.MapTypeLRU),
 			vectormap.WithBuckets(cacheBucketNum),
 			vectormap.WithLogger(log.GetLogger()),
-			vectormap.WithEliminate(vectormap.Byte(cfg.CacheSize), eliminateThreads, 180*time.Second))
+			vectormap.WithEliminate(vectormap.Byte(cfg.CacheSize), cacheEliminateThreadNum, cacheCircleDuration))
 	}
 
 	return baseDb, nil
@@ -239,16 +241,19 @@ func (b *BaseDB) CacheInfo() string {
 	if b.MetaCache == nil {
 		return ""
 	}
-	maxMem := b.MetaCache.MaxMem()
+	memCap := b.MetaCache.MaxMem()
 	usedMem := b.MetaCache.UsedMem()
 	effectiveMem := b.MetaCache.EffectiveMem()
 	remainItemNum := b.MetaCache.Capacity()
 	itemNum := b.MetaCache.Count()
+	reputFailsCount := b.MetaCache.RePutFails()
 	missCount := b.MetaCache.MissCount()
 	queryCount := b.MetaCache.QueryCount()
 	var hitRate float64
 	if queryCount > 0 {
 		hitRate = float64(queryCount-missCount) / float64(queryCount)
 	}
-	return fmt.Sprintf("maxmem:%d usedMem:%d effectiveMem:%d remainItem:%d items:%d queryCount:%d missCount:%d hitRate:%.4f", maxMem, usedMem, effectiveMem, remainItemNum, itemNum, queryCount, missCount, hitRate)
+
+	return fmt.Sprintf("memCap:%d usedMem:%d effectiveMem:%d remainItem:%d Items:%d reputFailsCount:%d queryCount:%d missCount:%d hitRate:%.6f",
+		memCap, usedMem, effectiveMem, remainItemNum, itemNum, reputFailsCount, queryCount, missCount, hitRate)
 }

@@ -6,10 +6,10 @@ import (
 	"hash"
 )
 
-// The size of an MD5 checksum in bytes.
+// Size The size of an MD5 checksum in bytes.
 const Size = 16
 
-// The blocksize of MD5 in bytes.
+// BlockSize The blocksize of MD5 in bytes.
 const BlockSize = 64
 
 const (

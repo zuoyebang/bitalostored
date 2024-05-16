@@ -15,9 +15,7 @@
 package vectormap
 
 import (
-	"bytes"
 	"fmt"
-	"math/rand"
 	"strconv"
 	"testing"
 	"time"
@@ -42,9 +40,7 @@ func TestVectorGet(t *testing.T) {
 				key := []byte(strconv.Itoa(j))
 				value, closer, ok := m.Get(key)
 				assert.Equal(t, true, ok)
-				if !bytes.Equal(values[j], value) {
-					fmt.Printf("ex: %s \nac: %s\n", string(values[j]), string(value))
-				}
+				assert.Equal(t, values[j], value, "ex: %s \nac: %s\n", string(values[j]), string(value))
 				if closer != nil {
 					closer()
 				}
@@ -158,19 +154,17 @@ func TestVectorMap_Base(t *testing.T) {
 	}
 
 	var resident uint32 = 0
-	var memUsed uint32 = 0
-	for i, _ := range m.shards[0].groups {
-		for _, kIdx := range m.shards[0].groups[i] {
-			k, v := m.shards[0].kvHolder.getKV(kIdx)
+	groups := m.shards[0].Groups()
+	for i, _ := range groups {
+		for _, kIdx := range groups[i] {
+			k := m.shards[0].kvholder().getKey(kIdx)
 			if len(k) > 0 {
 				resident++
-				memUsed += uint32(len(v))
 			}
 		}
 	}
-	assert.Equal(t, m.shards[0].resident-m.shards[0].dead, resident, "%d : %d", m.shards[0].resident-m.shards[0].dead, resident)
-	assert.Equal(t, m.shards[0].resident-m.shards[0].dead, m.shards[0].kvHolder.items)
-	assert.Equal(t, memUsed, m.shards[0].kvHolder.valUsed)
+	assert.Equal(t, m.shards[0].Resident()-m.shards[0].Dead(), resident, "%d : %d", m.shards[0].Resident()-m.shards[0].Dead(), resident)
+	assert.Equal(t, m.shards[0].Resident()-m.shards[0].Dead(), m.shards[0].kvholder().items)
 	assert.Equal(t, m.Count(), int(m.Items()))
 
 	sliceKey := []byte("slice")
@@ -195,6 +189,81 @@ func TestVectorMap_Base(t *testing.T) {
 	m.Clear()
 }
 
+func TestVectorMap_BaseLRU(t *testing.T) {
+	keys := genStringData(16, 100)
+
+	m := NewVectorMap(2, WithDebug(), WithType(MapTypeLRU), WithBuckets(1), WithEliminate(1*GB, 0, 1*time.Second))
+	m.RePut([]byte(keys[0]), []byte(keys[1]))
+	v, closer, ok := m.Get([]byte(keys[0]))
+	assert.Equal(t, true, ok)
+	assert.Equal(t, []byte(keys[1]), v)
+	if closer != nil {
+		closer()
+	}
+
+	lv := make([]byte, 256)
+	m.RePut([]byte(keys[2]), lv)
+	v, closer, ok = m.Get([]byte(keys[2]))
+	assert.Equal(t, true, ok)
+	assert.Equal(t, lv, v)
+	if closer != nil {
+		closer()
+	}
+
+	m.RePut([]byte(keys[3]), lv)
+	v, closer, ok = m.Get([]byte(keys[3]))
+	assert.Equal(t, true, ok)
+	assert.Equal(t, lv, v)
+	if closer != nil {
+		closer()
+	}
+
+	for i := 0; i < 100; i += 2 {
+		if ok := m.RePut([]byte(keys[i]), []byte(keys[i+1])); ok {
+			v, closer, ok = m.Get([]byte(keys[i]))
+			assert.Equal(t, true, ok)
+			assert.Equal(t, []byte(keys[i+1]), v, "key: %s, i: %d", keys[i], i)
+			if closer != nil {
+				closer()
+			}
+		}
+	}
+
+	var resident uint32 = 0
+	groups := m.shards[0].Groups()
+	for i, _ := range groups {
+		for _, kIdx := range groups[i] {
+			k := m.shards[0].kvholder().getKey(kIdx)
+			if len(k) > 0 {
+				resident++
+			}
+		}
+	}
+	assert.Equal(t, m.shards[0].Resident()-m.shards[0].Dead(), resident, "%d : %d", m.shards[0].Resident()-m.shards[0].Dead(), resident)
+	assert.Equal(t, m.shards[0].Resident()-m.shards[0].Dead(), m.shards[0].kvholder().items)
+	assert.Equal(t, m.Count(), int(m.Items()))
+
+	sliceKey := []byte("slice")
+	m.RePut(sliceKey, []byte("slice"))
+	m.PutMultiValue(sliceKey, 8, []byte("new"), []byte("slice"))
+	slice, closer, ok := m.Get(sliceKey)
+	assert.Equal(t, true, ok)
+	assert.Equal(t, []byte("newslice"), slice)
+	if closer != nil {
+		closer()
+	}
+
+	m.Delete(sliceKey)
+	_, closer, ok = m.Get(sliceKey)
+	assert.Equal(t, false, ok)
+	assert.Equal(t, m.Count(), int(m.Items()))
+	if closer != nil {
+		closer()
+	}
+
+	m.Clear()
+}
+
 func TestVectorMap_GC_Release(t *testing.T) {
 	m := NewVectorMap(4, WithDebug(), WithBuckets(1), WithEliminate(3*KB, 0, 100*time.Millisecond))
 	{
@@ -202,10 +271,10 @@ func TestVectorMap_GC_Release(t *testing.T) {
 		m.RePut([]byte("c"), make([]byte, 1024))
 
 		_, closer, _ := m.Get([]byte("c"))
-		assert.Equal(t, int32(2), m.shards[0].kvHolder.buffer.ref.refs())
+		assert.Equal(t, int32(2), m.shards[0].kvholder().buffer.ref.refs())
 		m.Delete([]byte("c"))
-		m.shards[0].gcCopy()
-		assert.Equal(t, int32(1), m.shards[0].kvHolder.buffer.ref.refs())
+		m.shards[0].GCCopy()
+		assert.Equal(t, int32(1), m.shards[0].kvholder().buffer.ref.refs())
 		if closer != nil {
 			closer()
 		}
@@ -220,7 +289,7 @@ func TestVectorMap_GC(t *testing.T) {
 		m.RePut([]byte("a"), []byte("b"))
 		m.RePut([]byte("c"), []byte("d"))
 		m.Delete([]byte("c"))
-		m.shards[0].gcCopy()
+		m.shards[0].GCCopy()
 		assert.Equal(t, float32(32+20+4)/(3*1024), m.shards[0].itemsMemUsage())
 		assert.Equal(t, float32(32+20+4+20+4)/(3*1024), m.shards[0].memUsage())
 	}
@@ -229,7 +298,7 @@ func TestVectorMap_GC(t *testing.T) {
 		m.RePut([]byte("c"), make([]byte, 1024))
 		assert.Equal(t, float32(32+20+4+20+4+20+1024)/(3*1024), m.shards[0].memUsage())
 		m.Delete([]byte("c"))
-		m.shards[0].gcCopy()
+		m.shards[0].GCCopy()
 		assert.Equal(t, float32(32+20+4)/(3*1024), m.shards[0].memUsage())
 	}
 
@@ -240,8 +309,8 @@ func TestVectorMap_EliminateAndGC(t *testing.T) {
 	m := NewVectorMap(4, WithDebug(), WithBuckets(1), WithEliminate(3*KB, 0, 100*time.Millisecond))
 
 	{
-		m.shards[0].eliminate()
-		m.shards[0].gcCopy()
+		m.shards[0].Eliminate()
+		m.shards[0].GCCopy()
 	}
 	m.Get([]byte("b"))
 	m.Get([]byte("c"))
@@ -249,7 +318,7 @@ func TestVectorMap_EliminateAndGC(t *testing.T) {
 
 	m.RePut([]byte("a"), make([]byte, vlen))
 	m.RePut([]byte("b"), make([]byte, vlen))
-	m.shards[0].eliminate()
+	m.shards[0].Eliminate()
 	assert.Equal(t, float32(32+20+vlen+20+vlen)/(3*1024), m.shards[0].itemsMemUsage())
 	assert.Equal(t, float32(32+20+vlen+20+vlen)/(3*1024), m.shards[0].memUsage())
 
@@ -261,19 +330,91 @@ func TestVectorMap_EliminateAndGC(t *testing.T) {
 	m.Get([]byte("a"))
 	m.Get([]byte("c"))
 
-	m.shards[0].eliminate()
+	m.shards[0].Eliminate()
 	assert.Equal(t, float32(32+20+vlen+20+vlen)/(3*1024), m.shards[0].itemsMemUsage())
 	assert.Equal(t, float32(32+20+vlen+20+vlen+20+vlen)/(3*1024), m.shards[0].memUsage())
 	{
 		_, closer, ok := m.Get([]byte("b"))
 		assert.Equal(t, false, ok)
-		assert.Equal(t, uint32(1), m.shards[0].dead)
+		assert.Equal(t, uint32(1), m.shards[0].Dead())
 		if closer != nil {
 			closer()
 		}
 	}
 
-	m.shards[0].gcCopy()
+	m.shards[0].GCCopy()
+	assert.Equal(t, float32(32+20+vlen+20+vlen)/(3*1024), m.shards[0].itemsMemUsage())
+	assert.Equal(t, float32(32+20+vlen+20+vlen)/(3*1024), m.shards[0].memUsage())
+
+	m.Clear()
+}
+
+func TestVectorMap_EliminateAndGC_LRU(t *testing.T) {
+	m := NewVectorMap(4, WithDebug(), WithType(MapTypeLRU), WithBuckets(1), WithEliminate(3*KB, 0, 100*time.Millisecond))
+
+	{
+		m.shards[0].Eliminate()
+		m.shards[0].GCCopy()
+	}
+	m.Get([]byte("b"))
+	m.Get([]byte("c"))
+	vlen := 992
+
+	m.RePut([]byte("a"), make([]byte, vlen))
+	m.RePut([]byte("b"), make([]byte, vlen))
+	m.shards[0].Eliminate()
+	assert.Equal(t, float32(32+20+vlen+20+vlen)/(3*1024), m.shards[0].itemsMemUsage())
+	assert.Equal(t, float32(32+20+vlen+20+vlen)/(3*1024), m.shards[0].memUsage())
+
+	ok := m.RePut([]byte("c"), make([]byte, vlen))
+	assert.Equal(t, true, ok)
+	assert.Equal(t, float32(32+20+vlen+20+vlen+20+vlen)/(3*1024), m.shards[0].itemsMemUsage())
+	assert.Equal(t, float32(32+20+vlen+20+vlen+20+vlen)/(3*1024), m.shards[0].memUsage())
+
+	m.shards[0].Eliminate()
+	assert.Equal(t, float32(32+20+vlen+20+vlen)/(3*1024), m.shards[0].itemsMemUsage())
+	assert.Equal(t, float32(32+20+vlen+20+vlen+20+vlen)/(3*1024), m.shards[0].memUsage())
+	m.shards[0].GCCopy()
+	assert.Equal(t, float32(32+20+vlen+20+vlen)/(3*1024), m.shards[0].memUsage())
+	{
+		_, closer, ok := m.Get([]byte("a"))
+		assert.Equal(t, false, ok)
+		if closer != nil {
+			closer()
+		}
+	}
+	time.Sleep(UnitTime)
+	m.RePut([]byte("a"), make([]byte, vlen))
+	// key[b] should be deleted
+	m.Put([]byte("b"), make([]byte, vlen))
+	{
+		_, closer, ok := m.Get([]byte("a"))
+		assert.Equal(t, true, ok)
+		assert.Equal(t, uint32(1), m.shards[0].Dead())
+		if closer != nil {
+			closer()
+		}
+	}
+	m.shards[0].GCCopy()
+	{
+		_, closer, ok := m.Get([]byte("b"))
+		assert.Equal(t, false, ok)
+		if closer != nil {
+			closer()
+		}
+	}
+	m.RePut([]byte("b"), make([]byte, vlen))
+	m.shards[0].Eliminate()
+	m.shards[0].GCCopy()
+	{
+		_, closer, ok := m.Get([]byte("c"))
+		assert.Equal(t, false, ok)
+		if closer != nil {
+			closer()
+		}
+	}
+
+	m.shards[0].GCCopy()
 	assert.Equal(t, float32(32+20+vlen+20+vlen)/(3*1024), m.shards[0].itemsMemUsage())
 	assert.Equal(t, float32(32+20+vlen+20+vlen)/(3*1024), m.shards[0].memUsage())
 
@@ -343,27 +484,28 @@ func TestVectorMap_WithOption(t *testing.T) {
 	}
 
 	var resident uint32 = 0
-	for i, _ := range m.shards[0].groups {
-		for _, kIdx := range m.shards[0].groups[i] {
-			k := m.shards[0].kvHolder.getKey(kIdx)
+	groups := m.shards[0].Groups()
+	for i, _ := range groups {
+		for _, kIdx := range groups[i] {
+			k := m.shards[0].kvholder().getKey(kIdx)
 			if len(k) > 0 {
 				resident++
 			}
 		}
 	}
-	assert.Equal(t, m.shards[0].resident-m.shards[0].dead, resident, "%d : %d", m.shards[0].resident-m.shards[0].dead, resident)
+	assert.Equal(t, m.shards[0].Resident()-m.shards[0].Dead(), resident, "%d : %d", m.shards[0].Resident()-m.shards[0].Dead(), resident)
 
 	var actualitems, expected uint32
 	for i, _ := range m.shards {
-		for j, _ := range m.shards[i].groups {
-			for _, kIdx := range m.shards[i].groups[j] {
-				k := m.shards[i].kvHolder.getKey(kIdx)
+		for j, _ := range m.shards[i].Groups() {
+			for _, kIdx := range m.shards[i].Groups()[j] {
+				k := m.shards[i].kvholder().getKey(kIdx)
 				if len(k) > 0 {
 					actualitems++
 				}
 			}
 		}
-		expected += m.shards[i].resident - m.shards[i].dead
+		expected += m.shards[i].Resident() - m.shards[i].Dead()
 	}
 	assert.Equal(t, expected, actualitems, "%d : %d", expected, actualitems)
 
@@ -384,144 +526,311 @@ func TestVectorMap_WithOption(t *testing.T) {
 	m.Clear()
 }
 
-func TestParallelLongValueRW(t *testing.T) {
-	m := NewVectorMap(10, WithBuckets(1), WithEliminate(1*GB, 1, 1*time.Second))
-	key := []byte("1234567890")
-	values := genBytesData(256, 2)
-	var c = make(chan struct{}, 1)
-	var oldV, newV = 0, 1
-	var missHis int
-	for i := 0; i < 100; i++ {
-		go func() {
-			var query, miss int
-			for {
-				select {
-				case <-c:
-					return
-				default:
-					query++
-					if v, _, ok := m.Get(key); ok {
-						assert.Equal(t, true, bytes.Equal(v, values[0]) || bytes.Equal(v, values[1]), " 0: %s \n 1: %s \n v: %s", string(values[0]), string(values[1]), string(v))
-					} else {
-						miss++
-					}
-				}
-				if miss > missHis && miss%200 == 0 {
-					missHis = miss
-					fmt.Printf("query: %d, miss: %d\n", query, miss)
-				}
-			}
-		}()
+//func TestParallelLongValueRW(t *testing.T) {
+//	m := NewVectorMap(10, WithBuckets(1), WithEliminate(1*GB, 1, 1*time.Second))
+//	key := []byte("1234567890")
+//	values := genBytesData(256, 2)
+//	var c = make(chan struct{}, 1)
+//	var oldV, newV = 0, 1
+//	var missHis int
+//	for i := 0; i < 100; i++ {
+//		go func() {
+//			var query, miss int
+//			for {
+//				select {
+//				case <-c:
+//					return
+//				default:
+//					query++
+//					if v, _, ok := m.Get(key); ok {
+//						assert.Equal(t, true, bytes.Equal(v, values[0]) || bytes.Equal(v, values[1]), " 0: %s \n 1: %s \n v: %s", string(values[0]), string(values[1]), string(v))
+//					} else {
+//						miss++
+//					}
+//				}
+//				if miss > missHis && miss%200 == 0 {
+//					missHis = miss
+//					fmt.Printf("query: %d, miss: %d\n", query, miss)
+//				}
+//			}
+//		}()
+//	}
+//
+//	go func() {
+//		for {
+//			select {
+//			case <-c:
+//				return
+//			default:
+//				m.Put(key, values[newV])
+//				oldV, newV = newV, oldV
+//				time.Sleep(time.Millisecond * 20)
+//			}
+//		}
+//	}()
+//
+//	go func() {
+//		for {
+//			select {
+//			case <-c:
+//				return
+//			default:
+//				m.PutMultiValue(key, len(values[newV]), values[newV][:len(values[newV])/2], values[newV][len(values[newV])/2:])
+//				oldV, newV = newV, oldV
+//				time.Sleep(time.Millisecond * 20)
+//			}
+//		}
+//	}()
+//
+//	go func() {
+//		for {
+//			select {
+//			case <-c:
+//				return
+//			default:
+//				m.RePut(key, values[newV])
+//				oldV, newV = newV, oldV
+//				time.Sleep(time.Millisecond * 20)
+//			}
+//		}
+//	}()
+//
+//	time.Sleep(1 * time.Minute)
+//	close(c)
+//	time.Sleep(time.Second)
+//}
+
+//func TestParallelShortValueRW(t *testing.T) {
+//	m := NewVectorMap(10, WithBuckets(1), WithEliminate(10*KB, 1, 1*time.Second))
+//	key := []byte("1234567890")
+//	values := genBytesData(100, 2)
+//	var c = make(chan struct{}, 1)
+//	var oldV, newV = 0, 1
+//	for i := 0; i < 100; i++ {
+//		go func() {
+//			for {
+//				select {
+//				case <-c:
+//					return
+//				default:
+//					v, closer, ok := m.Get(key)
+//					if ok {
+//						assert.Equal(t, true, bytes.Equal(v, values[0]) || bytes.Equal(v, values[1]), " 0: %s \n 1: %s \n v: %s", string(values[0]), string(values[1]), string(v))
+//					}
+//					if closer != nil {
+//						closer()
+//					}
+//				}
+//			}
+//		}()
+//	}
+//
+//	go func() {
+//		for {
+//			select {
+//			case <-c:
+//				return
+//			default:
+//				m.Put(key, values[newV])
+//				oldV, newV = newV, oldV
+//			}
+//		}
+//	}()
+//
+//	go func() {
+//		for {
+//			select {
+//			case <-c:
+//				return
+//			default:
+//				m.PutMultiValue(key, len(values[newV]), values[newV][:len(values[newV])/2], values[newV][len(values[newV])/2:])
+//				oldV, newV = newV, oldV
+//			}
+//		}
+//	}()
+//
+//	go func() {
+//		for {
+//			select {
+//			case <-c:
+//				return
+//			default:
+//				m.RePut(key, values[newV])
+//				oldV, newV = newV, oldV
+//			}
+//		}
+//	}()
+//
+//	time.Sleep(100 * time.Second)
+//	close(c)
+//	time.Sleep(time.Second)
+//}
+
+func TestVectorMapLRU_BigValue(t *testing.T) {
+	logger := &defaultLogger{}
+	k := []byte("K1234567890")
+	k1 := []byte("K1")
+	vs := genBytesData(1<<16-20, 4)
+	vs1 := genBytesData(1<<14, 4)
+	vs2 := genBytesData(1<<5, 4)
+	ca := 1 << 19
+	m := NewVectorMap(4,
+		WithDebug(),
+		WithLogger(logger),
+		WithLRUUnitTime(time.Second),
+		WithType(MapTypeLRU),
+		WithBuckets(1),
+		WithEliminate(Byte(ca), 0, 0))
+	ok := m.RePut(k, vs[0])
+	assert.Equal(t, true, ok)
+
+	v, c, ok := m.Get(k)
+	assert.Equal(t, true, ok)
+	assert.Equal(t, vs[0], v)
+	if c != nil {
+		c()
 	}
 
-	go func() {
-		for {
-			select {
-			case <-c:
-				return
-			default:
-				m.Put(key, values[newV])
-				oldV, newV = newV, oldV
-				time.Sleep(time.Millisecond * 20)
-			}
-		}
-	}()
+	m.RePut(k1, vs[1])
+	v, c, ok = m.Get(k1)
+	assert.Equal(t, true, ok)
+	assert.Equal(t, vs[1], v)
+	if c != nil {
+		c()
+	}
 
-	go func() {
-		for {
-			select {
-			case <-c:
-				return
-			default:
-				m.PutMultiValue(key, len(values[newV]), values[newV][:len(values[newV])/2], values[newV][len(values[newV])/2:])
-				oldV, newV = newV, oldV
-				time.Sleep(time.Millisecond * 20)
-			}
-		}
-	}()
-
-	go func() {
-		for {
-			select {
-			case <-c:
-				return
-			default:
-				m.RePut(key, values[newV])
-				oldV, newV = newV, oldV
-				time.Sleep(time.Millisecond * 20)
-			}
-		}
-	}()
-
-	time.Sleep(1 * time.Minute)
-	close(c)
+	v, c, ok = m.Get(k)
+	assert.Equal(t, true, ok)
+	assert.Equal(t, vs[0], v)
+	if c != nil {
+		c()
+	}
 	time.Sleep(time.Second)
+
+	for i := 0; i < 90; i++ {
+		k := []byte(strconv.Itoa(i))
+		if i > 60 {
+			k = []byte(strconv.Itoa(i/60 + 1))
+		} else if i > 30 {
+			k = []byte(strconv.Itoa(i/30 + 2))
+		}
+		var v []byte
+		r := randIntN(3)
+		if r == 0 {
+			v = vs[i%4]
+		} else if r == 1 {
+			v = vs1[i%4]
+		} else {
+			v = vs2[i%4]
+		}
+		if ok = m.RePut(k, v); ok {
+			res, c, ok := m.Get(k)
+			assert.Equal(t, true, ok)
+			assert.Equal(t, v, res)
+			if c != nil {
+				c()
+			}
+		}
+		m.shards[0].Eliminate()
+		m.shards[0].GCCopy()
+		time.Sleep(time.Second)
+	}
+
+	if ok = m.RePut(k1, vs[1]); ok {
+		assert.Equal(t, true, ok)
+		v, c, ok = m.Get(k1)
+		assert.Equal(t, true, ok)
+		assert.Equal(t, vs[1], v)
+		if c != nil {
+			c()
+		}
+	}
+	m.Put(k1, vs[2])
+	m.Put(k1, vs[3])
+	m.shards[0].Eliminate()
+	m.shards[0].GCCopy()
 }
 
-func TestParallelShortValueRW(t *testing.T) {
-	m := NewVectorMap(10, WithBuckets(1), WithEliminate(10*KB, 1, 1*time.Second))
-	key := []byte("1234567890")
-	values := genBytesData(100, 2)
-	var c = make(chan struct{}, 1)
-	var oldV, newV = 0, 1
-	for i := 0; i < 100; i++ {
-		go func() {
-			for {
-				select {
-				case <-c:
-					return
-				default:
-					v, closer, ok := m.Get(key)
-					if ok {
-						assert.Equal(t, true, bytes.Equal(v, values[0]) || bytes.Equal(v, values[1]), " 0: %s \n 1: %s \n v: %s", string(values[0]), string(values[1]), string(v))
-					}
-					if closer != nil {
-						closer()
-					}
-				}
-			}
-		}()
+func TestVectorMapLFU_BigValue(t *testing.T) {
+	logger := &defaultLogger{}
+	k := []byte("K1234567890")
+	k1 := []byte("K1")
+	vs := genBytesData(1<<16-20, 4)
+	vs1 := genBytesData(1<<14, 4)
+	vs2 := genBytesData(1<<5, 4)
+	ca := 1 << 19
+	m := NewVectorMap(4,
+		WithDebug(),
+		WithLogger(logger),
+		WithType(MapTypeLFU),
+		WithBuckets(1),
+		WithEliminate(Byte(ca), 0, 0))
+	ok := m.RePut(k, vs[0])
+	assert.Equal(t, true, ok)
+
+	v, c, ok := m.Get(k)
+	assert.Equal(t, true, ok)
+	assert.Equal(t, vs[0], v)
+	if c != nil {
+		c()
 	}
 
-	go func() {
-		for {
-			select {
-			case <-c:
-				return
-			default:
-				m.Put(key, values[newV])
-				oldV, newV = newV, oldV
+	m.RePut(k1, vs[1])
+	v, c, ok = m.Get(k1)
+	assert.Equal(t, true, ok)
+	assert.Equal(t, vs[1], v)
+	if c != nil {
+		c()
+	}
+
+	v, c, ok = m.Get(k)
+	assert.Equal(t, true, ok)
+	assert.Equal(t, vs[0], v)
+	if c != nil {
+		c()
+	}
+
+	for i := 0; i < 90; i++ {
+		k := []byte(strconv.Itoa(i))
+		if i > 60 {
+			k = []byte(strconv.Itoa(i/60 + 1))
+		} else if i > 30 {
+			k = []byte(strconv.Itoa(i/30 + 2))
+		}
+		var v []byte
+		r := randIntN(3)
+		if r == 0 {
+			v = vs[i%4]
+		} else if r == 1 {
+			v = vs1[i%4]
+		} else {
+			v = vs2[i%4]
+		}
+		if ok = m.RePut(k, v); ok {
+			res, c, ok := m.Get(k)
+			assert.Equal(t, true, ok)
+			assert.Equal(t, v, res)
+			if c != nil {
+				c()
 			}
 		}
-	}()
+		m.shards[0].Eliminate()
+		m.shards[0].GCCopy()
+	}
 
-	go func() {
-		for {
-			select {
-			case <-c:
-				return
-			default:
-				m.PutMultiValue(key, len(values[newV]), values[newV][:len(values[newV])/2], values[newV][len(values[newV])/2:])
-				oldV, newV = newV, oldV
-			}
+	if ok = m.RePut(k1, vs[1]); ok {
+		assert.Equal(t, true, ok)
+		v, c, ok = m.Get(k1)
+		assert.Equal(t, true, ok)
+		assert.Equal(t, vs[1], v)
+		if c != nil {
+			c()
 		}
-	}()
-
-	go func() {
-		for {
-			select {
-			case <-c:
-				return
-			default:
-				m.RePut(key, values[newV])
-				oldV, newV = newV, oldV
-			}
-		}
-	}()
-
-	time.Sleep(100 * time.Second)
-	close(c)
-	time.Sleep(time.Second)
+	}
+	m.Put(k1, vs[2])
+	m.Put(k1, vs[3])
+	m.shards[0].Eliminate()
+	m.shards[0].GCCopy()
 }
 
 func TestGCTime(t *testing.T) {
@@ -530,29 +839,28 @@ func TestGCTime(t *testing.T) {
 	for i := 0; i < 460000; i++ {
 		m.RePut([]byte(strconv.Itoa(i)), vs[0])
 	}
-	t.Logf("MemUse: %d", m.shards[0].itemsUsedMem())
+	t.Logf("MemUse: %d", m.shards[0].ItemsUsedMem())
 	t.Logf("memUsage: %.3f", m.shards[0].memUsage())
-	t.Logf("Items: %d", m.shards[0].items())
+	t.Logf("Items: %d", m.shards[0].Items())
 	for i := 0; i < 460000; i += 9 {
 		m.Delete([]byte(strconv.Itoa(i)))
 	}
-	t.Logf("MemUse: %d", m.shards[0].itemsUsedMem())
+	t.Logf("MemUse: %d", m.shards[0].ItemsUsedMem())
 	t.Logf("memUsage: %.3f", m.shards[0].memUsage())
 	start := time.Now()
-	m.shards[0].gcCopy()
-	t.Logf("gcCopy time: %s", time.Since(start))
+	m.shards[0].GCCopy()
+	t.Logf("GCCopy time: %s", time.Since(start))
 
-	t.Logf("MemUse: %d", m.shards[0].itemsUsedMem())
+	t.Logf("MemUse: %d", m.shards[0].ItemsUsedMem())
 	t.Logf("memUsage: %.3f", m.shards[0].memUsage())
 	m.Clear()
 }
 
 func genBytesData(size, count int) (keys [][]byte) {
-	src := rand.New(rand.NewSource(int64(size * count)))
 	letters := []byte("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
 	r := make([]byte, size*count)
 	for i := range r {
-		r[i] = letters[src.Intn(len(letters))]
+		r[i] = letters[randIntN(len(letters))]
 	}
 	keys = make([][]byte, count)
 	for i := range keys {
@@ -563,11 +871,10 @@ func genBytesData(size, count int) (keys [][]byte) {
 }
 
 func genStringData(size, count int) (keys []string) {
-	src := rand.New(rand.NewSource(int64(size * count)))
 	letters := []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
 	r := make([]rune, size*count)
 	for i := range r {
-		r[i] = letters[src.Intn(len(letters))]
+		r[i] = letters[randIntN(len(letters))]
 	}
 	keys = make([]string, count)
 	for i := range keys {

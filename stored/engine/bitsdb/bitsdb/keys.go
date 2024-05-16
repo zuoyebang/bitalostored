@@ -18,14 +18,12 @@ import (
 	"bytes"
 	"encoding/binary"
 
+	"github.com/zuoyebang/bitalostored/butils/hash"
+	"github.com/zuoyebang/bitalostored/butils/unsafe2"
 	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/bitsdb/base"
 	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/bitskv"
 	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/btools"
 	"github.com/zuoyebang/bitalostored/stored/internal/glob"
-
-	"github.com/zuoyebang/bitalostored/butils/hash"
-
-	"github.com/zuoyebang/bitalostored/butils/unsafe2"
 )
 
 func (bdb *BitsDB) Scan(

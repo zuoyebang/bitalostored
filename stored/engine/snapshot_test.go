@@ -22,10 +22,9 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/zuoyebang/bitalostored/butils/hash"
 	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/btools"
 	"github.com/zuoyebang/bitalostored/stored/internal/config"
-
-	"github.com/zuoyebang/bitalostored/butils/hash"
 )
 
 func TestDoCheckpoint(t *testing.T) {

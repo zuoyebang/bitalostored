@@ -54,6 +54,9 @@ func MAdds256epu8(a, b, out unsafe.Pointer)
 //go:noescape
 func MSubs256epu8(a, b, out unsafe.Pointer)
 
+//go:noescape
+func MSubs256epu16(a, b, out unsafe.Pointer)
+
 func FMAdd128epi8(a, b, out *[16]int8) {
 	MAdd128epi8(unsafe.Pointer(&a[0]), unsafe.Pointer(&b[0]), unsafe.Pointer(&out[0]))
 }
@@ -100,4 +103,8 @@ func FMAdds256epu8(a, b, out *[32]uint8) {
 
 func FMSubs256epu8(a, b, out *[32]uint8) {
 	MSubs256epu8(unsafe.Pointer(&a[0]), unsafe.Pointer(&b[0]), unsafe.Pointer(&out[0]))
+}
+
+func FMSubs256epu16(a, b, out *[16]uint16) {
+	MSubs256epu16(unsafe.Pointer(&a[0]), unsafe.Pointer(&b[0]), unsafe.Pointer(&out[0]))
 }

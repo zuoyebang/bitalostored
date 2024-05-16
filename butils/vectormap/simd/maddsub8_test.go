@@ -174,3 +174,15 @@ func TestFMSubs256epu8(t *testing.T) {
 		t.Errorf("MSub256(%v, %v, %v) = %v, want %v", c, d, out2, out2, res2)
 	}
 }
+
+func TestFMSubs256epu16(t *testing.T) {
+	c := [16]uint16{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}
+	d := [16]uint16{8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8}
+
+	var out2 [16]uint16
+	FMSubs256epu16(&c, &d, &out2)
+	res2 := [16]uint16{0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8}
+	if !reflect.DeepEqual(out2, res2) {
+		t.Errorf("MSub256(%v, %v, %v) = %v, want %v", c, d, out2, out2, res2)
+	}
+}

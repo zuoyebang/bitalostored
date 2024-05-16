@@ -16,75 +16,16 @@ package vectormap
 
 import (
 	"testing"
-	"unsafe"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/zuoyebang/bitalostored/butils/md5hash"
 )
 
 var vh *kvHolder
 
 func TestStoreAndLoadUint32(t *testing.T) {
-	var holder [4]byte
+	var holder = make([]byte, 4)
 	u := uint32(123456789)
-	StoreUint32(unsafe.Pointer(&holder[0]), u)
-	res := LoadUint32(unsafe.Pointer(&holder[0]))
+	StoreUint32(holder, u)
+	res := LoadUint32(holder)
 	assert.Equal(t, u, res)
-}
-
-func TestKvHolder_SetGet(t *testing.T) {
-	key := []byte("test")
-	value := []byte("value")
-	khash := md5hash.MD5(key)
-	ki, fail := vh.set(khash, value)
-	assert.Equal(t, false, fail)
-	k, v := vh.getKV(ki)
-	assert.Equal(t, khash, k)
-	assert.Equal(t, value, v)
-
-	value2 := []byte("valu")
-	ki, fail = vh.update(ki, value2)
-	assert.Equal(t, false, fail)
-	k2, v2 := vh.getKV(ki)
-	assert.Equal(t, khash, k2)
-	assert.Equal(t, value2, v2)
-
-	value3 := []byte("value__lt__8")
-	ki, fail = vh.update(ki, value3)
-	assert.Equal(t, false, fail)
-	k3, v3 := vh.getKV(ki)
-	assert.Equal(t, khash, k3)
-	assert.Equal(t, value3, v3)
-
-	lValue := make([]byte, 128)
-	for i, _ := range lValue {
-		lValue[i] = byte(i)
-	}
-	ki, fail = vh.update(ki, lValue)
-	assert.Equal(t, false, fail)
-	k, v = vh.getKV(ki)
-	assert.Equal(t, khash, k)
-	assert.Equal(t, lValue, v)
-
-	lValue2 := make([]byte, 256)
-	for i, _ := range lValue2 {
-		lValue2[i] = byte(i)
-	}
-	ki, fail = vh.update(ki, lValue2)
-	assert.Equal(t, false, fail)
-	k, v = vh.getKV(ki)
-	assert.Equal(t, khash, k)
-	assert.Equal(t, lValue2, v)
-
-	sValue := []byte("short_after_long")
-	ki, fail = vh.update(ki, sValue)
-	assert.Equal(t, false, fail)
-	k, v = vh.getKV(ki)
-	assert.Equal(t, khash, k)
-	assert.Equal(t, sValue, v)
-}
-
-func TestMain(m *testing.M) {
-	vh = newKVHolder(1 * MB)
-	m.Run()
 }

@@ -25,12 +25,11 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/zuoyebang/bitalostored/stored/internal/config"
-	"github.com/zuoyebang/bitalostored/stored/internal/log"
-
 	"github.com/cockroachdb/errors"
 	"github.com/zuoyebang/bitalostored/butils"
 	"github.com/zuoyebang/bitalostored/butils/unsafe2"
+	"github.com/zuoyebang/bitalostored/stored/internal/config"
+	"github.com/zuoyebang/bitalostored/stored/internal/log"
 )
 
 const readBufferSize = 2048

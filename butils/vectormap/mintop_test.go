@@ -25,7 +25,7 @@ func TestMinTop(t *testing.T) {
 	{
 		ctrl := []metadata{{-128, -128, -128, -128, -128, -128, -128, -128, -128, -128, -128, -128, -128, -128, -128, -128}}
 		counter := []counter{{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}}
-		minTop, max := BuildMinTop(ctrl, counter, 5)
+		minTop, max := BuildMinTopCounter[uint8](ctrl, counter, 5)
 
 		for i := 0; i < len(minTop); i++ {
 			assert.Less(t, minTop[i].value, uint8(4), "g: %d, s: %d, v: %d", minTop[i].g, minTop[i].s, minTop[i].value)
@@ -37,7 +37,7 @@ func TestMinTop(t *testing.T) {
 	{
 		ctrl := []metadata{{3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5, 10, 12, 14, 1, -128}, {3, 1, 4, -2, 5, 9, 2, 6, 5, 3, 5, 9, 2, 6, 5, 3}}
 		counter := []counter{{3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5, 10, 12, 14, 0, 0}, {3, 1, 4, 0, 5, 9, 2, 6, 5, 3, 5, 9, 2, 6, 5, 3}}
-		minTop, max := BuildMinTop(ctrl, counter, 5)
+		minTop, max := BuildMinTopCounter[uint8](ctrl, counter, 5)
 
 		for i := 0; i < len(minTop); i++ {
 			assert.Less(t, minTop[i].value, uint8(4), "g: %d, s: %d, v: %d", minTop[i].g, minTop[i].s, minTop[i].value)
@@ -49,7 +49,7 @@ func TestMinTop(t *testing.T) {
 	{
 		ctrl := []metadata{{3, 1, 4, -2, -128, -128, -128, -128, -128, -128, -128, -128, -128, -128, -128, -128}}
 		arr := []counter{{3, 1, 2}}
-		minTop, max := BuildMinTop(ctrl, arr, 5)
+		minTop, max := BuildMinTopCounter[uint8](ctrl, arr, 5)
 
 		for i := 0; i < len(minTop); i++ {
 			assert.Less(t, minTop[i].value, uint8(4), "g: %d, s: %d, v: %d", minTop[i].g, minTop[i].s, minTop[i].value)

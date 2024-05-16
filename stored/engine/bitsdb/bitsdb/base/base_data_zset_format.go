@@ -18,11 +18,10 @@ import (
 	"crypto/md5"
 	"encoding/binary"
 
+	"github.com/zuoyebang/bitalostored/butils/numeric"
 	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/btools"
 	"github.com/zuoyebang/bitalostored/stored/internal/bytepools"
 	"github.com/zuoyebang/bitalostored/stored/internal/utils"
-
-	"github.com/zuoyebang/bitalostored/butils/numeric"
 )
 
 func EncodeZsetDataKey(buf []byte, version uint64, khash uint32, member []byte) {

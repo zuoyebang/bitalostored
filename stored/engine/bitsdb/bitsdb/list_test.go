@@ -19,12 +19,10 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+	"github.com/zuoyebang/bitalostored/butils/hash"
 	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/bitsdb/base"
 	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/bitsdb/list"
-
-	"github.com/zuoyebang/bitalostored/butils/hash"
-
-	"github.com/stretchr/testify/require"
 )
 
 func TestListCodec(t *testing.T) {

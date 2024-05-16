@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"github.com/zuoyebang/bitalostored/stored/internal/config"
-
 	"github.com/zuoyebang/bitalostored/stored/internal/log"
 )
 
