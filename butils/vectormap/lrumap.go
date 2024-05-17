@@ -29,7 +29,7 @@ import (
 
 var UnitTime = 30 * time.Second
 
-const LRUSubDuration = 10 * time.Second
+const LRUSubDuration = 24 * time.Hour
 
 type LRUMap struct {
 	owner      *VectorMap
@@ -1083,7 +1083,7 @@ func (m *LRUMap) GCCopy() (deadCount int, gcMem int, subSince bool, skipReason i
 		for i := 0; i < ctrLen; i++ {
 			simd.MSubs256epu16(unsafe.Pointer(&(sinces[i])), unsafe.Pointer(&level), unsafe.Pointer(&(sinces[i])))
 		}
-		m.startTime.Add(time.Duration(m.minTopSince) * UnitTime)
+		m.startTime = m.startTime.Add(time.Duration(m.minTopSince) * UnitTime)
 		subSince = true
 	}
 
