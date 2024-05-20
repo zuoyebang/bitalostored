@@ -967,10 +967,14 @@ func (m *LRUMap) rehash() {
 	m.groups = groups
 	m.ctrl = ctrl
 	m.sinces = sinces
+	m.kvHolder.buffer.release()
 	m.kvHolder = kvholder
 	m.limit = n * maxAvgGroupLoad
 	m.resident, m.dead = resident, 0
 	m.rehashLock.Unlock()
+	if m.owner.logger != nil {
+		m.owner.logger.Infof("rehash done, new size: %d", n)
+	}
 }
 
 func (m *LRUMap) loadFactor() float32 {

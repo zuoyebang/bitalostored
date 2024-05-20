@@ -33,7 +33,7 @@ import (
 const (
 	cacheBucketNum          int           = 1024
 	cacheEliminateThreadNum int           = 1
-	cacheCircleDuration     time.Duration = 600 * time.Second
+	cacheCircleDuration     time.Duration = 768 * time.Second
 )
 
 type BaseDB struct {
