@@ -31,9 +31,9 @@ import (
 )
 
 const (
-	cacheBucketNum          int           = 1024
-	cacheEliminateThreadNum int           = 1
-	cacheCircleDuration     time.Duration = 900 * time.Second
+	cacheBucketNum          int = 1024
+	cacheEliminateThreadNum int = 1
+	cacheEliminateDuration  int = 900
 )
 
 type BaseDB struct {
@@ -58,11 +58,15 @@ func NewBaseDB(cfg *dbconfig.Config) (*BaseDB, error) {
 	}
 
 	if cfg.CacheSize > 0 {
+		if cfg.CacheEliminateDuration <= 0 {
+			cfg.CacheEliminateDuration = cacheEliminateDuration
+		}
+		eliminateDuration := time.Duration(cfg.CacheEliminateDuration) * time.Second
 		baseDb.MetaCache = vectormap.NewVectorMap(uint32(cfg.CacheHashSize),
 			vectormap.WithType(vectormap.MapTypeLRU),
 			vectormap.WithBuckets(cacheBucketNum),
 			vectormap.WithLogger(log.GetLogger()),
-			vectormap.WithEliminate(vectormap.Byte(cfg.CacheSize), cacheEliminateThreadNum, cacheCircleDuration))
+			vectormap.WithEliminate(vectormap.Byte(cfg.CacheSize), cacheEliminateThreadNum, eliminateDuration))
 	}
 
 	return baseDb, nil

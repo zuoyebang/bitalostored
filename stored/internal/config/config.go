@@ -150,6 +150,7 @@ type BitalosConfig struct {
 	WriteBufferSize                 bytesize.Int64 `toml:"write_buffer_size" mapstructure:"write_buffer_size"`
 	CacheSize                       bytesize.Int64 `toml:"cache_size" mapstructure:"cache_size"`
 	CacheHashSize                   int            `toml:"cache_hash_size" mapstructure:"cache_hash_size"`
+	CacheEliminateDuration          int            `toml:"cache_eliminate_duration" mapstructure:"cache_eliminate_duration"`
 	CompactStartTime                int            `toml:"compact_start_time" mapstructure:"compact_start_time"`
 	CompactEndTime                  int            `toml:"compact_end_time" mapstructure:"compact_end_time"`
 	CompactInterval                 int            `toml:"compact_interval" mapstructure:"compact_interval"`

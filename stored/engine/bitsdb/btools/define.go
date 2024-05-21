@@ -26,7 +26,6 @@ const (
 	LuaScriptSlot      uint16 = 2048
 	KeyLockerPoolCap   uint32 = 16 << 10
 	ConfigMaxFieldSize int    = 60 << 10
-	ConfigMaxValueSize int    = 8 << 20
 )
 
 var (
@@ -48,11 +47,7 @@ func SetDefineVarFromCfg() {
 	}
 
 	if config.GlobalConfig.Bitalos.MaxValueSize > 0 {
-		if config.GlobalConfig.Bitalos.MaxValueSize > ConfigMaxValueSize {
-			MaxValueSize = ConfigMaxValueSize
-		} else {
-			MaxValueSize = config.GlobalConfig.Bitalos.MaxValueSize
-		}
+		MaxValueSize = config.GlobalConfig.Bitalos.MaxValueSize
 	}
 
 	if config.GlobalConfig.Bitalos.IOWriteLoadQpsThreshold > 0 {

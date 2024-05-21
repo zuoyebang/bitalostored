@@ -28,6 +28,7 @@ type Config struct {
 	DisableWAL                 bool
 	CacheSize                  int
 	CacheHashSize              int
+	CacheEliminateDuration     int
 	CompactStartTime           int
 	CompactEndTime             int
 	BithashGcThreshold         float64

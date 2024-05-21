@@ -87,6 +87,7 @@ func (b *Bitalos) dumpDbConfig(cfg *dbconfig.Config) string {
 
 	fmt.Fprintf(&buf, "CacheSize:%d ", cfg.CacheSize)
 	fmt.Fprintf(&buf, "CacheInitCap:%d ", cfg.CacheHashSize)
+	fmt.Fprintf(&buf, "CacheEliminateDuration:%d ", cfg.CacheEliminateDuration)
 
 	fmt.Fprintf(&buf, "MetaUpdateIndex:%d ", b.Meta.GetUpdateIndex())
 	fmt.Fprintf(&buf, "MetaFlushIndex:%d ", b.Meta.GetFlushIndex())
