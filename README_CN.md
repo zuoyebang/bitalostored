@@ -2,7 +2,7 @@
 
 ## 简介
 
-- 高性能分布式存储系统，核心引擎基于[bitalosdb](https://github.com/zuoyebang/bitalosdb)，兼容redis协议；作为redis的替代品，用成本更低的硬盘存储数据，充分发挥多核优势，且单核性能优秀，可大幅降低服务成本。
+- 高性能分布式存储系统，核心引擎基于[bitalosdb](https://git.zuoyebang.cc/stored-bitalosdb/bitalosdb/README_CN.md)，兼容redis协议；作为redis的替代品，用成本更低的硬盘存储数据，充分发挥多核优势，且单核性能优秀，可大幅降低服务成本。
 
 - 开源版本，集成dashboard（可视化管理平台）、stored（存储服务）、proxy（代理服务）于一体，是完整的工业级解决方案。经历作业帮100+个集群的实践验证，存储200TB数据，峰值QPS：2000万，峰值带宽：5000Gbps；2019年发布v1.0至今线上零事故。
 
@@ -42,7 +42,7 @@
 
 ## 性能报告
 
-- bitalostored在性能上持续精进，此次性能测试基于bitalostored v4.0；当前有数款知名的开源存储系统（兼容redis协议），同为redis的替代品，选取其中性能优秀的两款产品（\*d\* 与 \*i\*）做性能对比。
+- bitalostored在性能上持续精进，此次性能测试基于bitalostored v5.0；当前有数款知名的开源存储系统（兼容redis协议），同为redis的替代品，选取其中性能优秀的两款产品（\*d\* 与 \*i\*）做性能对比。
 
 ### 硬件
 
@@ -58,23 +58,23 @@ Disk:   2*3.5TB NVMe SSD
 
 - 存储服务：线程数（8）、CPU限制（8核）
 
-- 压测命令：--data-size=1024｜512｜128、-n=20971520｜41943040｜167772160
+- 压测命令：--data-size=1024｜128、-n=40672038｜335544320
 
 ```
-./memtier_benchmark -t 8 -c 16 -s 127.0.0.1 -p xxxx --distinct-client-seed --command="set __key__ __data__" --key-prefix="kv_" --key-minimum=1 --key-maximum=30000000 --random-data --data-size=1024 -n 163840
-./memtier_benchmark -t 8 -c 16 -s 127.0.0.1 -p xxxx --distinct-client-seed --command="get __key__" --key-prefix="kv_" --key-minimum=1 --key-maximum=30000000 --test-time=300
-./memtier_benchmark -t 8 -c 16 -s 127.0.0.1 -p xxxx --distinct-client-seed --command="incr __key__" --key-prefix="int_" --key-minimum=1 --key-maximum=200000000 --random-data -n 1310720
-./memtier_benchmark -t 8 -c 16 -s 127.0.0.1 -p xxxx --distinct-client-seed --command="lpush __key__ __data__" --key-prefix="list_" --key-minimum=1 --key-maximum=30000000 --random-data --data-size=1024 -n 163840
-./memtier_benchmark -t 8 -c 16 -s 127.0.0.1 -p xxxx --distinct-client-seed --command="sadd __key__ __data__" --key-prefix="set_" --key-minimum=1 --key-maximum=30000000 --random-data --data-size=1024 -n 163840
-./memtier_benchmark -t 8 -c 16 -s 127.0.0.1 -p xxxx --distinct-client-seed --command="zadd __key__ __key__ __data__" --key-prefix="" --key-minimum=1 --key-maximum=30000000 --random-data --data-size=1024 -n 163840
-./memtier_benchmark -t 8 -c 16 -s 127.0.0.1 -p xxxx --distinct-client-seed --command="hset __key__ __data__ __key__" --key-prefix="hash_" --key-minimum=1 --key-maximum=30000000 --random-data --data-size=1024 -n 163840
+./memtier_benchmark -t 8 -c 16 -s 127.0.0.1 -p xxxx --distinct-client-seed --command="set __key__ __data__" --key-prefix="performance_test_key_prefix_" --key-minimum=1 --key-maximum=40672038 --random-data --data-size=1024 -n 317750
+./memtier_benchmark -t 8 -c 16 -s 127.0.0.1 -p xxxx --distinct-client-seed --command="get __key__" --key-prefix="performance_test_key_prefix_" --key-minimum=1 --key-maximum=40672038 --test-time=300
+./memtier_benchmark -t 8 -c 16 -s 127.0.0.1 -p xxxx --distinct-client-seed --command="incr __key__" --key-prefix="int_" --key-minimum=1 --key-maximum=40672038 --random-data --data-size=1024 -n 317750
+./memtier_benchmark -t 8 -c 16 -s 127.0.0.1 -p xxxx --distinct-client-seed --command="lpush __key__ __data__" --key-prefix="list_" --key-minimum=1 --key-maximum=40672038 --random-data --data-size=1024 -n 317750
+./memtier_benchmark -t 8 -c 16 -s 127.0.0.1 -p xxxx --distinct-client-seed --command="sadd __key__ __data__" --key-prefix="set_" --key-minimum=1 --key-maximum=40672038 --random-data --data-size=1024 -n 317750
+./memtier_benchmark -t 8 -c 16 -s 127.0.0.1 -p xxxx --distinct-client-seed --command="zadd __key__ __key__ __data__" --key-prefix="" --key-minimum=1 --key-maximum=40672038 --random-data --data-size=1024 -n 317750
+./memtier_benchmark -t 8 -c 16 -s 127.0.0.1 -p xxxx --distinct-client-seed --command="hset __key__ __data__ __key__" --key-prefix="hash_" --key-minimum=1 --key-maximum=40672038 --random-data --data-size=1024 -n 317750
 ```
 
 ### 数据
 
-- 数据总量：20GB
+- 数据总量：40GB
 
-- 对比维度：命令（SET、GET、INCR、LPUSH、SADD、ZADD、HSET） x 数据大小&条数（1KB & 20,971,520、512B & 41,943,040、128B & 167,772,160）
+- 对比维度：命令（SET、GET、INCR、LPUSH、SADD、ZADD、HSET） x 数据大小&条数（1KB & 40,672,000、128B & 335,544,320）
 
 - 对比标准：多核压测QPS换算成单核QPS对比，单核性能更能体现成本优势
 
@@ -87,7 +87,7 @@ Threads:8
 Memtable：512MB
 WAL：enable
 Binlog：disable
-Cache：8GB
+Cache：40GB
 
 其余参数使用官方推荐压测配置
 ```
@@ -99,7 +99,7 @@ Threads:8
 Memtable：512MB
 WAL：enable
 Raftlog：disable
-Cache：disable
+Cache：2GB~40GB
 ```
 
 ### 结果
@@ -114,7 +114,7 @@ Cache：disable
 
 ## 文档
 
-- 技术架构和文档，参考官网：[bitalos.zuoyebang.com](https://bitalos.zuoyebang.com)
+- 技术架构和文档，参考官网：bitalos.zuoyebang.com
 
 ## 技术积累(bitalosearch)
 

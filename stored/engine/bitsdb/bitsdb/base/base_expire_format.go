@@ -24,19 +24,10 @@ import (
 
 const (
 	DeleteMixKeyMaxNum   = 20000
-	DeleteMixFieldMaxNum = 800
+	DeleteMixFieldMaxNum = 1000
 )
 
 func EncodeExpireKey(key []byte, mkv *MetaData) ([]byte, func()) {
-	switch mkv.dt {
-	case btools.STRING:
-		return EncodeExpireKeyForString(key, mkv.timestamp)
-	default:
-		return EncodeExpireKeyForMix(key, mkv)
-	}
-}
-
-func EncodeExpireKeyForMix(key []byte, mkv *MetaData) ([]byte, func()) {
 	size := expireKeyHeaderLength + len(key)
 	pool, closer := bytepools.BytePools.GetBytePool(size)
 
@@ -51,19 +42,6 @@ func EncodeExpireKeyForMix(key []byte, mkv *MetaData) ([]byte, func()) {
 	return pool[:size], closer
 }
 
-func EncodeExpireKeyForString(key []byte, timestamp uint64) ([]byte, func()) {
-	size := expireKeyStringHeaderLength + len(key)
-	pool, closer := bytepools.BytePools.GetBytePool(size)
-
-	pos := keyTimestampLength
-	binary.BigEndian.PutUint64(pool[0:pos], timestamp)
-	pool[pos] = uint8(btools.STRING)
-	pos += keyDataTypeLength
-	copy(pool[pos:], key)
-
-	return pool[:size], closer
-}
-
 func DecodeExpireKey(ek []byte) (timestamp uint64, dt btools.DataType, version uint64, kind uint8, key []byte, err error) {
 	if len(ek) <= expireKeyStringHeaderLength {
 		return 0, 0, 0, 0, nil, errEncodeKVKey
@@ -73,57 +51,39 @@ func DecodeExpireKey(ek []byte) (timestamp uint64, dt btools.DataType, version u
 	pos := keyTimestampLength
 	dt = btools.DataType(ek[pos])
 	pos += keyDataTypeLength
-	if dt != btools.STRING {
-		if len(ek) <= expireKeyHeaderLength {
-			return 0, 0, 0, 0, nil, errEncodeKVKey
-		}
-		version = binary.BigEndian.Uint64(ek[pos:])
-		kind = DecodeKeyVersionKind(version)
-		pos += keyVersionLength
+	if len(ek) <= expireKeyHeaderLength {
+		return 0, 0, 0, 0, nil, errEncodeKVKey
 	}
+	version = binary.BigEndian.Uint64(ek[pos:])
+	kind = DecodeKeyVersionKind(version)
+	pos += keyVersionLength
 
 	key = ek[pos:]
 
 	return timestamp, dt, version, kind, key, nil
 }
 
-func (bo *BaseObject) DeleteDataKeyByExpire(keyVersion uint64, khash uint32) (finished bool, err error) {
+func (bo *BaseObject) DeleteDataKeyByExpire(keyVersion uint64, keyHash uint32) error {
+	var keyBuf [DataKeyHeaderLength]byte
+	PutDataKeyHeader(keyBuf[:], keyVersion, keyHash)
+
 	wb := bo.GetDataWriteBatchFromPool()
 	defer bo.PutWriteBatchToPool(wb)
-
-	var cnt uint64
-	var lowerBound [DataKeyHeaderLength]byte
-	var upperBound [DataKeyUpperBoundLength]byte
-	EncodeDataKeyLowerBound(lowerBound[:], keyVersion, khash)
-	EncodeDataKeyUpperBound(upperBound[:], keyVersion, khash)
-	iterOpts := &bitskv.IterOptions{
-		KeyHash:      khash,
-		UpperBound:   upperBound[:],
-		DisableCache: true,
-	}
-	it := bo.DataDb.NewIterator(iterOpts)
-	defer it.Close()
-	for it.Seek(lowerBound[:]); it.Valid() && it.ValidForPrefix(lowerBound[:]); it.Next() {
-		_ = wb.Delete(it.RawKey())
-		cnt++
-		if cnt >= DeleteMixFieldMaxNum {
-			break
-		}
-	}
-
-	if cnt == 0 {
-		return true, nil
-	}
-
-	if err = wb.Commit(); err != nil {
-		return false, err
-	}
-
-	bo.BaseDb.DelDataDbNum.Add(cnt)
-	return cnt < DeleteMixFieldMaxNum, nil
+	_ = wb.PutPrefixDeleteKey(keyBuf[:])
+	return wb.Commit()
 }
 
-func (bo *BaseObject) DeleteZsetKeyByExpire(keyVersion uint64, keyKind uint8, khash uint32) (finished bool, err error) {
+func (bo *BaseObject) DeleteZsetIndexKeyByExpire(keyVersion uint64, keyHash uint32) error {
+	var keyBuf [DataKeyHeaderLength]byte
+	PutDataKeyHeader(keyBuf[:], keyVersion, keyHash)
+
+	wb := bo.GetIndexWriteBatchFromPool()
+	defer bo.PutWriteBatchToPool(wb)
+	_ = wb.PutPrefixDeleteKey(keyBuf[:])
+	return wb.Commit()
+}
+
+func (bo *BaseObject) DeleteZsetKeyByExpire(keyVersion uint64, keyKind uint8, khash uint32) (bool, uint64, error) {
 	var cnt uint64
 	var dataKey [DataKeyZsetLength]byte
 	var lowerBound [DataKeyHeaderLength]byte
@@ -150,7 +110,6 @@ func (bo *BaseObject) DeleteZsetKeyByExpire(keyVersion uint64, keyKind uint8, kh
 		_, _, fp := DecodeZsetIndexKey(keyKind, indexKey, it.RawValue())
 		EncodeZsetDataKey(dataKey[:], keyVersion, khash, fp.Merge())
 		_ = dataWb.Delete(dataKey[:])
-
 		cnt++
 		if cnt >= DeleteMixFieldMaxNum {
 			break
@@ -158,17 +117,16 @@ func (bo *BaseObject) DeleteZsetKeyByExpire(keyVersion uint64, keyKind uint8, kh
 	}
 
 	if cnt == 0 {
-		return true, nil
-	}
-	if err = dataWb.Commit(); err != nil {
-		return false, err
-	}
-	if err = indexWb.Commit(); err != nil {
-		return false, err
+		return true, 0, nil
 	}
 
-	bo.BaseDb.DelDataDbNum.Add(cnt)
-	bo.BaseDb.DelIndexDbNum.Add(cnt)
+	if err := dataWb.Commit(); err != nil {
+		return false, 0, err
+	}
 
-	return cnt < DeleteMixFieldMaxNum, nil
+	if err := indexWb.Commit(); err != nil {
+		return false, 0, err
+	}
+
+	return cnt < DeleteMixFieldMaxNum, cnt, nil
 }

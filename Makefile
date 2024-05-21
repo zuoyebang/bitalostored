@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-CGOLDFLAGS=CGO_LDFLAGS="-lstdc++ -lm -lz -lbz2 -lsnappy -llz4 -ljemalloc -O2"
+CGOLDFLAGS=CGO_LDFLAGS="-lstdc++ -lm -lz -lbz2 -lsnappy -llz4 -O2"
 GOARENAS=GOEXPERIMENT=arenas
 GOBUILD=go build
 

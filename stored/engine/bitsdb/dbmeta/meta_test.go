@@ -19,9 +19,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/zuoyebang/bitalostored/stored/internal/config"
-
 	"github.com/stretchr/testify/require"
+	"github.com/zuoyebang/bitalostored/stored/internal/config"
 )
 
 const testDir = "./test"

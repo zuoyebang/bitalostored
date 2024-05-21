@@ -23,6 +23,9 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/gomodule/redigo/redis"
+	"github.com/zuoyebang/bitalostored/butils/hash"
+	"github.com/zuoyebang/bitalostored/butils/unsafe2"
 	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/bitsdb"
 	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/btools"
 	"github.com/zuoyebang/bitalostored/stored/internal/errn"
@@ -30,11 +33,6 @@ import (
 	"github.com/zuoyebang/bitalostored/stored/internal/resp"
 	"github.com/zuoyebang/bitalostored/stored/internal/task"
 	"github.com/zuoyebang/bitalostored/stored/internal/utils"
-
-	"github.com/zuoyebang/bitalostored/butils/hash"
-	"github.com/zuoyebang/bitalostored/butils/unsafe2"
-
-	"github.com/gomodule/redigo/redis"
 )
 
 var MigrateLuaScript = "redis.call(KEYS)"

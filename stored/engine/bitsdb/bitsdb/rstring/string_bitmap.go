@@ -18,11 +18,10 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/RoaringBitmap/roaring/roaring64"
 	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/bitsdb/base"
 	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/btools"
 	"github.com/zuoyebang/bitalostored/stored/internal/resp"
-
-	"github.com/RoaringBitmap/roaring/roaring64"
 )
 
 func (so *StringObject) SetBit(key []byte, khash uint32, offset int, on int) (int64, error) {

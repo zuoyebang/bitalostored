@@ -86,6 +86,9 @@ func (so *StringObject) FlushLuaScript() error {
 	for it.Seek(minKey); it.Valid() && it.ValidForPrefix(minKey); it.Next() {
 		n++
 		_ = wb.Delete(it.RawKey())
+		if so.BaseDb.MetaCache != nil {
+			so.BaseDb.MetaCache.Delete(it.RawKey())
+		}
 	}
 
 	if n > 0 {

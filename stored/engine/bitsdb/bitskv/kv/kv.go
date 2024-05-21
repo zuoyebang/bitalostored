@@ -25,6 +25,7 @@ type IWriteBatch interface {
 	Commit() error
 	Put(key []byte, val []byte) error
 	PutMultiValue(key []byte, vals ...[]byte) error
+	PutPrefixDeleteKey(key []byte) error
 	Delete(key []byte) error
 	Clear()
 	Close() error
@@ -61,14 +62,15 @@ type IKVStore interface {
 	Compact(jobId int)
 	DebugInfo() string
 	CacheInfo() string
-	ForestInfo() ForestInfo
+	MetricsInfo() MetricsInfo
 	SetCheckpointLock(lock bool)
 	SetCheckpointHighPriority(lock bool)
 	Checkpoint(destDir string) error
 	Id() int
+	SetAutoCompact(bool)
 }
 
-type ForestInfo struct {
+type MetricsInfo struct {
 	FlushMemTime       int64 `json:"-"`
 	BithashFileTotal   int   `json:"bithash_file_total"`
 	BithashKeyTotal    int   `json:"bithash_key_total"`

@@ -18,10 +18,9 @@ import (
 	"math"
 	"sync"
 
+	"github.com/zuoyebang/bitalostored/butils/extend"
 	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/btools"
 	"github.com/zuoyebang/bitalostored/stored/internal/tclock"
-
-	"github.com/zuoyebang/bitalostored/butils/extend"
 )
 
 const (

@@ -24,7 +24,6 @@ import (
 	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/dbconfig"
 	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/dbmeta"
 	"github.com/zuoyebang/bitalostored/stored/internal/config"
-
 	"github.com/zuoyebang/bitalostored/stored/internal/log"
 )
 
@@ -74,7 +73,6 @@ func (b *Bitalos) dumpDbConfig(cfg *dbconfig.Config) string {
 	fmt.Fprintf(&buf, "MaxValueSize:%d ", btools.MaxValueSize)
 	fmt.Fprintf(&buf, "MaxIOWriteLoadQPS:%d ", btools.MaxIOWriteLoadQPS)
 	fmt.Fprintf(&buf, "DisableWAL:%v ", cfg.DisableWAL)
-	fmt.Fprintf(&buf, "CacheSize:%d ", cfg.CacheSize)
 	fmt.Fprintf(&buf, "EnableRaftlogRestore:%v ", cfg.EnableRaftlogRestore)
 	fmt.Fprintf(&buf, "BithashCompressionType:%d ", cfg.BithashCompressionType)
 	fmt.Fprintf(&buf, "WriteBufferSize:%d ", cfg.WriteBufferSize)
@@ -83,8 +81,13 @@ func (b *Bitalos) dumpDbConfig(cfg *dbconfig.Config) string {
 	fmt.Fprintf(&buf, "CompactInterval:%d ", cfg.CompactInterval)
 	fmt.Fprintf(&buf, "BithashGcThreshold:%.3f ", cfg.BithashGcThreshold)
 	fmt.Fprintf(&buf, "EnablePageBlockCompression:%v ", cfg.EnablePageBlockCompression)
+	fmt.Fprintf(&buf, "PageBlockCacheSize:%v ", cfg.PageBlockCacheSize)
 	fmt.Fprintf(&buf, "ExpiredDeletionQpsThreshold:%d ", config.GlobalConfig.Bitalos.ExpiredDeletionQpsThreshold)
 	fmt.Fprintf(&buf, "EnableClockCache:%v ", config.GlobalConfig.Bitalos.EnableClockCache)
+
+	fmt.Fprintf(&buf, "CacheSize:%d ", cfg.CacheSize)
+	fmt.Fprintf(&buf, "CacheInitCap:%d ", cfg.CacheHashSize)
+	fmt.Fprintf(&buf, "CacheEliminateDuration:%d ", cfg.CacheEliminateDuration)
 
 	fmt.Fprintf(&buf, "MetaUpdateIndex:%d ", b.Meta.GetUpdateIndex())
 	fmt.Fprintf(&buf, "MetaFlushIndex:%d ", b.Meta.GetFlushIndex())
@@ -105,6 +108,7 @@ func newDbConfig(path string) *dbconfig.Config {
 	cfg.CompactInterval = config.GlobalConfig.Bitalos.CompactInterval
 	cfg.BithashCompressionType = config.GlobalConfig.Bitalos.BithashCompressionType
 	cfg.EnablePageBlockCompression = config.GlobalConfig.Bitalos.EnablePageBlockCompression
+	cfg.PageBlockCacheSize = config.GlobalConfig.Bitalos.PageBlockCacheSize.AsInt()
 	if config.GlobalConfig.Bitalos.EnableWAL {
 		cfg.DisableWAL = false
 		cfg.EnableRaftlogRestore = false
@@ -254,4 +258,8 @@ func (b *Bitalos) SetQPS(qps uint64) {
 	if b.bitsdb != nil {
 		b.bitsdb.SetQPS(qps)
 	}
+}
+
+func (b *Bitalos) SetAutoCompact(val bool) {
+	b.bitsdb.SetAutoCompact(val)
 }

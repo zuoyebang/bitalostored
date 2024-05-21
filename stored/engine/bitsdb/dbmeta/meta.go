@@ -22,9 +22,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/zuoyebang/bitalostored/stored/internal/log"
-
 	"github.com/zuoyebang/bitalostored/butils/mmap"
+	"github.com/zuoyebang/bitalostored/stored/internal/log"
 )
 
 // file: format
@@ -40,7 +39,6 @@ import (
 // 128-136 migratestatus
 // 136-148 migrateslotid
 
-// bitalosdb config
 // 256-258 compress_type
 // 258-260 database_type
 // 260-268 keyId

@@ -18,9 +18,8 @@ import (
 	"os"
 
 	"github.com/zuoyebang/bitalostored/stored/engine"
-	"github.com/zuoyebang/bitalostored/stored/internal/task"
-
 	"github.com/zuoyebang/bitalostored/stored/internal/log"
+	"github.com/zuoyebang/bitalostored/stored/internal/task"
 )
 
 type DB struct {

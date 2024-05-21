@@ -108,7 +108,8 @@ func (bo *BaseObject) SetMetaData(ek []byte, mkv *MetaData) error {
 	case btools.STRING:
 		var meta [MetaStringValueLen]byte
 		EncodeMetaDbValueForString(meta[:], mkv.timestamp)
-		return bo.SetMetaDataByValues(ek, meta[:], mkv.value)
+		vlen := MetaStringValueLen + len(mkv.value)
+		return bo.SetMetaDataByValues(ek, vlen, meta[:], mkv.value)
 	case btools.LIST:
 		var meta [MetaListValueLen]byte
 		EncodeMetaDbValueForList(meta[:], mkv)
@@ -167,28 +168,22 @@ func (bo *BaseObject) SetMetaDataByValue(ek []byte, value []byte) error {
 	defer bo.PutWriteBatchToPool(wb)
 
 	_ = wb.Put(ek, value)
-	return wb.Commit()
+	err := wb.Commit()
+	if err == nil && bo.BaseDb.MetaCache != nil {
+		bo.BaseDb.MetaCache.Put(ek, value)
+	}
+	return err
 }
 
-func (bo *BaseObject) SetMetaDataByValues(ek []byte, value ...[]byte) error {
+func (bo *BaseObject) SetMetaDataByValues(ek []byte, vlen int, value ...[]byte) error {
 	wb := bo.GetMetaWriteBatchFromPool()
 	defer bo.PutWriteBatchToPool(wb)
 
 	_ = wb.PutMultiValue(ek, value...)
-	return wb.Commit()
-}
-
-func (bo *BaseObject) DeleteMetaDataForString(ek, key []byte, timestamp uint64) (err error) {
-	if err = bo.BaseDb.DeleteMetaKey(ek); err != nil {
-		return err
+	err := wb.Commit()
+	if err == nil && bo.BaseDb.MetaCache != nil {
+		bo.BaseDb.MetaCache.PutMultiValue(ek, vlen, value...)
 	}
-
-	if timestamp > 0 {
-		expireKey, expireKeyCloser := EncodeExpireKeyForString(key, timestamp)
-		err = bo.BaseDb.DeleteExpireKey(expireKey)
-		expireKeyCloser()
-	}
-
 	return err
 }
 
@@ -201,26 +196,6 @@ func (bo *BaseObject) UpdateExpire(oldKey, newKey []byte) error {
 	}
 	_ = wb.Put(newKey, NilDataVal)
 	return wb.Commit()
-}
-
-func (bo *BaseObject) UpdateExpireForString(key []byte, newTtl, oldTtl uint64) error {
-	if newTtl == oldTtl {
-		return nil
-	}
-
-	var oldKey, newKey []byte
-	var oekCloser, nekCloser func()
-
-	newKey, nekCloser = EncodeExpireKeyForString(key, newTtl)
-	defer nekCloser()
-	if oldTtl > 0 {
-		oldKey, oekCloser = EncodeExpireKeyForString(key, oldTtl)
-		defer oekCloser()
-	} else {
-		oldKey = nil
-	}
-
-	return bo.UpdateExpire(oldKey, newKey)
 }
 
 func (bo *BaseObject) IsExistData(ek []byte) (bool, error) {
@@ -262,15 +237,15 @@ func (bo *BaseObject) PutWriteBatchToPool(wb *bitskv.WriteBatch) {
 	bo.BaseDb.DB.PutWriteBatchToPool(wb)
 }
 
-func (bo *BaseObject) DataStats() bitskv.ForestInfo {
+func (bo *BaseObject) DataStats() bitskv.MetricsInfo {
 	return bo.DataDb.DataStats()
 }
 
-func (bo *BaseObject) IndexStats() bitskv.ForestInfo {
+func (bo *BaseObject) IndexStats() bitskv.MetricsInfo {
 	return bo.DataDb.IndexStats()
 }
 
-func (bo *BaseObject) MetaStats() bitskv.ForestInfo {
+func (bo *BaseObject) MetaStats() bitskv.MetricsInfo {
 	return bo.BaseDb.DB.MetaStats()
 }
 

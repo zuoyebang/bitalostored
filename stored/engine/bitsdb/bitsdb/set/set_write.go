@@ -15,11 +15,10 @@
 package set
 
 import (
+	"github.com/zuoyebang/bitalostored/butils/unsafe2"
 	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/bitsdb/base"
 	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/bitskv"
 	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/btools"
-
-	"github.com/zuoyebang/bitalostored/butils/unsafe2"
 )
 
 func (so *SetObject) SAdd(key []byte, khash uint32, args ...[]byte) (int64, error) {

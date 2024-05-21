@@ -17,11 +17,10 @@ package list
 import (
 	"math"
 
+	"github.com/zuoyebang/bitalostored/butils/extend"
 	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/bitsdb/base"
 	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/btools"
 	"github.com/zuoyebang/bitalostored/stored/internal/errn"
-
-	"github.com/zuoyebang/bitalostored/butils/extend"
 )
 
 func (lo *ListObject) LPop(key []byte, khash uint32) ([]byte, func(), error) {

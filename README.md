@@ -4,7 +4,7 @@
 
 ## Introduction
 
-- Bitalostored is a high-performance distributed storage system, core engine based on [bitalosdb](https://github.com/zuoyebang/bitalosdb), compatible with Redis protocol. As an alternative to Redis, it stores data with low-cost hard disk instead of expensive memory, takes full advantage of multi-core and provides excellent single-core performance, which can significantly reduce service costs.
+- Bitalostored is a high-performance distributed storage system, core engine based on [bitalosdb](https://git.zuoyebang.cc/stored-bitalosdb/bitalosdb/README.md), compatible with Redis protocol. As an alternative to Redis, it stores data with low-cost hard disk instead of expensive memory, takes full advantage of multi-core and provides excellent single-core performance, which can significantly reduce service costs.
 
 - Bitalostored contains three main projects: dashboard (visual management platform), stored (storage service), and proxy (proxy service). Current open-source version is stable, and provides a complete industrial grade solution. In Zuoyebang company, the stability of Bitalostored has been verified. Hundreds of online clusters are running stably all year round. Now data capacity is 200TB, peak QPS is 20 million, peak network bandwidth is 5000Gbps, and since v1.0 was released in 2019, there have been no online incidents.
 
@@ -44,7 +44,7 @@
 
 ## Performance
 
-There are currently several well-known open source storage systems (compatible with the redis protocol), two products (\*d\* & \*i\*) with excellent performance are chosen. This benchmark is bases on bitalostored v4.0 and two procudcts (\*d\* & \*i\*) newest version.
+There are currently several well-known open source storage systems (compatible with the redis protocol), two products (\*d\* & \*i\*) with excellent performance are chosen. This benchmark is bases on bitalostored v5.0 and two procudcts (\*d\* & \*i\*) newest version.
 
 ### Hardware
 
@@ -63,21 +63,20 @@ Disk:   2*3.5TB NVMe SSD
 - Command args: 3 data spec
 
 ```
---data-size=1024 --key-maximum=30000000 -t 8 -c 16 -n 163840 # items=20971520 (8*16*163840)
---data-size=512--key-maximum=60000000 -t 8 -c 16 -n 327680 # items=41943040 (8*16*327680)
---data-size=128 --key-maximum=200000000 -t 8 -c 16 -n 1310720 # items=167772160 (8*16*1310720)
+--data-size=1024 --key-maximum=40672038 -t 8 -c 16 -n 317750 # items=40672000 (8*16*317750)
+--data-size=128 --key-maximum=335544320 -t 8 -c 16 -n 2621440 # items=335544320 (8*16*2621440)
 ```
 
 - Command (e.g., --data-size=1024)
 
 ```
-./memtier_benchmark -t 8 -c 16 -s 127.0.0.1 -p xxxx --distinct-client-seed --command="set __key__ __data__" --key-prefix="kv_" --key-minimum=1 --key-maximum=30000000 --random-data --data-size=1024 -n 163840
-./memtier_benchmark -t 8 -c 16 -s 127.0.0.1 -p xxxx --distinct-client-seed --command="get __key__" --key-prefix="kv_" --key-minimum=1 --key-maximum=30000000 --test-time=300
-./memtier_benchmark -t 8 -c 16 -s 127.0.0.1 -p xxxx --distinct-client-seed --command="incr __key__" --key-prefix="int_" --key-minimum=1 --key-maximum=200000000 --random-data -n 1310720
-./memtier_benchmark -t 8 -c 16 -s 127.0.0.1 -p xxxx --distinct-client-seed --command="lpush __key__ __data__" --key-prefix="list_" --key-minimum=1 --key-maximum=30000000 --random-data --data-size=1024 -n 163840
-./memtier_benchmark -t 8 -c 16 -s 127.0.0.1 -p xxxx --distinct-client-seed --command="sadd __key__ __data__" --key-prefix="set_" --key-minimum=1 --key-maximum=30000000 --random-data --data-size=1024 -n 163840
-./memtier_benchmark -t 8 -c 16 -s 127.0.0.1 -p xxxx --distinct-client-seed --command="zadd __key__ __key__ __data__" --key-prefix="" --key-minimum=1 --key-maximum=30000000 --random-data --data-size=1024 -n 163840
-./memtier_benchmark -t 8 -c 16 -s 127.0.0.1 -p xxxx --distinct-client-seed --command="hset __key__ __data__ __key__" --key-prefix="hash_" --key-minimum=1 --key-maximum=30000000 --random-data --data-size=1024 -n 163840
+./memtier_benchmark -t 8 -c 16 -s 127.0.0.1 -p xxxx --distinct-client-seed --command="set __key__ __data__" --key-prefix="performance_test_key_prefix_" --key-minimum=1 --key-maximum=40672038 --random-data --data-size=1024 -n 317750
+./memtier_benchmark -t 8 -c 16 -s 127.0.0.1 -p xxxx --distinct-client-seed --command="get __key__" --key-prefix="performance_test_key_prefix_" --key-minimum=1 --key-maximum=40672038 --test-time=300
+./memtier_benchmark -t 8 -c 16 -s 127.0.0.1 -p xxxx --distinct-client-seed --command="incr __key__" --key-prefix="int_" --key-minimum=1 --key-maximum=40672038 --random-data --data-size=1024 -n 317750
+./memtier_benchmark -t 8 -c 16 -s 127.0.0.1 -p xxxx --distinct-client-seed --command="lpush __key__ __data__" --key-prefix="list_" --key-minimum=1 --key-maximum=40672038 --random-data --data-size=1024 -n 317750
+./memtier_benchmark -t 8 -c 16 -s 127.0.0.1 -p xxxx --distinct-client-seed --command="sadd __key__ __data__" --key-prefix="set_" --key-minimum=1 --key-maximum=40672038 --random-data --data-size=1024 -n 317750
+./memtier_benchmark -t 8 -c 16 -s 127.0.0.1 -p xxxx --distinct-client-seed --command="zadd __key__ __key__ __data__" --key-prefix="" --key-minimum=1 --key-maximum=40672038 --random-data --data-size=1024 -n 317750
+./memtier_benchmark -t 8 -c 16 -s 127.0.0.1 -p xxxx --distinct-client-seed --command="hset __key__ __data__ __key__" --key-prefix="hash_" --key-minimum=1 --key-maximum=40672038 --random-data --data-size=1024 -n 317750
 ```
 
 incr is irrelevant to data size, only needs to be tested once.
@@ -85,9 +84,9 @@ incr is irrelevant to data size, only needs to be tested once.
 
 ### Data
 
-- Total data size：20GB
+- Total data size：40GB
 
-- Comparison dimensions： comand（SET、GET、LPUSH、SADD、ZADD、HSET） x valueSize&count（1KB & 20,971,520、512B & 41,943,040、128B & 167,772,160）, INCR
+- Comparison dimensions： comand（SET、GET、LPUSH、SADD、ZADD、HSET） x value-size&count（1KB & 40,672,000、128B & 335,544,320）, INCR
 
 - Comparison standard: QPS on single-core (multi-core QPS / core number), single-core performance reflects cost advantage better.
 
@@ -100,7 +99,7 @@ Threads:8
 Memtable：512MB
 WAL：enable
 Binlog：disable
-Cache：8GB
+Cache：40GB
 
 Other parameters are set as same as the official recommended benchmark configuration
 ```
@@ -112,7 +111,7 @@ Threads:8
 Memtable：512MB
 WAL：enable
 Raftlog：disable
-Cache：disable
+Cache：2GB~40GB
 ```
 
 ### Result
@@ -127,7 +126,7 @@ Cache：disable
 
 ## Document
 
-Technical architecture and documentation, refer to the official website: [bitalos.zuoyebang.com](https://bitalos.zuoyebang.com)
+Technical architecture and documentation, refer to the official website: bitalos.zuoyebang.com
 
 ## Technology accumulation(bitalosearch)
 

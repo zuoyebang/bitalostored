@@ -22,10 +22,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/zuoyebang/bitalostored/stored/internal/resp"
-
 	"github.com/gomodule/redigo/redis"
 	"github.com/stretchr/testify/require"
+	"github.com/zuoyebang/bitalostored/stored/internal/resp"
 )
 
 const defaultValBytes = "1qaz2wsx3edc4rfv5tgb6yhn7ujm8ik9ol0p1qaz2wsx3edc4rfv5tgb6yhn7ujm8ik9ol0p1qaz2wsx3edc4rfv5tgb6yhn7ujm8ik9ol0p"
@@ -54,15 +53,17 @@ func TestKVSetEx(t *testing.T) {
 	} else if ok != resp.ReplyOK {
 		t.Fatal(ok)
 	}
-	if n, err := redis.Int64(c.Do("ttl", key)); err != nil {
-		t.Fatal(err)
-	} else if n != 1000 {
-		t.Fatalf("ttl fail exp:%d act:%d", 1000, n)
-	}
-	if v, err := redis.String(c.Do("get", key)); err != nil {
-		t.Fatal(err)
-	} else if v != val1 {
-		t.Fatalf("get fail exp:%s act:%s", val1, v)
+	for i := 0; i < readNum; i++ {
+		if n, err := redis.Int64(c.Do("ttl", key)); err != nil {
+			t.Fatal(err)
+		} else if n != 1000 {
+			t.Fatalf("ttl fail exp:%d act:%d", 1000, n)
+		}
+		if v, err := redis.String(c.Do("get", key)); err != nil {
+			t.Fatal(err)
+		} else if v != val1 {
+			t.Fatalf("get fail exp:%s act:%s", val1, v)
+		}
 	}
 
 	val2 := "hello world2"
@@ -71,15 +72,17 @@ func TestKVSetEx(t *testing.T) {
 	} else if ok != resp.ReplyOK {
 		t.Fatal(ok)
 	}
-	if n, err := redis.Int64(c.Do("ttl", key)); err != nil {
-		t.Fatal(err)
-	} else if n != 100 {
-		t.Fatalf("ttl fail exp:%d act:%d", 100, n)
-	}
-	if v, err := redis.String(c.Do("get", key)); err != nil {
-		t.Fatal(err)
-	} else if v != val2 {
-		t.Fatalf("get fail exp:%s act:%s", val2, v)
+	for i := 0; i < readNum; i++ {
+		if n, err := redis.Int64(c.Do("ttl", key)); err != nil {
+			t.Fatal(err)
+		} else if n != 100 {
+			t.Fatalf("ttl fail exp:%d act:%d", 100, n)
+		}
+		if v, err := redis.String(c.Do("get", key)); err != nil {
+			t.Fatal(err)
+		} else if v != val2 {
+			t.Fatalf("get fail exp:%s act:%s", val2, v)
+		}
 	}
 
 	val3 := "hello world3"
@@ -88,30 +91,34 @@ func TestKVSetEx(t *testing.T) {
 	} else if ok != resp.ReplyOK {
 		t.Fatal(ok)
 	}
-	if n, err := redis.Int64(c.Do("pttl", key)); err != nil {
-		t.Fatal(err)
-	} else if n != 1300 {
-		t.Fatalf("ttl fail exp:%d act:%d", 1300, n)
-	}
-	if n, err := redis.Int64(c.Do("ttl", key)); err != nil {
-		t.Fatal(err)
-	} else if n != 2 {
-		t.Fatalf("ttl fail exp:%d act:%d", 2, n)
-	}
-	if v, err := redis.String(c.Do("get", key)); err != nil {
-		t.Fatal(err)
-	} else if v != val3 {
-		t.Fatalf("get fail exp:%s act:%s", val3, v)
+	for i := 0; i < readNum; i++ {
+		if n, err := redis.Int64(c.Do("pttl", key)); err != nil {
+			t.Fatal(err)
+		} else if n != 1300 {
+			t.Fatalf("ttl fail exp:%d act:%d", 1300, n)
+		}
+		if n, err := redis.Int64(c.Do("ttl", key)); err != nil {
+			t.Fatal(err)
+		} else if n != 2 {
+			t.Fatalf("ttl fail exp:%d act:%d", 2, n)
+		}
+		if v, err := redis.String(c.Do("get", key)); err != nil {
+			t.Fatal(err)
+		} else if v != val3 {
+			t.Fatalf("get fail exp:%s act:%s", val3, v)
+		}
 	}
 
 	time.Sleep(time.Second * 2)
-	if _, err := redis.String(c.Do("get", key)); err != redis.ErrNil {
-		t.Fatal(err)
-	}
-	if n, err := redis.Int(c.Do("exists", key)); err != nil {
-		t.Fatal(err)
-	} else if n != 0 {
-		t.Fatal(n)
+	for i := 0; i < readNum; i++ {
+		if _, err := redis.String(c.Do("get", key)); err != redis.ErrNil {
+			t.Fatal(err)
+		}
+		if n, err := redis.Int(c.Do("exists", key)); err != nil {
+			t.Fatal(err)
+		} else if n != 0 {
+			t.Fatal(n)
+		}
 	}
 
 	if ok, err := redis.String(c.Do("set", key, val3, "px", 1500, "nx")); err != nil {
@@ -119,20 +126,24 @@ func TestKVSetEx(t *testing.T) {
 	} else if ok != resp.ReplyOK {
 		t.Fatal(ok)
 	}
-	if v, err := redis.String(c.Do("get", key)); err != nil {
-		t.Fatal(err)
-	} else if v != val3 {
-		t.Fatalf("get fail exp:%s act:%s", val3, v)
+	for i := 0; i < readNum; i++ {
+		if v, err := redis.String(c.Do("get", key)); err != nil {
+			t.Fatal(err)
+		} else if v != val3 {
+			t.Fatalf("get fail exp:%s act:%s", val3, v)
+		}
 	}
 
 	time.Sleep(time.Second * 2)
-	if _, err := redis.String(c.Do("get", key)); err != redis.ErrNil {
-		t.Fatal(err)
-	}
-	if n, err := redis.Int(c.Do("exists", key)); err != nil {
-		t.Fatal(err)
-	} else if n != 0 {
-		t.Fatal(n)
+	for i := 0; i < readNum; i++ {
+		if _, err := redis.String(c.Do("get", key)); err != redis.ErrNil {
+			t.Fatal(err)
+		}
+		if n, err := redis.Int(c.Do("exists", key)); err != nil {
+			t.Fatal(err)
+		} else if n != 0 {
+			t.Fatal(n)
+		}
 	}
 }
 
@@ -158,9 +169,11 @@ func TestKVGet1(t *testing.T) {
 	for i := 0; i <= 50; i++ {
 		newKey := []byte(fmt.Sprintf("key_%d", i))
 		newValue := []byte(fmt.Sprintf("%s_%s", newKey, defaultValBytes))
-		v, err := redis.String(c.Do("get", newKey))
-		require.NoError(t, err)
-		require.Equal(t, string(newValue), v)
+		for i := 0; i < readNum; i++ {
+			v, err := redis.String(c.Do("get", newKey))
+			require.NoError(t, err)
+			require.Equal(t, string(newValue), v)
+		}
 	}
 }
 
@@ -223,10 +236,12 @@ func TestKV(t *testing.T) {
 		t.Fatal(ok)
 	}
 
-	if v, err := redis.String(c.Do("get", "aabbvv")); err != nil {
-		t.Fatal(err)
-	} else if v != "1234" {
-		t.Fatal(v)
+	for i := 0; i < readNum; i++ {
+		if v, err := redis.String(c.Do("get", "aabbvv")); err != nil {
+			t.Fatal(err)
+		} else if v != "1234" {
+			t.Fatal(v)
+		}
 	}
 
 	if v, err := redis.String(c.Do("getset", "aabbvv", "123")); err != nil {
@@ -235,38 +250,42 @@ func TestKV(t *testing.T) {
 		t.Fatal(v)
 	}
 
-	if v, err := redis.String(c.Do("get", "aabbvv")); err != nil {
-		t.Fatal(err)
-	} else if v != "123" {
-		t.Fatal(v)
-	}
+	for i := 0; i < readNum; i++ {
+		if v, err := redis.String(c.Do("get", "aabbvv")); err != nil {
+			t.Fatal(err)
+		} else if v != "123" {
+			t.Fatal(v)
+		}
 
-	if n, err := redis.Int(c.Do("exists", "aabbvv")); err != nil {
-		t.Fatal(err)
-	} else if n != 1 {
-		t.Fatal(n)
-	}
+		if n, err := redis.Int(c.Do("exists", "aabbvv")); err != nil {
+			t.Fatal(err)
+		} else if n != 1 {
+			t.Fatal(n)
+		}
 
-	if n, err := redis.Int(c.Do("exists", "empty_key_test")); err != nil {
-		t.Fatal(err)
-	} else if n != 0 {
-		t.Fatal(n)
+		if n, err := redis.Int(c.Do("exists", "empty_key_test")); err != nil {
+			t.Fatal(err)
+		} else if n != 0 {
+			t.Fatal(n)
+		}
 	}
 
 	if _, err := redis.Int(c.Do("del", "aabbvv", "bbcccvv")); err != nil {
 		t.Fatal(err)
 	}
 
-	if n, err := redis.Int(c.Do("exists", "aabbvv")); err != nil {
-		t.Fatal(err)
-	} else if n != 0 {
-		t.Fatal(n)
-	}
+	for i := 0; i < readNum; i++ {
+		if n, err := redis.Int(c.Do("exists", "aabbvv")); err != nil {
+			t.Fatal(err)
+		} else if n != 0 {
+			t.Fatal(n)
+		}
 
-	if n, err := redis.Int(c.Do("exists", "bbcccvv")); err != nil {
-		t.Fatal(err)
-	} else if n != 0 {
-		t.Fatal(n)
+		if n, err := redis.Int(c.Do("exists", "bbcccvv")); err != nil {
+			t.Fatal(err)
+		} else if n != 0 {
+			t.Fatal(n)
+		}
 	}
 
 	rangeKey := "range_key"
@@ -283,22 +302,26 @@ func TestKV(t *testing.T) {
 		t.Fatal(n)
 	}
 
-	if n, err := redis.Int(c.Do("strlen", rangeKey)); err != nil {
-		t.Fatal(err)
-	} else if n != 11 {
-		t.Fatal(n)
+	for i := 0; i < readNum; i++ {
+		if n, err := redis.Int(c.Do("strlen", rangeKey)); err != nil {
+			t.Fatal(err)
+		} else if n != 11 {
+			t.Fatal(n)
+		}
 	}
 
-	if v, err := redis.String(c.Do("getrange", rangeKey, 0, -1)); err != nil {
-		t.Fatal(err)
-	} else if v != "Hello Redis" {
-		t.Fatal(v)
-	}
+	for i := 0; i < readNum; i++ {
+		if v, err := redis.String(c.Do("getrange", rangeKey, 0, -1)); err != nil {
+			t.Fatal(err)
+		} else if v != "Hello Redis" {
+			t.Fatal(v)
+		}
 
-	if v, err := redis.String(c.Do("getrange", rangeKey, 0, 5)); err != nil {
-		t.Fatal(err)
-	} else if v != "Hello " {
-		t.Fatal(v)
+		if v, err := redis.String(c.Do("getrange", rangeKey, 0, 5)); err != nil {
+			t.Fatal(err)
+		} else if v != "Hello " {
+			t.Fatal(v)
+		}
 	}
 
 	bitKey := "bit_key"
@@ -309,22 +332,24 @@ func TestKV(t *testing.T) {
 		t.Fatal(n)
 	}
 
-	if n, err := redis.Int(c.Do("getbit", bitKey, 7)); err != nil {
-		t.Fatal(err)
-	} else if n != 1 {
-		t.Fatal(n)
-	}
+	for i := 0; i < readNum; i++ {
+		if n, err := redis.Int(c.Do("getbit", bitKey, 7)); err != nil {
+			t.Fatal(err)
+		} else if n != 1 {
+			t.Fatal(n)
+		}
 
-	if n, err := redis.Int(c.Do("bitcount", bitKey)); err != nil {
-		t.Fatal(err)
-	} else if n != 1 {
-		t.Fatal(n)
-	}
+		if n, err := redis.Int(c.Do("bitcount", bitKey)); err != nil {
+			t.Fatal(err)
+		} else if n != 1 {
+			t.Fatal(n)
+		}
 
-	if n, err := redis.Int(c.Do("bitpos", bitKey, 1)); err != nil {
-		t.Fatal(err)
-	} else if n != 7 {
-		t.Fatal(n)
+		if n, err := redis.Int(c.Do("bitpos", bitKey, 1)); err != nil {
+			t.Fatal(err)
+		} else if n != 7 {
+			t.Fatal(n)
+		}
 	}
 }
 
@@ -338,21 +363,23 @@ func TestKVM(t *testing.T) {
 		t.Fatal(ok)
 	}
 
-	if v, err := redis.Values(c.Do("mget", "a", "b", "c")); err != nil {
-		t.Fatal(err)
-	} else if len(v) != 3 {
-		t.Fatal(len(v))
-	} else {
-		if vv, ok := v[0].([]byte); !ok || string(vv) != "1" {
-			t.Fatal("not 1")
-		}
+	for i := 0; i < readNum; i++ {
+		if v, err := redis.Values(c.Do("mget", "a", "b", "c")); err != nil {
+			t.Fatal(err)
+		} else if len(v) != 3 {
+			t.Fatal(len(v))
+		} else {
+			if vv, ok := v[0].([]byte); !ok || string(vv) != "1" {
+				t.Fatal("not 1")
+			}
 
-		if vv, ok := v[1].([]byte); !ok || string(vv) != "2" {
-			t.Fatal("not 2")
-		}
+			if vv, ok := v[1].([]byte); !ok || string(vv) != "2" {
+				t.Fatal("not 2")
+			}
 
-		if v[2] != nil {
-			t.Fatal("must nil")
+			if v[2] != nil {
+				t.Fatal("must nil")
+			}
 		}
 	}
 }
@@ -563,10 +590,12 @@ func TestKVConcurrencySet(t *testing.T) {
 	defer c.Close()
 	for i := 1; i <= 100000; i++ {
 		key := fmt.Sprintf("TestKVConcurrencySet_%d", i)
-		if v, err := redis.String(c.Do("get", key)); err != nil {
-			t.Fatal(err)
-		} else if v != key {
-			t.Fatalf("get fail exp:%s act:%s", key, v)
+		for i := 0; i < readNum; i++ {
+			if v, err := redis.String(c.Do("get", key)); err != nil {
+				t.Fatal(err)
+			} else if v != key {
+				t.Fatalf("get fail exp:%s act:%s", key, v)
+			}
 		}
 	}
 }

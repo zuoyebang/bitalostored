@@ -18,15 +18,14 @@ import (
 	"errors"
 	"strconv"
 
+	"github.com/shopspring/decimal"
+	"github.com/zuoyebang/bitalostored/butils/extend"
 	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/bitsdb/base"
 	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/btools"
 	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/dbconfig"
 	"github.com/zuoyebang/bitalostored/stored/internal/errn"
+	"github.com/zuoyebang/bitalostored/stored/internal/log"
 	"github.com/zuoyebang/bitalostored/stored/internal/tclock"
-
-	"github.com/zuoyebang/bitalostored/butils/extend"
-
-	"github.com/shopspring/decimal"
 )
 
 type StringObject struct {
@@ -104,6 +103,7 @@ func (so *StringObject) getValueForString(key []byte) ([]byte, uint64, func(), e
 
 	dt, timestamp, val := base.DecodeMetaValueForString(eval)
 	if dt != so.DataType {
+		log.Errorf("getValueForString dataType notmatch key:%s exp:%d act:%d", string(key), so.DataType, dt)
 		return nil, 0, closer, errn.ErrWrongType
 	}
 
@@ -129,11 +129,13 @@ func (so *StringObject) getValueCheckAliveForString(key []byte) ([]byte, uint64,
 func (so *StringObject) setValueForString(ek, value []byte, timestamp uint64) (err error) {
 	var metaValue [base.MetaStringValueLen]byte
 	base.EncodeMetaDbValueForString(metaValue[:], timestamp)
-	return so.SetMetaDataByValues(ek, metaValue[:], value)
+	vlen := base.MetaStringValueLen + len(value)
+	return so.SetMetaDataByValues(ek, vlen, metaValue[:], value)
 }
 
 func (so *StringObject) setMultiValueForString(ek, oldValue, value []byte, timestamp uint64) (err error) {
 	var metaValue [base.MetaStringValueLen]byte
 	base.EncodeMetaDbValueForString(metaValue[:], timestamp)
-	return so.SetMetaDataByValues(ek, metaValue[:], oldValue, value)
+	vlen := base.MetaStringValueLen + len(oldValue) + len(value)
+	return so.SetMetaDataByValues(ek, vlen, metaValue[:], oldValue, value)
 }

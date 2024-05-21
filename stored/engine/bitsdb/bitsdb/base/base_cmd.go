@@ -15,11 +15,10 @@
 package base
 
 import (
+	"github.com/zuoyebang/bitalostored/butils/hash"
 	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/btools"
 	"github.com/zuoyebang/bitalostored/stored/internal/tclock"
 	"github.com/zuoyebang/bitalostored/stored/internal/utils"
-
-	"github.com/zuoyebang/bitalostored/butils/hash"
 )
 
 func (bo *BaseObject) Del(khash uint32, keys ...[]byte) (n int64, err error) {
@@ -139,19 +138,24 @@ func (bo *BaseObject) BaseExpireAt(key []byte, khash uint32, when int64) (int64,
 		return 0, nil
 	}
 
-	oldExpireKey, oekCloser := EncodeExpireKey(key, mkv)
-	mkv.SetTimestamp(uint64(when))
-	newExpireKey, nekCloser := EncodeExpireKey(key, mkv)
-	defer func() {
-		oekCloser()
-		nekCloser()
-	}()
+	if mkv.dt == btools.STRING {
+		mkv.SetTimestamp(uint64(when))
+		if err = bo.SetMetaData(mk, mkv); err != nil {
+			return 0, err
+		}
+	} else {
+		oldExpireKey, oekCloser := EncodeExpireKey(key, mkv)
+		mkv.SetTimestamp(uint64(when))
+		newExpireKey, nekCloser := EncodeExpireKey(key, mkv)
+		defer func() {
+			oekCloser()
+			nekCloser()
+		}()
 
-	if err = bo.SetMetaData(mk, mkv); err != nil {
-		return 0, err
-	}
+		if err = bo.SetMetaData(mk, mkv); err != nil {
+			return 0, err
+		}
 
-	if mkv.dt != btools.STRING {
 		err = bo.UpdateExpire(oldExpireKey, newExpireKey)
 		if err != nil {
 			return 0, err

@@ -20,10 +20,9 @@ import (
 	"path"
 	"time"
 
-	"github.com/zuoyebang/bitalostored/stored/internal/log"
-
 	"github.com/zuoyebang/bitalostored/butils/bytesize"
 	"github.com/zuoyebang/bitalostored/butils/timesize"
+	"github.com/zuoyebang/bitalostored/stored/internal/log"
 )
 
 func (c *Config) Validate() error {

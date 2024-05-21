@@ -28,12 +28,14 @@ type Config struct {
 	DisableWAL                 bool
 	CacheSize                  int
 	CacheHashSize              int
+	CacheEliminateDuration     int
 	CompactStartTime           int
 	CompactEndTime             int
 	BithashGcThreshold         float64
 	CompactInterval            int
 	BithashCompressionType     int
 	EnablePageBlockCompression bool
+	PageBlockCacheSize         int
 	EnableRaftlogRestore       bool
 	KvCheckExpireFunc          func(int, []byte, []byte) bool
 	KvTimestampFunc            func([]byte, uint8) (bool, uint64)

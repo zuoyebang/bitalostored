@@ -19,7 +19,6 @@ import (
 	"fmt"
 
 	"github.com/gomodule/redigo/redis"
-
 	"github.com/zuoyebang/bitalostored/stored/internal/config"
 	"github.com/zuoyebang/bitalostored/stored/internal/resp"
 )

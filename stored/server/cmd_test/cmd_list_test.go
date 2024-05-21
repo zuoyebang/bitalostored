@@ -27,13 +27,15 @@ func testListIndex(key []byte, index int64, v int) error {
 	c := getTestConn()
 	defer c.Close()
 
-	n, err := redis.Int(c.Do("lindex", key, index))
-	if err == redis.ErrNil && v != 0 {
-		return fmt.Errorf("must nil")
-	} else if err != nil && err != redis.ErrNil {
-		return err
-	} else if n != v {
-		return fmt.Errorf("index err number %d != %d", n, v)
+	for i := 0; i < readNum; i++ {
+		n, err := redis.Int(c.Do("lindex", key, index))
+		if err == redis.ErrNil && v != 0 {
+			return fmt.Errorf("must nil")
+		} else if err != nil && err != redis.ErrNil {
+			return err
+		} else if n != v {
+			return fmt.Errorf("index err number %d != %d", n, v)
+		}
 	}
 
 	return nil
@@ -43,26 +45,28 @@ func testListRange(key []byte, start int64, stop int64, checkValues ...int) erro
 	c := getTestConn()
 	defer c.Close()
 
-	vs, err := redis.Values(c.Do("lrange", key, start, stop))
-	if err != nil {
-		return err
-	}
+	for i := 0; i < readNum; i++ {
+		vs, err := redis.Values(c.Do("lrange", key, start, stop))
+		if err != nil {
+			return err
+		}
 
-	if len(vs) != len(checkValues) {
-		return fmt.Errorf("invalid return number %d != %d", len(vs), len(checkValues))
-	}
+		if len(vs) != len(checkValues) {
+			return fmt.Errorf("invalid return number %d != %d", len(vs), len(checkValues))
+		}
 
-	var n int
-	for i, v := range vs {
-		if d, ok := v.([]byte); ok {
-			n, err = strconv.Atoi(string(d))
-			if err != nil {
-				return err
-			} else if n != checkValues[i] {
-				return fmt.Errorf("invalid data %d: %d != %d", i, n, checkValues[i])
+		var n int
+		for i, v := range vs {
+			if d, ok := v.([]byte); ok {
+				n, err = strconv.Atoi(string(d))
+				if err != nil {
+					return err
+				} else if n != checkValues[i] {
+					return fmt.Errorf("invalid data %d: %d != %d", i, n, checkValues[i])
+				}
+			} else {
+				return fmt.Errorf("invalid data %v %T", v, v)
 			}
-		} else {
-			return fmt.Errorf("invalid data %v %T", v, v)
 		}
 	}
 
@@ -87,10 +91,12 @@ func TestList(t *testing.T) {
 		t.Fatal(n)
 	}
 
-	if n, err := redis.Int(c.Do("lkeyexists", key)); err != nil {
-		t.Fatal(err)
-	} else if n != 1 {
-		t.Fatal(1)
+	for i := 0; i < readNum; i++ {
+		if n, err := redis.Int(c.Do("lkeyexists", key)); err != nil {
+			t.Fatal(err)
+		} else if n != 1 {
+			t.Fatal(1)
+		}
 	}
 
 	if n, err := redis.Int(c.Do("rpush", key, 2)); err != nil {
@@ -105,10 +111,12 @@ func TestList(t *testing.T) {
 		t.Fatal(n)
 	}
 
-	if n, err := redis.Int(c.Do("llen", key)); err != nil {
-		t.Fatal(err)
-	} else if n != 3 {
-		t.Fatal(n)
+	for i := 0; i < readNum; i++ {
+		if n, err := redis.Int(c.Do("llen", key)); err != nil {
+			t.Fatal(err)
+		} else if n != 3 {
+			t.Fatal(n)
+		}
 	}
 
 	if err := testListRange(key, 0, 0, 1); err != nil {
@@ -245,31 +253,36 @@ func TestListLrange(t *testing.T) {
 		{5, 5, 0},
 	}
 
-	for _, item := range checkList {
-		start, stop, l := item[0], item[1], item[2]
-		if r, _ := redis.Values(c.Do("lrange", key, start, stop)); len(r) != l {
-			assert.Equalf(t, 1, len(r), "lrange", start, stop)
+	for i := 0; i < readNum; i++ {
+		for _, item := range checkList {
+			start, stop, l := item[0], item[1], item[2]
+			if r, _ := redis.Values(c.Do("lrange", key, start, stop)); len(r) != l {
+				assert.Equalf(t, 1, len(r), "lrange", start, stop)
+			}
 		}
-	}
-	if _, err := redis.Values(c.Do("lrange", key, 0, 10000)); true {
-		assert.Equalf(t, err, nil, "lrange")
-	}
-	if r, err := redis.Values(c.Do("lrange", "lrange_noexist_list", 0, 10000)); true {
-		assert.Equalf(t, err, nil, "lrange")
-		assert.Equalf(t, 0, len(r), "lrange")
+		if _, err := redis.Values(c.Do("lrange", key, 0, 10000)); true {
+			assert.Equalf(t, err, nil, "lrange")
+		}
+
+		if r, err := redis.Values(c.Do("lrange", "lrange_noexist_list", 0, 10000)); true {
+			assert.Equalf(t, err, nil, "lrange")
+			assert.Equalf(t, 0, len(r), "lrange")
+		}
 	}
 
 	largeKey := "test_list_lrange_large"
 	for i := 0; i <= 10000; i++ {
 		c.Do("lpush", largeKey, i)
 	}
-	if r, err := redis.Values(c.Do("lrange", largeKey, 0, 9999)); true {
-		assert.Equalf(t, err, nil, "lrange")
-		assert.Equalf(t, 10000, len(r), "lrange")
-	}
-	if r, err := redis.Values(c.Do("lrange", largeKey, 0, 10000)); true {
-		assert.Equalf(t, err, nil, "lrange")
-		assert.Equalf(t, 10000, len(r), "lrange")
+	for i := 0; i < readNum; i++ {
+		if r, err := redis.Values(c.Do("lrange", largeKey, 0, 9999)); true {
+			assert.Equalf(t, err, nil, "lrange")
+			assert.Equalf(t, 10000, len(r), "lrange")
+		}
+		if r, err := redis.Values(c.Do("lrange", largeKey, 0, 10000)); true {
+			assert.Equalf(t, err, nil, "lrange")
+			assert.Equalf(t, 10000, len(r), "lrange")
+		}
 	}
 	c.Do("del", key)
 }
@@ -357,10 +370,12 @@ func TestPop(t *testing.T) {
 		t.Fatal(n)
 	}
 
-	if n, err := redis.Int(c.Do("llen", key)); err != nil {
-		t.Fatal(err)
-	} else if n != 0 {
-		t.Fatal(n)
+	for i := 0; i < readNum; i++ {
+		if n, err := redis.Int(c.Do("llen", key)); err != nil {
+			t.Fatal(err)
+		} else if n != 0 {
+			t.Fatal(n)
+		}
 	}
 
 }
@@ -389,10 +404,12 @@ func TestTrim(t *testing.T) {
 		t.Fatal(n)
 	}
 
-	if n, err := redis.Int(c.Do("llen", key)); err != nil {
-		t.Fatal(err)
-	} else if n != 3 {
-		t.Fatal(n)
+	for i := 0; i < readNum; i++ {
+		if n, err := redis.Int(c.Do("llen", key)); err != nil {
+			t.Fatal(err)
+		} else if n != 3 {
+			t.Fatal(n)
+		}
 	}
 
 	if n, err := redis.Int(c.Do("ltrim_back", key, 2)); err != nil {
@@ -401,10 +418,12 @@ func TestTrim(t *testing.T) {
 		t.Fatal(n)
 	}
 
-	if n, err := redis.Int(c.Do("llen", key)); err != nil {
-		t.Fatal(err)
-	} else if n != 1 {
-		t.Fatal(n)
+	for i := 0; i < readNum; i++ {
+		if n, err := redis.Int(c.Do("llen", key)); err != nil {
+			t.Fatal(err)
+		} else if n != 1 {
+			t.Fatal(n)
+		}
 	}
 
 	if n, err := redis.Int(c.Do("ltrim_front", key, 5)); err != nil {
@@ -413,10 +432,12 @@ func TestTrim(t *testing.T) {
 		t.Fatal(n)
 	}
 
-	if n, err := redis.Int(c.Do("llen", key)); err != nil {
-		t.Fatal(err)
-	} else if n != 0 {
-		t.Fatal(n)
+	for i := 0; i < readNum; i++ {
+		if n, err := redis.Int(c.Do("llen", key)); err != nil {
+			t.Fatal(err)
+		} else if n != 0 {
+			t.Fatal(n)
+		}
 	}
 
 	if n, err := redis.Int(c.Do("rpush", key, 1, 2)); err != nil {
@@ -431,10 +452,12 @@ func TestTrim(t *testing.T) {
 		t.Fatal(n)
 	}
 
-	if n, err := redis.Int(c.Do("llen", key)); err != nil {
-		t.Fatal(err)
-	} else if n != 0 {
-		t.Fatal(n)
+	for i := 0; i < readNum; i++ {
+		if n, err := redis.Int(c.Do("llen", key)); err != nil {
+			t.Fatal(err)
+		} else if n != 0 {
+			t.Fatal(n)
+		}
 	}
 }
 

@@ -23,8 +23,13 @@ import (
 func init() {
 	addr := "127.0.0.1:8950"
 	initRedisPool(addr, 150)
+	cacheEable := false
+	if cacheEable {
+		readNum = 2
+	}
 }
 
+var readNum int = 1
 var redisPool *redis.Pool
 
 type RedisConnConf struct {
