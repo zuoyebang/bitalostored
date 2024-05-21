@@ -939,6 +939,7 @@ func (m *LFUMap) rehash() {
 	m.groups = groups
 	m.ctrl = ctrl
 	m.counters = counters
+	m.kvHolder.buffer.release()
 	m.kvHolder = kvholder
 	m.limit = n * maxAvgGroupLoad
 	m.resident, m.dead = resident, 0
