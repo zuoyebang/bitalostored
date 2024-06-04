@@ -4,7 +4,7 @@
 
 ## Introduction
 
-- Bitalostored is a high-performance distributed storage system, core engine based on [bitalosdb](https:///stored-bitalosdb/bitalosdb/README.md), compatible with Redis protocol. As an alternative to Redis, it stores data with low-cost hard disk instead of expensive memory, takes full advantage of multi-core and provides excellent single-core performance, which can significantly reduce service costs.
+- Bitalostored is a high-performance distributed storage system, core engine based on [bitalosdb](https://github.com/zuoyebang/bitalosdb/blob/main/README.md), compatible with Redis protocol. As an alternative to Redis, it stores data with low-cost hard disk instead of expensive memory, takes full advantage of multi-core and provides excellent single-core performance, which can significantly reduce service costs.
 
 - Bitalostored contains three main projects: dashboard (visual management platform), stored (storage service), and proxy (proxy service). Current open-source version is stable, and provides a complete industrial grade solution. In Zuoyebang company, the stability of Bitalostored has been verified. Hundreds of online clusters are running stably all year round. Now data capacity is 200TB, peak QPS is 20 million, peak network bandwidth is 5000Gbps, and since v1.0 was released in 2019, there have been no online incidents.
 
