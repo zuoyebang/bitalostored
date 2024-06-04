@@ -1,4 +1,4 @@
-// Copyright 2019 The Bitalostored author and other contributors.
+// Copyright 2019-2024 Xu Ruibo (hustxurb@163.com) and Contributors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
