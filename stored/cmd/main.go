@@ -25,7 +25,6 @@ import (
 	"github.com/zuoyebang/bitalostored/stored/internal/tclock"
 	"github.com/zuoyebang/bitalostored/stored/plugin/anticc"
 	"github.com/zuoyebang/bitalostored/stored/plugin/catch_panic"
-	"github.com/zuoyebang/bitalostored/stored/plugin/gops"
 	"github.com/zuoyebang/bitalostored/stored/plugin/info"
 	"github.com/zuoyebang/bitalostored/stored/plugin/pprof"
 	"github.com/zuoyebang/bitalostored/stored/plugin/raft"
@@ -71,7 +70,6 @@ func main() {
 	info.Init()
 	catch_panic.Init()
 	pprof.Init()
-	gops.Init()
 	raft.Init()
 	anticc.Init()
 
