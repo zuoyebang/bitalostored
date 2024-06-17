@@ -15,7 +15,6 @@ require (
 	github.com/goccy/go-json v0.10.2
 	github.com/golang/snappy v0.0.4
 	github.com/gomodule/redigo v2.0.0+incompatible
-	github.com/google/gops v0.3.28
 	github.com/hashicorp/memberlist v0.2.4
 	github.com/json-iterator/go v1.1.12
 	github.com/juju/ratelimit v1.0.2-0.20191002062651-f60b32039441
@@ -32,7 +31,7 @@ require (
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.9.0
 	github.com/yuin/gopher-lua v1.1.1
-	github.com/zuoyebang/bitalosdb v1.1.1
+	github.com/zuoyebang/bitalosdb v1.1.3
 	github.com/zuoyebang/bitalostable v1.0.0
 	go.uber.org/atomic v1.7.0
 	go.uber.org/zap v1.26.0

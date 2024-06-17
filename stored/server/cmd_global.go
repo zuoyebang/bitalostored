@@ -15,8 +15,11 @@
 package server
 
 import (
+	"os"
 	"runtime/debug"
+	"syscall"
 
+	"github.com/zuoyebang/bitalostored/stored/internal/errn"
 	"github.com/zuoyebang/bitalostored/stored/internal/resp"
 	"github.com/zuoyebang/bitalostored/stored/internal/utils"
 )
@@ -30,7 +33,19 @@ func init() {
 		"debuginfo":  {Sync: false, Handler: debugInfoCommand, NoKey: true},
 		"cacheinfo":  {Sync: false, Handler: cacheInfoCommand, NoKey: true},
 		"freememory": {Sync: false, Handler: freeOsMemoryCommand, NoKey: true},
+		"shutdown":   {Sync: false, Handler: shutdownCommand, NoKey: true},
 	})
+}
+
+func shutdownCommand(c *Client) error {
+	c.conn.Close()
+
+	p, _ := os.FindProcess(os.Getpid())
+
+	p.Signal(syscall.SIGTERM)
+	p.Signal(os.Interrupt)
+
+	return errn.ErrClientQuit
 }
 
 func freeOsMemoryCommand(c *Client) error {
