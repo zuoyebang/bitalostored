@@ -10,7 +10,7 @@
 
 - 团队：作业帮-平台技术团队
 
-- 作者：徐锐波(hustxrb@163.com)
+- 作者：徐锐波(hustxurb@163.com)
 
 - 贡献者：幸福(wzxingfu@gmail.com)、卢文伟(422213023@qq.com)、刘方(killcode13@sina.com)、李景晨(cokin.lee@outlook.com)
 

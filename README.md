@@ -12,7 +12,7 @@
 
 - Produced: Zuoyebang Company - Platform technical team
 
-- Author: Xu Ruibo(hustxrb@163.com)
+- Author: Xu Ruibo(hustxurb@163.com)
 
 - Contributors: Xing Fu(wzxingfu@gmail.com), Lu Wenwei(422213023@qq.com), Liu Fang(killcode13@sina.com), Li Jingchen(cokin.lee@outlook.com)
 
