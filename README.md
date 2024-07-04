@@ -6,7 +6,7 @@
 
 - Bitalostored is a high-performance distributed storage system, core engine based on [bitalosdb](https://github.com/zuoyebang/bitalosdb/blob/main/README.md), compatible with Redis protocol. As an alternative to Redis, it stores data with low-cost hard disk instead of expensive memory, takes full advantage of multi-core and provides excellent single-core performance, which can significantly reduce service costs.
 
-- Bitalostored contains three main projects: dashboard (visual management platform), stored (storage service), and proxy (proxy service). Current open-source version is stable, and provides a complete industrial grade solution. In Zuoyebang company, the stability of Bitalostored has been verified. Hundreds of online clusters are running stably all year round. Now data capacity is 300TB, peak QPS is 20 million, peak network bandwidth is 6000Gbps, and since v1.0 was released in 2019, there have been no online incidents.
+- Bitalostored contains three main projects: dashboard (visual management platform), stored (storage service), and proxy (proxy service). Current open-source version is stable, and provides a complete industrial grade solution. In Zuoyebang company, the stability of Bitalostored has been verified. Now data capacity is 300TB, peak QPS is 22 million, peak network bandwidth is 6000Gbps, and since v1.0 was released in 2019, there have been no online incidents.
 
 ## Team
 
@@ -63,20 +63,20 @@ Disk:   2*3.5TB NVMe SSD
 - Command args: 3 data spec
 
 ```
---data-size=1024 --key-maximum=40672038 -t 8 -c 16 -n 317750 # items=40672000 (8*16*317750)
---data-size=128 --key-maximum=335544320 -t 8 -c 16 -n 2621440 # items=335544320 (8*16*2621440)
+--data-size=1024 --key-maximum=40672038 -t 16 -c 32 -n 317750 # items=40672000 (8*16*317750)
+--data-size=128 --key-maximum=335544320 -t 16 -c 32 -n 2621440 # items=335544320 (8*16*2621440)
 ```
 
 - Command (e.g., --data-size=1024)
 
 ```
-./memtier_benchmark -t 8 -c 16 -s 127.0.0.1 -p xxxx --distinct-client-seed --command="set __key__ __data__" --key-prefix="performance_test_key_prefix_" --key-minimum=1 --key-maximum=40672038 --random-data --data-size=1024 -n 317750
-./memtier_benchmark -t 8 -c 16 -s 127.0.0.1 -p xxxx --distinct-client-seed --command="get __key__" --key-prefix="performance_test_key_prefix_" --key-minimum=1 --key-maximum=40672038 --test-time=300
-./memtier_benchmark -t 8 -c 16 -s 127.0.0.1 -p xxxx --distinct-client-seed --command="incr __key__" --key-prefix="int_" --key-minimum=1 --key-maximum=40672038 --random-data --data-size=1024 -n 317750
-./memtier_benchmark -t 8 -c 16 -s 127.0.0.1 -p xxxx --distinct-client-seed --command="lpush __key__ __data__" --key-prefix="list_" --key-minimum=1 --key-maximum=40672038 --random-data --data-size=1024 -n 317750
-./memtier_benchmark -t 8 -c 16 -s 127.0.0.1 -p xxxx --distinct-client-seed --command="sadd __key__ __data__" --key-prefix="set_" --key-minimum=1 --key-maximum=40672038 --random-data --data-size=1024 -n 317750
-./memtier_benchmark -t 8 -c 16 -s 127.0.0.1 -p xxxx --distinct-client-seed --command="zadd __key__ __key__ __data__" --key-prefix="" --key-minimum=1 --key-maximum=40672038 --random-data --data-size=1024 -n 317750
-./memtier_benchmark -t 8 -c 16 -s 127.0.0.1 -p xxxx --distinct-client-seed --command="hset __key__ __data__ __key__" --key-prefix="hash_" --key-minimum=1 --key-maximum=40672038 --random-data --data-size=1024 -n 317750
+./memtier_benchmark -t 16 -c 32 -s 127.0.0.1 -p xxxx --distinct-client-seed --command="set __key__ __data__" --key-prefix="performance_test_key_prefix_" --key-minimum=1 --key-maximum=40672038 --random-data --data-size=1024 -n 317750
+./memtier_benchmark -t 16 -c 32 -s 127.0.0.1 -p xxxx --distinct-client-seed --command="get __key__" --key-prefix="performance_test_key_prefix_" --key-minimum=1 --key-maximum=40672038 --test-time=300
+./memtier_benchmark -t 16 -c 32 -s 127.0.0.1 -p xxxx --distinct-client-seed --command="incr __key__" --key-prefix="int_" --key-minimum=1 --key-maximum=40672038 --random-data --data-size=1024 -n 317750
+./memtier_benchmark -t 16 -c 32 -s 127.0.0.1 -p xxxx --distinct-client-seed --command="lpush __key__ __data__" --key-prefix="list_" --key-minimum=1 --key-maximum=40672038 --random-data --data-size=1024 -n 317750
+./memtier_benchmark -t 16 -c 32 -s 127.0.0.1 -p xxxx --distinct-client-seed --command="sadd __key__ __data__" --key-prefix="set_" --key-minimum=1 --key-maximum=40672038 --random-data --data-size=1024 -n 317750
+./memtier_benchmark -t 16 -c 32 -s 127.0.0.1 -p xxxx --distinct-client-seed --command="zadd __key__ __key__ __data__" --key-prefix="" --key-minimum=1 --key-maximum=40672038 --random-data --data-size=1024 -n 317750
+./memtier_benchmark -t 16 -c 32 -s 127.0.0.1 -p xxxx --distinct-client-seed --command="hset __key__ __data__ __key__" --key-prefix="hash_" --key-minimum=1 --key-maximum=40672038 --random-data --data-size=1024 -n 317750
 ```
 
 incr is irrelevant to data size, only needs to be tested once.
@@ -111,7 +111,7 @@ Threads:8
 Memtable：512MB
 WAL：enable
 Raftlog：disable
-Cache：2GB~40GB
+Cache：0GB~40GB
 ```
 
 ### Result
@@ -119,10 +119,6 @@ Cache：2GB~40GB
 - QPS ([Horizontal](./docs/benchmark-qps.png))
 
 ![benchmark](./docs/benchmark-qps-vertical.png)
-
-- Latency ([Horizontal](./docs/benchmark-latency.png))
-
-![benchmark](./docs/benchmark-latency-vertical.png)
 
 ## Document
 
