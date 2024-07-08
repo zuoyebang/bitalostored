@@ -2778,9 +2778,6 @@ func TestRegularStateMachineDoesNotAllowConcurrentSaveSnapshot(t *testing.T) {
 }
 
 func TestLogDBRateLimit(t *testing.T) {
-	if invariants.DragonboatRocksDBTest {
-		t.Skip("not supported on rocksdb")
-	}
 	fs := vfs.GetTestFS()
 	to := &testOption{
 		defaultTestNode: true,
@@ -5031,9 +5028,6 @@ func testIOErrorIsHandled(t *testing.T, op vfs.Op) {
 }
 
 func TestIOErrorIsHandled(t *testing.T) {
-	if invariants.DragonboatRocksDBTest {
-		t.Skip("not supported on rocksdb")
-	}
 	testIOErrorIsHandled(t, vfs.OpWrite)
 	testIOErrorIsHandled(t, vfs.OpSync)
 }
