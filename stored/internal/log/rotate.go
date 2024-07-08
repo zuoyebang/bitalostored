@@ -66,7 +66,6 @@ func getRotateLogs(path, rotation string) *rotatelogs.RotateLogs {
 	param := getRotationParam(rotation)
 	rl, _ := rotatelogs.New(
 		path+param.format,
-		rotatelogs.WithLinkName(path),
 		rotatelogs.WithMaxAge(time.Hour*24*14),
 		rotatelogs.WithRotationTime(param.duration),
 	)
