@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//go:build !go1.16
 // +build !go1.16
 
 package fileutil
@@ -21,12 +22,6 @@ import (
 	"io/ioutil"
 	"os"
 )
-
-// TODO:
-// io/iotuil has been deprecated in go1.16
-// ioutil.Discard, ioutil.TempFile and other functions have been moved to the
-// other stdlib packages (io and os) in go1.16.
-// remove this file when we require go1.16 for dragonboat
 
 // Discard ...
 var Discard = ioutil.Discard
