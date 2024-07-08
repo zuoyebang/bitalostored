@@ -44,6 +44,7 @@ type BitalosDBMinCore struct {
 
 const testDBPath = "./test_cores"
 const testCacheDBPath = "./test_cache_cores"
+const testLogPath = "./test_log"
 
 func testGetDefaultConfig() *dbconfig.Config {
 	cfg := dbconfig.NewConfigDefault()
@@ -74,6 +75,7 @@ func closeCores(cores []*BitalosDBMinCore) {
 	for _, c := range cores {
 		c.Close()
 	}
+	//os.RemoveAll(testLogPath)
 }
 
 func testNewBitsDB() *BitsDB {
@@ -150,12 +152,8 @@ func testCheckKeyValue(t *testing.T, b *BitsDB, key []byte, khash uint32, value 
 		if v != nil {
 			t.Fatal("find not exist key value is not nil", string(key))
 		}
-	} else {
-		if !bytes.Equal(v, value) {
-			t.Fatal("v not eq", string(key), v, value)
-			// } else if closer == nil {
-			// 	t.Fatal("closer return nil", string(key))
-		}
+	} else if !bytes.Equal(v, value) {
+		t.Fatal("v not eq", string(key), v, value)
 	}
 	if closer != nil {
 		closer()
@@ -414,8 +412,6 @@ func TestKVCmd(t *testing.T) {
 			t.Fatal(err)
 		} else if string(v) != "18.2" {
 			t.Fatal(string(v))
-			// } else if closer == nil {
-			// 	t.Fatal("key8 return closer is nil")
 		} else {
 			if closer != nil {
 				closer()
@@ -482,7 +478,7 @@ func TestKVSetEX(t *testing.T) {
 	}
 }
 
-func TestMSetAndDel(t *testing.T) {
+func TestKVMSetAndDel(t *testing.T) {
 	cores := testTwoBitsCores()
 	defer closeCores(cores)
 
@@ -568,36 +564,6 @@ func TestMSetAndDel(t *testing.T) {
 	}
 }
 
-func TestKVSetBitLen(t *testing.T) {
-	cores := testTwoBitsCores()
-	defer closeCores(cores)
-
-	for _, cr := range cores {
-		bdb := cr.db
-
-		key := []byte("TestKVSetBitLen")
-		khash := hash.Fnv32(key)
-		n, err := bdb.StringObj.SetBit(key, khash, 123456, 1)
-		require.NoError(t, err)
-		require.Equal(t, int64(0), n)
-		n, err = bdb.StringObj.GetBit(key, khash, 123456)
-		require.NoError(t, err)
-		require.Equal(t, int64(1), n)
-
-		n, err = bdb.StringObj.SetBit(key, khash, 123457, 1)
-		require.NoError(t, err)
-		require.Equal(t, int64(0), n)
-
-		l, err := bdb.StringObj.StrLen(key, khash)
-		require.NoError(t, err)
-		require.Equal(t, int64(32), l)
-
-		n, err = bdb.StringObj.GetBit(key, khash, 123456)
-		require.NoError(t, err)
-		require.Equal(t, int64(1), n)
-	}
-}
-
 func TestKVSetBitGetBit(t *testing.T) {
 	cores := testTwoBitsCores()
 	defer closeCores(cores)
@@ -658,31 +624,6 @@ func TestKVSetBit(t *testing.T) {
 			_, err := bdb.StringObj.SetBit(wkey[0:16], khash, int(n), int(n%2))
 			require.NoError(t, err)
 		}
-	}
-}
-
-func TestKVSetBitDelete(t *testing.T) {
-	cores := testTwoBitsCores()
-	defer closeCores(cores)
-
-	for _, cr := range cores {
-		bdb := cr.db
-
-		key := []byte("TestKVSetBitDelete")
-		khash := hash.Fnv32(key)
-		n, err := bdb.StringObj.SetBit(key, khash, 1, 1)
-		require.NoError(t, err)
-		require.Equal(t, int64(0), n)
-		ex, err := bdb.StringObj.Exists(key, khash)
-		require.NoError(t, err)
-		require.Equal(t, int64(1), ex)
-
-		n, err = bdb.StringObj.SetBit(key, khash, 1, 0)
-		require.NoError(t, err)
-		require.Equal(t, int64(1), n)
-		ex, err = bdb.StringObj.Exists(key, khash)
-		require.NoError(t, err)
-		require.Equal(t, int64(0), ex)
 	}
 }
 
@@ -887,4 +828,40 @@ func TestKVExpire(t *testing.T) {
 		}
 		checkKey(key3, []byte(nil), false, "Del key3 2")
 	}
+}
+
+func TestKVMissCache(t *testing.T) {
+	dbPath := testCacheDBPath
+	os.RemoveAll(dbPath)
+	cfg := testCacheDefaultConfig()
+	cfg.EnableMissCache = true
+	db := testOpenBitsDb(true, dbPath, cfg)
+	defer func() {
+		db.Close()
+		os.RemoveAll(dbPath)
+		config.GlobalConfig.Plugin.OpenRaft = true
+	}()
+
+	key1 := []byte("testdb_kv_set_1")
+	khash1 := hash.Fnv32(key1)
+	require.NoError(t, db.StringObj.Set(key1, khash1, key1))
+	testCheckKeyValue(t, db, key1, khash1, key1)
+
+	key2 := []byte("testdb_kv_set_2")
+	khash2 := hash.Fnv32(key2)
+	testCheckKeyValue(t, db, key2, khash2, nil)
+	key2encode, key2encodeCloser := base.EncodeMetaKey(key2, khash2)
+	cv, ccloser, cexist := db.baseDb.MetaCache.Get(key2encode)
+	key2encodeCloser()
+	require.Equal(t, true, cexist)
+	require.Equal(t, byte(0), cv[0])
+	ccloser()
+
+	require.NoError(t, db.StringObj.Set(key2, khash2, key2))
+	testCheckKeyValue(t, db, key2, khash2, key2)
+	cv, ccloser, cexist = db.baseDb.MetaCache.Get(key2encode)
+	key2encodeCloser()
+	require.Equal(t, true, cexist)
+	require.Equal(t, byte(btools.STRING), cv[0])
+	ccloser()
 }

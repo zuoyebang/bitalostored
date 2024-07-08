@@ -40,7 +40,7 @@ func addRaftClusterNode(raft *StartRun, c *server.Client) error {
 
 	ret, err := raft.AddNode(nNodeId, unsafe2.String(c.Args[0]), raft.RetryTimes)
 	if ret == R_SUCCESS {
-		c.RespWriter.WriteStatus(resp.ReplyOK)
+		c.Writer.WriteStatus(resp.ReplyOK)
 		return nil
 	} else {
 		return err
@@ -59,7 +59,7 @@ func addObserver(raft *StartRun, c *server.Client) error {
 
 	ret, err := raft.AddObserver(nNodeId, unsafe2.String(c.Args[0]))
 	if ret == R_SUCCESS {
-		c.RespWriter.WriteStatus(resp.ReplyOK)
+		c.Writer.WriteStatus(resp.ReplyOK)
 		return nil
 	} else {
 		return err
@@ -78,7 +78,7 @@ func addWitness(raft *StartRun, c *server.Client) error {
 
 	ret, err := raft.AddWitness(nNodeId, unsafe2.String(c.Args[0]))
 	if ret == R_SUCCESS {
-		c.RespWriter.WriteStatus(resp.ReplyOK)
+		c.Writer.WriteStatus(resp.ReplyOK)
 		return nil
 	} else {
 		return err
@@ -97,7 +97,7 @@ func removeRaftClusterNode(raft *StartRun, c *server.Client) error {
 
 	ret, err := raft.DelNode(nNodeId, raft.RetryTimes)
 	if ret == R_SUCCESS {
-		c.RespWriter.WriteStatus(resp.ReplyOK)
+		c.Writer.WriteStatus(resp.ReplyOK)
 		return nil
 	} else {
 		return err
@@ -116,7 +116,7 @@ func transferRaftClusterNode(raft *StartRun, c *server.Client) error {
 
 	ret, err := raft.LeaderTransfer(targetNodeID)
 	if ret == R_SUCCESS {
-		c.RespWriter.WriteStatus(resp.ReplyOK)
+		c.Writer.WriteStatus(resp.ReplyOK)
 		return nil
 	} else {
 		return err
@@ -126,7 +126,7 @@ func transferRaftClusterNode(raft *StartRun, c *server.Client) error {
 func getLeaderFrmRaftCluster(raft *StartRun, c *server.Client) error {
 	id, ret, err := raft.GetLeaderId()
 	if ret == R_SUCCESS {
-		c.RespWriter.WriteStatus(strconv.FormatUint(id, 10))
+		c.Writer.WriteStatus(strconv.FormatUint(id, 10))
 		return nil
 	} else {
 		return err
@@ -136,7 +136,7 @@ func getLeaderFrmRaftCluster(raft *StartRun, c *server.Client) error {
 func getNodeHostInfo(raft *StartRun, c *server.Client) error {
 	out, ret, err := raft.GetNodeHostInfo()
 	if ret == R_SUCCESS {
-		c.RespWriter.WriteStatus(out)
+		c.Writer.WriteStatus(out)
 		return nil
 	} else {
 		return err
@@ -146,7 +146,7 @@ func getNodeHostInfo(raft *StartRun, c *server.Client) error {
 func getClusterMemberShip(raft *StartRun, c *server.Client) error {
 	out, ret, err := raft.GetClusterMembership()
 	if ret == R_SUCCESS {
-		c.RespWriter.WriteStatus(out)
+		c.Writer.WriteStatus(out)
 		return nil
 	} else {
 		return err
@@ -163,7 +163,7 @@ func removeRaftNodeData(raft *StartRun, c *server.Client) error {
 	}
 	ret, err := raft.RemoveData(targetNodeID)
 	if ret == R_SUCCESS {
-		c.RespWriter.WriteStatus("remove data request sent successfully !")
+		c.Writer.WriteStatus("remove data request sent successfully !")
 		return nil
 	} else {
 		return err
@@ -172,7 +172,7 @@ func removeRaftNodeData(raft *StartRun, c *server.Client) error {
 
 func deraft(s *server.Server, raft *StartRun, c *server.Client) error {
 	if len(c.Args) != 1 {
-		return resp.CmdParamsErr(DERAFT)
+		return errn.CmdParamsErr(DERAFT)
 	}
 
 	if string(c.Args[0]) != config.GlobalConfig.Server.Token {
@@ -187,16 +187,16 @@ func deraft(s *server.Server, raft *StartRun, c *server.Client) error {
 	}
 	s.GetDB().RaftReset()
 	if err := config.GlobalConfig.SetDegradeSingleNode(); err != nil {
-		c.RespWriter.WriteError(err)
+		c.Writer.WriteError(err)
 	} else {
-		c.RespWriter.WriteStatus(resp.ReplyOK)
+		c.Writer.WriteStatus(resp.ReplyOK)
 	}
 	return nil
 }
 
 func reRaft(s *server.Server, raft *StartRun, c *server.Client) error {
 	if len(c.Args) != 2 {
-		return resp.CmdParamsErr(RERAFT)
+		return errn.CmdParamsErr(RERAFT)
 	}
 
 	if string(c.Args[0]) != config.GlobalConfig.Server.Token {
@@ -217,12 +217,12 @@ func reRaft(s *server.Server, raft *StartRun, c *server.Client) error {
 	if err = raft.Clean(); err == nil {
 		if err = ReraftInit(s, port); err == nil {
 			if err = config.GlobalConfig.WriteFile(config.GlobalConfig.Server.ConfigFile); err == nil {
-				c.RespWriter.WriteStatus(resp.ReplyOK)
+				c.Writer.WriteStatus(resp.ReplyOK)
 			}
 		}
 	}
 	if err != nil {
-		c.RespWriter.WriteError(err)
+		c.Writer.WriteError(err)
 	}
 	return err
 }
@@ -241,9 +241,9 @@ func logCompact(raft *StartRun, c *server.Client) error {
 
 	_, err := raft.Nh.SyncRequestSnapshot(ctx, raft.ClusterId, opt)
 	if err != nil {
-		c.RespWriter.WriteError(err)
+		c.Writer.WriteError(err)
 	} else {
-		c.RespWriter.WriteStatus(resp.ReplyOK)
+		c.Writer.WriteStatus(resp.ReplyOK)
 	}
 	return err
 }
@@ -257,7 +257,7 @@ func okNodeHost(raft *StartRun, c *server.Client) error {
 		} else {
 			sRet = "false"
 		}
-		c.RespWriter.WriteStatus(sRet)
+		c.Writer.WriteStatus(sRet)
 	} else {
 		return err
 	}
@@ -270,7 +270,7 @@ func fullSync(raft *StartRun, c *server.Client) error {
 	}
 	err := raft.FullSync()
 	if err == nil {
-		c.RespWriter.WriteStatus(resp.ReplyOK)
+		c.Writer.WriteStatus(resp.ReplyOK)
 		return nil
 	}
 	return err
@@ -279,7 +279,7 @@ func fullSync(raft *StartRun, c *server.Client) error {
 func statInfo(raft *StartRun, c *server.Client) error {
 	info, ret, err := raft.StatInfo()
 	if R_SUCCESS == ret {
-		c.RespWriter.WriteStatus(info)
+		c.Writer.WriteStatus(info)
 	} else {
 		return err
 	}

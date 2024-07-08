@@ -12,30 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package dostats
+package trycatch
 
 import (
-	"sync/atomic"
+	"runtime"
+
+	"github.com/zuoyebang/bitalostored/butils/unsafe2"
+	"github.com/zuoyebang/bitalostored/stored/internal/log"
 )
 
-var connStats struct {
-	total atomic.Int64
-	alive atomic.Int64
-}
-
-func IncrConns() int64 {
-	connStats.total.Add(1)
-	return connStats.alive.Add(1)
-}
-
-func DecrConns() {
-	connStats.alive.Add(-1)
-}
-
-func ConnsTotal() int64 {
-	return connStats.total.Load()
-}
-
-func ConnsAlive() int64 {
-	return connStats.alive.Load()
+func Panic(s string, err any) {
+	if err != nil {
+		buf := make([]byte, 2048)
+		n := runtime.Stack(buf, false)
+		log.Errorf("%s panic err:%v stack:%s", s, err, unsafe2.String(buf[0:n]))
+	}
 }

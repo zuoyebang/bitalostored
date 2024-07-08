@@ -17,12 +17,13 @@ package server
 import (
 	"time"
 
-	"github.com/zuoyebang/bitalostored/butils/hash"
-	"github.com/zuoyebang/bitalostored/butils/unsafe2"
-	"github.com/zuoyebang/bitalostored/stored/internal/config"
 	"github.com/zuoyebang/bitalostored/stored/internal/errn"
 	"github.com/zuoyebang/bitalostored/stored/internal/resp"
 	"github.com/zuoyebang/bitalostored/stored/internal/utils"
+
+	"github.com/zuoyebang/bitalostored/butils/hash"
+
+	"github.com/zuoyebang/bitalostored/butils/unsafe2"
 )
 
 func init() {
@@ -42,7 +43,7 @@ func watchCommand(c *Client) error {
 	}
 	args := c.Args
 	if len(args) < 1 {
-		return resp.CmdParamsErr(resp.WATCH)
+		return errn.CmdParamsErr(resp.WATCH)
 	}
 	if !c.server.IsMaster() {
 		return errn.ErrTxNotInMaster
@@ -59,7 +60,7 @@ func watchCommand(c *Client) error {
 		}
 		c.addWatchKey(c.server.txLocks.GetTxLock(khash), args[i], c.QueryStartTime)
 	}
-	c.RespWriter.WriteStatus("OK")
+	c.Writer.WriteStatus("OK")
 	return nil
 }
 
@@ -68,13 +69,13 @@ func unwatchCommand(c *Client) error {
 		return errn.ErrTxDisable
 	}
 	if len(c.Args) != 0 {
-		return resp.CmdParamsErr(resp.WATCH)
+		return errn.CmdParamsErr(resp.WATCH)
 	}
 	if c.txState&TxStateWatch != 0 {
 		c.txState &= ^(TxStateWatch)
 		c.unwatchKey()
 	}
-	c.RespWriter.WriteStatus("OK")
+	c.Writer.WriteStatus("OK")
 	return nil
 }
 
@@ -83,7 +84,7 @@ func multiCommand(c *Client) error {
 		return errn.ErrTxDisable
 	}
 	if len(c.Args) != 0 {
-		return resp.CmdParamsErr(resp.MULTI)
+		return errn.CmdParamsErr(resp.MULTI)
 	}
 	if c.txState&TxStateMulti != 0 {
 		return errn.ErrMultiNested
@@ -98,7 +99,7 @@ func multiCommand(c *Client) error {
 	c.txState |= TxStateMulti
 	c.enableCommandQueued()
 	c.server.txParallelCounter.Add(1)
-	c.RespWriter.WriteStatus("OK")
+	c.Writer.WriteStatus("OK")
 	return nil
 }
 
@@ -107,7 +108,7 @@ func prepareCommand(c *Client) error {
 		return errn.ErrTxDisable
 	}
 	if len(c.Args) != 0 {
-		return resp.CmdParamsErr(resp.PREPARE)
+		return errn.CmdParamsErr(resp.PREPARE)
 	}
 	if c.txState&TxStateMulti == 0 {
 		return errn.ErrPrepareNoMulti
@@ -124,7 +125,7 @@ func prepareCommand(c *Client) error {
 	}
 
 	c.txState |= TxStatePrepare
-	c.RespWriter.WriteStatus("OK")
+	c.Writer.WriteStatus("OK")
 	return nil
 }
 
@@ -266,14 +267,14 @@ func execCommand(c *Client) (cerr error) {
 		return errn.ErrTxDisable
 	}
 	if len(c.Args) != 0 {
-		return resp.CmdParamsErr(resp.EXEC)
+		return errn.CmdParamsErr(resp.EXEC)
 	}
 	if c.txState&TxStatePrepare == 0 {
 		return errn.ErrExecNotPrepared
 	}
 	prepareState := c.prepareState.Load()
 	if prepareState == PrepareStateKeyModified || prepareState == PrepareStateLockFail {
-		c.RespWriter.WriteBulk(nil)
+		c.Writer.WriteBulk(nil)
 		return nil
 	}
 
@@ -293,7 +294,7 @@ func execCommand(c *Client) (cerr error) {
 	defer releaseLock()
 
 	if len(c.commandQueue) == 0 {
-		c.RespWriter.WriteStatus("(empty array)")
+		c.Writer.WriteStatus("(empty array)")
 		return nil
 	}
 
@@ -308,12 +309,12 @@ func execCommand(c *Client) (cerr error) {
 	}
 
 	c.disableCommandQueued()
-	c.RespWriter.SetCached()
+	c.Writer.SetCached()
 	for _, command := range c.commandQueue {
-		c.HandleRequest(config.GlobalConfig.Plugin.OpenRaft, command, false)
+		c.HandleRequest(command, false)
 	}
-	c.RespWriter.UnsetCached()
-	c.RespWriter.FlushCached()
+	c.Writer.UnsetCached()
+	c.Writer.FlushCached()
 	return nil
 }
 
@@ -322,13 +323,13 @@ func discardCommand(c *Client) error {
 		return errn.ErrTxDisable
 	}
 	if len(c.Args) != 0 {
-		return resp.CmdParamsErr(resp.DISCARD)
+		return errn.CmdParamsErr(resp.DISCARD)
 	}
 	if c.txState&TxStateMulti == 0 {
 		return errn.ErrDiscardNoMulti
 	}
 
 	c.discard()
-	c.RespWriter.WriteStatus("OK")
+	c.Writer.WriteStatus("OK")
 	return nil
 }

@@ -17,11 +17,11 @@ package logdb
 import (
 	"math"
 
+	"github.com/cockroachdb/errors"
+
 	"github.com/zuoyebang/bitalostored/raft/internal/logdb/kv"
 	"github.com/zuoyebang/bitalostored/raft/raftio"
 	pb "github.com/zuoyebang/bitalostored/raft/raftpb"
-
-	"github.com/cockroachdb/errors"
 )
 
 //

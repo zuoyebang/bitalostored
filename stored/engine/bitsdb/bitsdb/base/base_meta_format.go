@@ -43,7 +43,8 @@ const (
 	MetaListValueLen   = MetaMixValueLen + MetaListPosIndex*2
 
 	DataKeyHeaderLength     = keySlotIdLength + keyVersionLength
-	DataKeyZsetLength       = keySlotIdLength + FieldMd5Length
+	DataKeyZsetLength       = DataKeyHeaderLength + FieldMd5Length
+	DataKeyZsetOldLength    = keySlotIdLength + FieldMd5Length
 	DataKeyListIndex        = DataKeyHeaderLength + 4
 	DataKeyUpperBoundLength = DataKeyHeaderLength + MaxFieldLength
 

@@ -24,27 +24,21 @@ import (
 	"github.com/zuoyebang/bitalostored/stored/internal/utils"
 )
 
-func EncodeZsetDataKey(buf []byte, version uint64, khash uint32, member []byte) {
-	binary.LittleEndian.PutUint16(buf, utils.GetSlotId(khash))
-
-	var verBytes [8]byte
-	binary.LittleEndian.PutUint64(verBytes[:], version)
-	verMember := append(member, verBytes[:]...)
-	verMemberMd5 := md5.Sum(verMember)
-
-	copy(buf[keySlotIdLength:DataKeyZsetLength], verMemberMd5[0:FieldMd5Length])
-}
-
-func DecodeZsetDataKey(ekf []byte) ([]byte, error) {
-	if ekf == nil {
-		return nil, nil
+func EncodeZsetDataKey(buf []byte, version uint64, khash uint32, member []byte, isOld bool) int {
+	if !isOld {
+		PutDataKeyHeader(buf, version, khash)
+		memberMd5 := md5.Sum(member)
+		copy(buf[DataKeyHeaderLength:DataKeyZsetLength], memberMd5[0:FieldMd5Length])
+		return DataKeyZsetLength
+	} else {
+		var verBytes [8]byte
+		binary.LittleEndian.PutUint16(buf, utils.GetSlotId(khash))
+		binary.LittleEndian.PutUint64(verBytes[:], version)
+		verMember := append(member, verBytes[:]...)
+		verMemberMd5 := md5.Sum(verMember)
+		copy(buf[keySlotIdLength:DataKeyZsetOldLength], verMemberMd5[0:FieldMd5Length])
+		return DataKeyZsetOldLength
 	}
-
-	if len(ekf) < DataKeyZsetLength {
-		return nil, errFieldEncodeKey
-	}
-
-	return ekf[keySlotIdLength:DataKeyZsetLength], nil
 }
 
 func EncodeZsetIndexKeyScore(buf []byte, version uint64, khash uint32, score float64) {

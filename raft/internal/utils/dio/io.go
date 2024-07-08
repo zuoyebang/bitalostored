@@ -19,9 +19,8 @@ import (
 	"math"
 	"sync/atomic"
 
-	pb "github.com/zuoyebang/bitalostored/raft/raftpb"
-
 	"github.com/golang/snappy"
+	pb "github.com/zuoyebang/bitalostored/raft/raftpb"
 )
 
 // CompressionType is the type of the compression.

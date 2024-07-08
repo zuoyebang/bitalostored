@@ -22,9 +22,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/zuoyebang/bitalostored/stored/internal/config"
 	"github.com/zuoyebang/bitalostored/stored/internal/luajson"
-	"github.com/zuoyebang/bitalostored/stored/internal/resp"
 	"github.com/zuoyebang/bitalostored/stored/internal/utils"
 
 	lua "github.com/yuin/gopher-lua"
@@ -119,10 +117,10 @@ func MkLuaFuncs(srv *Server) map[string]lua.LGFunction {
 			reqData := utils.StringSliceToByteSlice(args)
 			vmClient := GetVmFromPool(srv)
 			defer PutRaftClientToPool(vmClient)
-			isPlugin := config.GlobalConfig.Plugin.OpenRaft
-			_ = vmClient.HandleRequest(isPlugin, reqData, true)
-			buf := bytes.NewBuffer(vmClient.RespWriter.FlushToBytes())
-			res, err := resp.ParseReply(bufio.NewReader(buf))
+			_ = vmClient.HandleRequest(reqData, true)
+			buf := bytes.NewBuffer(vmClient.Writer.Bytes())
+			defer vmClient.Writer.Reset()
+			res, err := ParseReply(bufio.NewReader(buf))
 			if err != nil {
 				if failFast {
 					if strings.Contains(err.Error(), "empty command") {
@@ -158,6 +156,7 @@ func MkLuaFuncs(srv *Server) map[string]lua.LGFunction {
 					panic(fmt.Sprintf("type not handled (%T)", r))
 				}
 			}
+
 			return 1
 		}
 	}
@@ -224,31 +223,31 @@ func ConvertLuaTable(l *lua.LState, value lua.LValue) []string {
 
 func LuaToRedis(l *lua.LState, c *Client, value lua.LValue) {
 	if value == nil {
-		c.RespWriter.WriteBulk(nil)
+		c.Writer.WriteBulk(nil)
 		return
 	}
 
 	switch t := value.(type) {
 	case *lua.LNilType:
-		c.RespWriter.WriteBulk(nil)
+		c.Writer.WriteBulk(nil)
 	case lua.LBool:
 		if lua.LVAsBool(value) {
-			c.RespWriter.WriteInteger(1)
+			c.Writer.WriteInteger(1)
 		} else {
-			c.RespWriter.WriteBulk(nil)
+			c.Writer.WriteBulk(nil)
 		}
 	case lua.LNumber:
-		c.RespWriter.WriteInteger(int64(lua.LVAsNumber(value)))
+		c.Writer.WriteInteger(int64(lua.LVAsNumber(value)))
 	case lua.LString:
 		s := lua.LVAsString(value)
-		c.RespWriter.WriteBulk([]byte(s))
+		c.Writer.WriteBulk([]byte(s))
 	case *lua.LTable:
 		if s := t.RawGetString("err"); s.Type() != lua.LTNil {
-			c.RespWriter.WriteError(errors.New(s.String()))
+			c.Writer.WriteError(errors.New(s.String()))
 			return
 		}
 		if s := t.RawGetString("ok"); s.Type() != lua.LTNil {
-			c.RespWriter.WriteStatus(s.String())
+			c.Writer.WriteStatus(s.String())
 			return
 		}
 
@@ -267,7 +266,7 @@ func LuaToRedis(l *lua.LState, c *Client, value lua.LValue) {
 			result = append(result, val)
 		}
 
-		c.RespWriter.WriteLen(len(result))
+		c.Writer.WriteLen(len(result))
 		for _, r := range result {
 			LuaToRedis(l, c, r)
 		}

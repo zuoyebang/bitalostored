@@ -141,6 +141,11 @@ func (so *StringObject) StrLen(key []byte, khash uint32) (int64, error) {
 		return 0, err
 	}
 
+	t, ok, err := so.bitmapStrlen(key)
+	if ok {
+		return t, err
+	}
+
 	ek, ekCloser := base.EncodeMetaKey(key, khash)
 	value, _, valueCloser, err := so.getValueCheckAliveForString(ek)
 	defer func() {

@@ -90,37 +90,34 @@ func openBitalosDB(dirname string, cfg *dbconfig.Config, dataType btools.DataTyp
 	}
 
 	opts := &bitalosdb.Options{
-		CompressionType:             cfg.BithashCompressionType,
-		MemTableSize:                cfg.WriteBufferSize,
-		MemTableStopWritesThreshold: cfg.MaxWriteBufferNum,
-		Logger:                      log.GetLogger(),
-		Verbose:                     true,
-		AutoCompact:                 true,
-		CompactInfo:                 compactOpt,
-		DataType:                    dataType.String(),
-		DisableWAL:                  cfg.DisableWAL,
-		UseBithash:                  false,
-		UseBitable:                  false,
-		UseMapIndex:                 true,
-		FlushReporter:               cfg.FlushReporterFunc,
-		Id:                          kv.GetDbId(dataType, dbType),
-		UsePrefixCompress:           true,
-		UseBlockCompress:            cfg.EnablePageBlockCompression,
-		BlockCacheSize:              int64(cfg.PageBlockCacheSize),
-		IOWriteLoadThresholdFunc:    cfg.IOWriteLoadThresholdFunc,
-		BytesPerSync:                1 << 20,
-		DeleteFileInternal:          8,
-		KvCheckExpireFunc:           nil,
-		KvTimestampFunc:             nil,
-		KeyPrefixDeleteFunc:         nil,
+		CompressionType:                cfg.BithashCompressionType,
+		MemTableSize:                   cfg.WriteBufferSize,
+		MemTableStopWritesThreshold:    cfg.MaxWriteBufferNum,
+		Logger:                         log.GetLogger(),
+		Verbose:                        true,
+		AutoCompact:                    true,
+		CompactInfo:                    compactOpt,
+		DataType:                       dataType.String(),
+		DisableWAL:                     cfg.DisableWAL,
+		UseBithash:                     false,
+		UseBitable:                     false,
+		UseMapIndex:                    true,
+		FlushReporter:                  cfg.FlushReporterFunc,
+		Id:                             kv.GetDbId(dataType, dbType),
+		UsePrefixCompress:              true,
+		UseBlockCompress:               cfg.EnablePageBlockCompression,
+		BlockCacheSize:                 int64(cfg.PageBlockCacheSize),
+		IOWriteLoadThresholdFunc:       cfg.IOWriteLoadThresholdFunc,
+		BytesPerSync:                   1 << 20,
+		DeleteFileInternal:             8,
+		KvCheckExpireFunc:              nil,
+		KvTimestampFunc:                nil,
+		KeyPrefixDeleteFunc:            nil,
+		FlushPrefixDeleteKeyMultiplier: cfg.FlushPrefixDeleteKeyMultiplier,
+		FlushFileLifetime:              cfg.FlushFileLifetime,
 	}
 
-	if dataType == btools.ZSET && dbType == kv.DB_TYPE_INDEX {
-		opts.DataType += kv.GetDbTypeDir(dbType)
-		opts.LogTag = fmt.Sprintf("[bitalosdb/%s]", opts.DataType)
-	} else {
-		opts.LogTag = fmt.Sprintf("[bitalosdb/%s%s]", opts.DataType, kv.GetDbTypeDir(dbType))
-	}
+	opts.LogTag = fmt.Sprintf("[bitalosdb/%s%s]", opts.DataType, kv.GetDbTypeDir(dbType))
 
 	opts.KeyHashFunc = func(k []byte) int {
 		return int(binary.LittleEndian.Uint16(k[0:2]))
@@ -131,6 +128,13 @@ func openBitalosDB(dirname string, cfg *dbconfig.Config, dataType btools.DataTyp
 		opts.KvTimestampFunc = cfg.KvTimestampFunc
 		opts.KvCheckExpireFunc = cfg.KvCheckExpireFunc
 	} else {
+		opts.KeyPrefixDeleteFunc = func(k []byte) uint64 {
+			if len(k) < 10 {
+				return 0
+			}
+			return binary.LittleEndian.Uint64(k[2:10])
+		}
+
 		if dataType == btools.HASH || dataType == btools.LIST {
 			opts.UseBithash = true
 		}
@@ -139,13 +143,6 @@ func openBitalosDB(dirname string, cfg *dbconfig.Config, dataType btools.DataTyp
 		}
 		if dataType == btools.ZSET && dbType == kv.DB_TYPE_DATA {
 			opts.UsePrefixCompress = false
-		} else {
-			opts.KeyPrefixDeleteFunc = func(k []byte) uint64 {
-				if len(k) < 10 {
-					return 0
-				}
-				return binary.LittleEndian.Uint64(k[2:10])
-			}
 		}
 	}
 

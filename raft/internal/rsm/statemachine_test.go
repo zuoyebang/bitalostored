@@ -21,11 +21,10 @@ import (
 	"math/rand"
 	"testing"
 
-	"github.com/zuoyebang/bitalostored/raft/client"
-
 	"github.com/cockroachdb/errors"
 	"github.com/lni/goutils/leaktest"
 
+	"github.com/zuoyebang/bitalostored/raft/client"
 	"github.com/zuoyebang/bitalostored/raft/config"
 	"github.com/zuoyebang/bitalostored/raft/internal/raft"
 	"github.com/zuoyebang/bitalostored/raft/internal/server"

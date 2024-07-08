@@ -13,20 +13,14 @@
 // limitations under the License.
 
 //go:build !dragonboat_rocksdb_test && !dragonboat_memfs_test
-// +build !dragonboat_rocksdb_test,!dragonboat_memfs_test
 
 package logdb
 
 import (
 	"github.com/zuoyebang/bitalostored/raft/config"
 	"github.com/zuoyebang/bitalostored/raft/internal/logdb/kv"
-	"github.com/zuoyebang/bitalostored/raft/internal/logdb/kv/pebble"
+	"github.com/zuoyebang/bitalostored/raft/internal/logdb/kv/bitable"
 	"github.com/zuoyebang/bitalostored/raft/internal/vfs"
-)
-
-const (
-	// DefaultKVStoreTypeName is the type name of the default kv store
-	DefaultKVStoreTypeName = "rocksdb"
 )
 
 func newDefaultKVStore(config config.LogDBConfig,
@@ -39,5 +33,5 @@ func newDefaultKVStore(config config.LogDBConfig,
 			panic("invalid fs")
 		}
 	}
-	return pebble.NewKVStore(config, callback, dir, wal, fs)
+	return bitable.NewKVStore(config, callback, dir, wal, fs)
 }

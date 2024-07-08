@@ -19,15 +19,15 @@ import (
 	"math"
 	"sync/atomic"
 
+	"github.com/cockroachdb/errors"
+	"github.com/lni/goutils/syncutil"
+
 	"github.com/zuoyebang/bitalostored/raft/config"
 	"github.com/zuoyebang/bitalostored/raft/internal/logdb/kv"
 	"github.com/zuoyebang/bitalostored/raft/internal/server"
 	"github.com/zuoyebang/bitalostored/raft/internal/utils"
 	"github.com/zuoyebang/bitalostored/raft/raftio"
 	pb "github.com/zuoyebang/bitalostored/raft/raftpb"
-
-	"github.com/cockroachdb/errors"
-	"github.com/lni/goutils/syncutil"
 )
 
 // ShardedDB is a LogDB implementation using sharded rocksdb instances.

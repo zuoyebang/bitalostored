@@ -23,16 +23,18 @@ const (
 	STRING
 	HASH
 	LIST
-	ZSET
+	ZSETOLD
 	SET
+	ZSET
 )
 
 const (
-	StringName = "string"
-	HashName   = "hash"
-	ListName   = "list"
-	ZSetName   = "zset"
-	SetName    = "set"
+	StringName  = "string"
+	HashName    = "hash"
+	ListName    = "list"
+	ZSetName    = "zset"
+	ZSetOldName = "zsetold"
+	SetName     = "set"
 )
 
 var DataTypeList = []DataType{STRING, HASH, LIST, SET, ZSET}
@@ -46,10 +48,12 @@ func (d DataType) String() string {
 		return HashName
 	case LIST:
 		return ListName
-	case ZSET:
-		return ZSetName
 	case SET:
 		return SetName
+	case ZSET:
+		return ZSetName
+	case ZSETOLD:
+		return ZSetOldName
 	default:
 		return ""
 	}
@@ -73,7 +77,7 @@ func StringToDataType(t string) DataType {
 }
 
 func IsDataTypeFieldCompress(dt DataType) bool {
-	return dt == SET || dt == ZSET
+	return dt == SET || dt == ZSET || dt == ZSETOLD
 }
 
 type ScanPair struct {

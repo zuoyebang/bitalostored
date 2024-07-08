@@ -15,37 +15,42 @@
 package server
 
 import (
+	"os"
+	"syscall"
 	"time"
 
-	"github.com/zuoyebang/bitalostored/butils/extend"
+	"github.com/zuoyebang/bitalostored/stored/internal/errn"
 	"github.com/zuoyebang/bitalostored/stored/internal/resp"
+
+	"github.com/zuoyebang/bitalostored/butils/extend"
 )
 
 func init() {
 	AddCommand(map[string]*Cmd{
-		resp.PING: {Sync: false, Handler: pingCommand, NoKey: true},
-		resp.ECHO: {Sync: false, Handler: echoCommand, NoKey: true},
-		resp.TIME: {Sync: false, Handler: timeCommand, NoKey: true},
+		resp.PING:     {Sync: false, Handler: pingCommand, NoKey: true},
+		resp.ECHO:     {Sync: false, Handler: echoCommand, NoKey: true},
+		resp.TIME:     {Sync: false, Handler: timeCommand, NoKey: true},
+		resp.SHUTDOWN: {Sync: false, Handler: shutdownCommand, NoKey: true},
 	})
 }
 
 func pingCommand(c *Client) error {
-	c.RespWriter.WriteStatus(resp.ReplyPONG)
+	c.Writer.WriteStatus(resp.ReplyPONG)
 	return nil
 }
 
 func echoCommand(c *Client) error {
 	if len(c.Args) != 1 {
-		return resp.CmdParamsErr(resp.ECHO)
+		return errn.CmdParamsErr(resp.ECHO)
 	}
 
-	c.RespWriter.WriteBulk(c.Args[0])
+	c.Writer.WriteBulk(c.Args[0])
 	return nil
 }
 
 func timeCommand(c *Client) error {
 	if len(c.Args) != 0 {
-		return resp.CmdParamsErr(resp.TIME)
+		return errn.CmdParamsErr(resp.TIME)
 	}
 
 	t := time.Now()
@@ -59,6 +64,15 @@ func timeCommand(c *Client) error {
 		extend.FormatInt64ToSlice(m),
 	}
 
-	c.RespWriter.WriteArray(ay)
+	c.Writer.WriteArray(ay)
+	return nil
+}
+
+func shutdownCommand(c *Client) error {
+	p, _ := os.FindProcess(os.Getpid())
+	p.Signal(syscall.SIGTERM)
+	p.Signal(os.Interrupt)
+
+	c.Writer.WriteStatus(resp.ReplyOK)
 	return nil
 }

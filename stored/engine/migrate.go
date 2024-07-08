@@ -27,6 +27,7 @@ import (
 	"github.com/zuoyebang/bitalostored/butils/hash"
 	"github.com/zuoyebang/bitalostored/butils/unsafe2"
 	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/bitsdb"
+	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/bitsdb/locker"
 	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/btools"
 	"github.com/zuoyebang/bitalostored/stored/internal/errn"
 	"github.com/zuoyebang/bitalostored/stored/internal/log"
@@ -52,7 +53,7 @@ type Migrate struct {
 	toHost            string
 	slotId            uint32
 	migrateDelToSlave func(uint32, [][]byte) error
-	lockerPool        *KeyLockerPool
+	keyLocker         *locker.ScopeLocker
 	db                *bitsdb.BitsDB
 	status            int64
 	total             int64
@@ -424,7 +425,7 @@ func (m *Migrate) migrateRunTask(isMaster func() bool) (err error) {
 					khash, _ := m.getKeyHash(key)
 
 					func() {
-						defer m.lockerPool.LockKey(khash, resp.SET)()
+						defer m.keyLocker.LockKey(khash, resp.SET)()
 
 						var e error
 						atomic.AddInt64(&m.total, 1)
@@ -433,12 +434,12 @@ func (m *Migrate) migrateRunTask(isMaster func() bool) (err error) {
 							e = m.migrateString(key, conn)
 						case btools.HASH:
 							e = m.migrateHash(key, conn)
-						case btools.ZSET:
-							e = m.migrateZSet(key, conn)
 						case btools.SET:
 							e = m.migrateSet(key, conn)
 						case btools.LIST:
 							e = m.migrateList(key, conn)
+						case btools.ZSET, btools.ZSETOLD:
+							e = m.migrateZSet(key, conn)
 						}
 						if e != nil {
 							atomic.AddInt64(&m.fails, 1)
@@ -487,7 +488,7 @@ func (b *Bitalos) CheckRedirectAndLockFunc(cmd string, key []byte, khash uint32)
 		return false, nil
 	}
 
-	lockFunc := b.Migrate.lockerPool.LockKey(khash, cmd)
+	lockFunc := b.Migrate.keyLocker.LockKey(khash, cmd)
 
 	if n, _ := b.bitsdb.StringObj.Exists(key, khash); n == 1 {
 		return false, lockFunc
@@ -496,7 +497,7 @@ func (b *Bitalos) CheckRedirectAndLockFunc(cmd string, key []byte, khash uint32)
 	}
 }
 
-func (b *Bitalos) Redirect(cmd string, key []byte, reqData [][]byte, rw *resp.RespWriter) error {
+func (b *Bitalos) Redirect(cmd string, key []byte, reqData [][]byte, rw *resp.Writer) error {
 	log.Info("redirect cmd: ", cmd, " key: ", string(key))
 	var arg []interface{}
 	for _, v := range reqData[1:] {
@@ -531,12 +532,12 @@ func (b *Bitalos) Redirect(cmd string, key []byte, reqData [][]byte, rw *resp.Re
 
 func (b *Bitalos) NewMigrate(slot uint32, tohost string, fromhost string) *Migrate {
 	mg := &Migrate{
-		fromHost:   fromhost,
-		toHost:     tohost,
-		slotId:     slot,
-		beginTime:  time.Now(),
-		endTime:    time.Now(),
-		lockerPool: NewKeyLockerPool(),
+		fromHost:  fromhost,
+		toHost:    tohost,
+		slotId:    slot,
+		beginTime: time.Now(),
+		endTime:   time.Now(),
+		keyLocker: locker.NewScopeLocker(false),
 		Conn: &redis.Pool{
 			MaxIdle: 10,
 			Dial: func() (redis.Conn, error) {
@@ -594,6 +595,7 @@ func (b *Bitalos) MigrateStart(
 			return nil
 		})
 	}
+	b.bitsdb.StringObj.BaseDb.BitmapMem.StartMigrate(slot)
 	b.Meta.SetMigrateStatus(MigrateStatusProcess)
 	b.Meta.SetMigrateSlotid(uint64(slot))
 	log.Infof("migrate end toHost:%s slotId:%d", host, slot)
@@ -609,6 +611,7 @@ func (b *Bitalos) MigrateOver(slotId uint64) error {
 	} else {
 		log.Infof("migrate over slotId:%d", slotId)
 	}
+	b.bitsdb.StringObj.BaseDb.BitmapMem.ClearMigrate()
 	b.Meta.SetMigrateStatus(MigrateStatusPrepare)
 	return nil
 }

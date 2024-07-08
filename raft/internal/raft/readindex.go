@@ -14,7 +14,9 @@
 
 package raft
 
-import "github.com/zuoyebang/bitalostored/raft/raftpb"
+import (
+	"github.com/zuoyebang/bitalostored/raft/raftpb"
+)
 
 type readStatus struct {
 	confirmed map[uint64]struct{}

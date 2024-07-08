@@ -17,6 +17,7 @@ package server
 import (
 	"strconv"
 
+	"github.com/zuoyebang/bitalostored/stored/internal/errn"
 	"github.com/zuoyebang/bitalostored/stored/internal/resp"
 	"github.com/zuoyebang/bitalostored/stored/internal/utils"
 )
@@ -30,26 +31,25 @@ func init() {
 		resp.SISMEMBER:   {Sync: resp.IsWriteCmd(resp.SISMEMBER), Handler: sismemberCommand},
 		resp.SMEMBERS:    {Sync: resp.IsWriteCmd(resp.SMEMBERS), Handler: smembersCommand},
 		resp.SRANDMEMBER: {Sync: resp.IsWriteCmd(resp.SRANDMEMBER), Handler: srandmemberCommand},
-
-		resp.SCLEAR:     {Sync: resp.IsWriteCmd(resp.SCLEAR), Handler: sclearCommand, KeySkip: 1},
-		resp.SEXPIRE:    {Sync: resp.IsWriteCmd(resp.SEXPIRE), Handler: sexpireCommand},
-		resp.SEXPIREAT:  {Sync: resp.IsWriteCmd(resp.SEXPIREAT), Handler: sexpireAtCommand},
-		resp.SPERSIST:   {Sync: resp.IsWriteCmd(resp.SPERSIST), Handler: spersistCommand},
-		resp.STTL:       {Sync: resp.IsWriteCmd(resp.STTL), Handler: sttlCommand},
-		resp.SKEYEXISTS: {Sync: resp.IsWriteCmd(resp.SKEYEXISTS), Handler: skeyexistsCommand},
+		resp.SCLEAR:      {Sync: resp.IsWriteCmd(resp.SCLEAR), Handler: sclearCommand, KeySkip: 1},
+		resp.SEXPIRE:     {Sync: resp.IsWriteCmd(resp.SEXPIRE), Handler: sexpireCommand},
+		resp.SEXPIREAT:   {Sync: resp.IsWriteCmd(resp.SEXPIREAT), Handler: sexpireAtCommand},
+		resp.SPERSIST:    {Sync: resp.IsWriteCmd(resp.SPERSIST), Handler: spersistCommand},
+		resp.STTL:        {Sync: resp.IsWriteCmd(resp.STTL), Handler: sttlCommand},
+		resp.SKEYEXISTS:  {Sync: resp.IsWriteCmd(resp.SKEYEXISTS), Handler: skeyexistsCommand},
 	})
 }
 
 func saddCommand(c *Client) error {
 	args := c.Args
 	if len(args) < 2 {
-		return resp.CmdParamsErr(resp.SADD)
+		return errn.CmdParamsErr(resp.SADD)
 	}
 
 	if n, err := c.DB.SAdd(args[0], c.KeyHash, args[1:]...); err != nil {
 		return err
 	} else {
-		c.RespWriter.WriteInteger(n)
+		c.Writer.WriteInteger(n)
 	}
 
 	return nil
@@ -58,13 +58,13 @@ func saddCommand(c *Client) error {
 func scardCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 1 {
-		return resp.CmdParamsErr(resp.SCARD)
+		return errn.CmdParamsErr(resp.SCARD)
 	}
 
 	if n, err := c.DB.SCard(args[0], c.KeyHash); err != nil {
 		return err
 	} else {
-		c.RespWriter.WriteInteger(n)
+		c.Writer.WriteInteger(n)
 	}
 
 	return nil
@@ -73,13 +73,13 @@ func scardCommand(c *Client) error {
 func sismemberCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 2 {
-		return resp.CmdParamsErr(resp.SISMEMBER)
+		return errn.CmdParamsErr(resp.SISMEMBER)
 	}
 
 	if n, err := c.DB.SIsMember(args[0], c.KeyHash, args[1]); err != nil {
 		return err
 	} else {
-		c.RespWriter.WriteInteger(n)
+		c.Writer.WriteInteger(n)
 	}
 
 	return nil
@@ -88,7 +88,7 @@ func sismemberCommand(c *Client) error {
 func smembersCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 1 {
-		return resp.CmdParamsErr(resp.SMEMBERS)
+		return errn.CmdParamsErr(resp.SMEMBERS)
 	}
 
 	res, err := c.DB.SMembers(args[0], c.KeyHash)
@@ -96,7 +96,7 @@ func smembersCommand(c *Client) error {
 		return err
 	}
 
-	c.RespWriter.WriteSliceArray(res)
+	c.Writer.WriteSliceArray(res)
 	return nil
 
 }
@@ -104,16 +104,16 @@ func smembersCommand(c *Client) error {
 func srandmemberCommand(c *Client) error {
 	args := c.Args
 	if len(args) < 1 {
-		return resp.CmdParamsErr(resp.SRANDMEMBER)
+		return errn.CmdParamsErr(resp.SRANDMEMBER)
 	} else if len(args) > 2 {
-		return resp.ErrSyntax
+		return errn.ErrSyntax
 	}
 
 	count := 1
 	if len(args) == 2 {
 		var err error
 		if count, err = strconv.Atoi(string(args[1])); err != nil {
-			return resp.ErrValue
+			return errn.ErrValue
 		}
 	}
 
@@ -122,12 +122,12 @@ func srandmemberCommand(c *Client) error {
 		return err
 	}
 	if len(args) == 2 {
-		c.RespWriter.WriteSliceArray(res)
+		c.Writer.WriteSliceArray(res)
 	} else {
 		if len(res) >= 1 {
-			c.RespWriter.WriteBulk(res[0])
+			c.Writer.WriteBulk(res[0])
 		} else {
-			c.RespWriter.WriteBulk(nil)
+			c.Writer.WriteBulk(nil)
 		}
 	}
 	return nil
@@ -137,13 +137,13 @@ func srandmemberCommand(c *Client) error {
 func sremCommand(c *Client) error {
 	args := c.Args
 	if len(args) < 2 {
-		return resp.CmdParamsErr(resp.SREM)
+		return errn.CmdParamsErr(resp.SREM)
 	}
 
 	if n, err := c.DB.SRem(args[0], c.KeyHash, args[1:]...); err != nil {
 		return err
 	} else {
-		c.RespWriter.WriteInteger(n)
+		c.Writer.WriteInteger(n)
 	}
 
 	return nil
@@ -153,7 +153,7 @@ func spopCommand(c *Client) error {
 	args := c.Args
 
 	if len(args) < 1 || len(args) > 2 {
-		return resp.CmdParamsErr(resp.SPOP)
+		return errn.CmdParamsErr(resp.SPOP)
 	}
 
 	var count int64 = 1
@@ -161,10 +161,10 @@ func spopCommand(c *Client) error {
 		var err error
 		count, err = utils.ByteToInt64(args[1])
 		if err != nil || count < 0 {
-			return resp.ErrValue
+			return errn.ErrValue
 		}
 		if count == 0 {
-			c.RespWriter.WriteSliceArray(nil)
+			c.Writer.WriteSliceArray(nil)
 			return nil
 		}
 	}
@@ -174,12 +174,12 @@ func spopCommand(c *Client) error {
 		return err
 	}
 	if len(args) == 2 {
-		c.RespWriter.WriteSliceArray(res)
+		c.Writer.WriteSliceArray(res)
 	} else {
 		if len(res) >= 1 {
-			c.RespWriter.WriteBulk(res[0])
+			c.Writer.WriteBulk(res[0])
 		} else {
-			c.RespWriter.WriteBulk(nil)
+			c.Writer.WriteBulk(nil)
 		}
 	}
 	return nil
@@ -188,13 +188,13 @@ func spopCommand(c *Client) error {
 func sclearCommand(c *Client) error {
 	args := c.Args
 	if len(args) < 1 {
-		return resp.CmdParamsErr(resp.SCLEAR)
+		return errn.CmdParamsErr(resp.SCLEAR)
 	}
 
 	if n, err := c.DB.SClear(c.KeyHash, args...); err != nil {
 		return err
 	} else {
-		c.RespWriter.WriteInteger(n)
+		c.Writer.WriteInteger(n)
 	}
 
 	return nil
@@ -203,12 +203,12 @@ func sclearCommand(c *Client) error {
 func sexpireCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 2 {
-		return resp.CmdParamsErr(resp.SEXPIRE)
+		return errn.CmdParamsErr(resp.SEXPIRE)
 	}
 
 	duration, err := utils.ByteToInt64(args[1])
 	if err != nil {
-		return resp.ErrValue
+		return errn.ErrValue
 	}
 
 	var n int64
@@ -216,19 +216,19 @@ func sexpireCommand(c *Client) error {
 	if err != nil {
 		return err
 	}
-	c.RespWriter.WriteInteger(n)
+	c.Writer.WriteInteger(n)
 	return nil
 }
 
 func sexpireAtCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 2 {
-		return resp.CmdParamsErr(resp.SEXPIREAT)
+		return errn.CmdParamsErr(resp.SEXPIREAT)
 	}
 
 	when, err := utils.ByteToInt64(args[1])
 	if err != nil {
-		return resp.ErrValue
+		return errn.ErrValue
 	}
 
 	var n int64
@@ -236,20 +236,20 @@ func sexpireAtCommand(c *Client) error {
 	if err != nil {
 		return err
 	}
-	c.RespWriter.WriteInteger(n)
+	c.Writer.WriteInteger(n)
 	return nil
 }
 
 func sttlCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 1 {
-		return resp.CmdParamsErr(resp.STTL)
+		return errn.CmdParamsErr(resp.STTL)
 	}
 
 	if v, err := c.DB.TTl(args[0], c.KeyHash); err != nil {
 		return err
 	} else {
-		c.RespWriter.WriteInteger(v)
+		c.Writer.WriteInteger(v)
 	}
 
 	return nil
@@ -259,13 +259,13 @@ func sttlCommand(c *Client) error {
 func spersistCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 1 {
-		return resp.CmdParamsErr(resp.SPERSIST)
+		return errn.CmdParamsErr(resp.SPERSIST)
 	}
 
 	if n, err := c.DB.Persist(args[0], c.KeyHash); err != nil {
 		return err
 	} else {
-		c.RespWriter.WriteInteger(n)
+		c.Writer.WriteInteger(n)
 	}
 
 	return nil
@@ -274,13 +274,13 @@ func spersistCommand(c *Client) error {
 func skeyexistsCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 1 {
-		return resp.CmdParamsErr(resp.SKEYEXISTS)
+		return errn.CmdParamsErr(resp.SKEYEXISTS)
 	}
 
 	if n, err := c.DB.Exists(args[0], c.KeyHash); err != nil {
 		return err
 	} else {
-		c.RespWriter.WriteInteger(n)
+		c.Writer.WriteInteger(n)
 	}
 	return nil
 }

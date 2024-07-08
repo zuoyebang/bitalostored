@@ -18,10 +18,9 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	"github.com/zuoyebang/bitalostored/raft/raftio"
 	pb "github.com/zuoyebang/bitalostored/raft/raftpb"
-
-	"github.com/stretchr/testify/require"
 )
 
 func TestTrySaveSnapshot(t *testing.T) {

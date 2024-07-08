@@ -12,34 +12,27 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package pebble
-
-// WARNING: pebble support is expermental, DO NOT USE IT IN PRODUCTION.
+package bitable
 
 import (
 	"bytes"
 	"fmt"
 	"sync"
+	"time"
 
-	"github.com/zuoyebang/bitalostored/raft/config"
-	"github.com/zuoyebang/bitalostored/raft/logger"
-
-	"github.com/cockroachdb/pebble"
 	"github.com/lni/goutils/syncutil"
-
+	bitable "github.com/zuoyebang/bitalostable"
+	"github.com/zuoyebang/bitalostored/raft/config"
 	"github.com/zuoyebang/bitalostored/raft/internal/fileutil"
 	"github.com/zuoyebang/bitalostored/raft/internal/logdb/kv"
 	"github.com/zuoyebang/bitalostored/raft/internal/utils"
 	"github.com/zuoyebang/bitalostored/raft/internal/vfs"
+	"github.com/zuoyebang/bitalostored/raft/logger"
 )
 
-var (
-	plog = logger.GetLogger("pebblekv")
-)
+const bitableLogTag = "[bitable/raftlog]"
 
-const (
-	maxLogFileSize = 1024 * 1024 * 128
-)
+var plog = logger.GetLogger("bitablekv")
 
 var firstError = utils.FirstError
 
@@ -70,82 +63,120 @@ func (l *eventListener) notify() {
 	})
 }
 
-func (l *eventListener) onCompactionEnd(pebble.CompactionInfo) {
+func (l *eventListener) onCompactionEnd(info bitable.CompactionInfo) {
+	plog.Infof("%s %s", bitableLogTag, info)
 	l.notify()
 }
 
-func (l *eventListener) onFlushEnd(pebble.FlushInfo) {
+func (l *eventListener) onFlushEnd(info bitable.FlushInfo) {
+	plog.Infof("%s %s", bitableLogTag, info)
 	l.notify()
 }
 
-func (l *eventListener) onWALCreated(pebble.WALCreateInfo) {
+func (l *eventListener) onWALCreated(bitable.WALCreateInfo) {
 	l.notify()
 }
 
-type pebbleWriteBatch struct {
-	wb *pebble.Batch
-	db *pebble.DB
-	wo *pebble.WriteOptions
+type bitableWriteBatch struct {
+	wb *bitable.Batch
+	db *bitable.DB
+	wo *bitable.WriteOptions
 }
 
-func (w *pebbleWriteBatch) Destroy() {
+func (w *bitableWriteBatch) Destroy() {
 	if err := w.wb.Close(); err != nil {
 		panic(err)
 	}
 }
 
-func (w *pebbleWriteBatch) Put(key []byte, val []byte) {
+func (w *bitableWriteBatch) Put(key []byte, val []byte) {
 	if err := w.wb.Set(key, val, w.wo); err != nil {
 		panic(err)
 	}
 }
 
-func (w *pebbleWriteBatch) Delete(key []byte) {
+func (w *bitableWriteBatch) Delete(key []byte) {
 	if err := w.wb.Delete(key, w.wo); err != nil {
 		panic(err)
 	}
 }
 
-func (w *pebbleWriteBatch) Clear() {
+func (w *bitableWriteBatch) Clear() {
 	if err := w.wb.Close(); err != nil {
 		panic(err)
 	}
 	w.wb = w.db.NewBatch()
 }
 
-func (w *pebbleWriteBatch) Count() int {
+func (w *bitableWriteBatch) Count() int {
 	return int(w.wb.Count())
 }
 
-type pebbleLogger struct{}
+var _ bitable.Logger = (*bitableLogger)(nil)
 
-var _ pebble.Logger = (*pebbleLogger)(nil)
+type bitableLogger struct{}
 
-// PebbleLogger is the logger used by pebble
-var PebbleLogger pebbleLogger
-
-func (pebbleLogger) Infof(format string, args ...interface{}) {
-	pebble.DefaultLogger.Infof(format, args...)
+func (l bitableLogger) Info(args ...interface{}) {
+	plog.Infof(fmt.Sprint(args...))
 }
 
-func (pebbleLogger) Fatalf(format string, args ...interface{}) {
-	pebble.DefaultLogger.Infof(format, args...)
-	panic(fmt.Errorf(format, args...))
+func (l bitableLogger) Warn(args ...interface{}) {
+	plog.Warningf(fmt.Sprint(args...))
 }
 
-// NewKVStore returns a pebble based IKVStore instance.
+func (l bitableLogger) Error(args ...interface{}) {
+	plog.Errorf(fmt.Sprint(args...))
+}
+
+func (l bitableLogger) Cost(args ...interface{}) func() {
+	begin := time.Now()
+	return func() {
+		plog.Infof(fmt.Sprint(fmt.Sprint(args...), " ", fmtDuration(time.Now().Sub(begin))))
+	}
+}
+
+func (l bitableLogger) Warnf(format string, args ...interface{}) {
+	plog.Warningf(format, args...)
+}
+
+func (l bitableLogger) Errorf(format string, args ...interface{}) {
+	plog.Errorf(format, args...)
+}
+
+func (bitableLogger) Infof(format string, args ...interface{}) {
+	plog.Infof(format, args...)
+}
+
+func (bitableLogger) Fatalf(format string, args ...interface{}) {
+	plog.Warningf(format, args...)
+}
+
+func fmtDuration(d time.Duration) string {
+	if d > time.Second {
+		return fmt.Sprintf("cost:%d.%03ds", d/time.Second, d/time.Millisecond%1000)
+	}
+	if d > time.Millisecond {
+		return fmt.Sprintf("cost:%d.%03dms", d/time.Millisecond, d/time.Microsecond%1000)
+	}
+	if d > time.Microsecond {
+		return fmt.Sprintf("cost:%d.%03dus", d/time.Microsecond, d%1000)
+	}
+	return fmt.Sprintf("cost:%dns", d)
+}
+
+// NewKVStore returns a bitable based IKVStore instance.
 func NewKVStore(config config.LogDBConfig, callback kv.LogDBCallback,
 	dir string, wal string, fs vfs.IFS) (kv.IKVStore, error) {
-	return openPebbleDB(config, callback, dir, wal, fs)
+	return openBitableDB(config, callback, dir, wal, fs)
 }
 
-// KV is a pebble based IKVStore type.
+// KV is a bitable based IKVStore type.
 type KV struct {
-	db       *pebble.DB
+	db       *bitable.DB
 	dbSet    chan struct{}
-	opts     *pebble.Options
-	ro       *pebble.IterOptions
-	wo       *pebble.WriteOptions
+	opts     *bitable.Options
+	ro       *bitable.IterOptions
+	wo       *bitable.WriteOptions
 	event    *eventListener
 	callback kv.LogDBCallback
 	config   config.LogDBConfig
@@ -153,20 +184,20 @@ type KV struct {
 
 var _ kv.IKVStore = (*KV)(nil)
 
-var pebbleWarning sync.Once
+var bitableWarning sync.Once
 
-func openPebbleDB(config config.LogDBConfig, callback kv.LogDBCallback,
+func openBitableDB(config config.LogDBConfig, callback kv.LogDBCallback,
 	dir string, walDir string, fs vfs.IFS) (kv.IKVStore, error) {
 	if config.IsEmpty() {
 		panic("invalid LogDBConfig")
 	}
-	pebbleWarning.Do(func() {
+	bitableWarning.Do(func() {
 		if fs == vfs.MemStrictFS {
-			plog.Warningf("running in pebble memfs test mode")
+			plog.Warningf("running in bitable memfs test mode")
 		}
 	})
 	//blockSize := int(config.KVBlockSize)
-	blockSize := 128 * 1024
+	blockSize := 128 << 10
 	writeBufferSize := 128 << 20
 	targetFileSizeBase := int64(128 << 20)
 	//cacheSize := int64(config.KVLRUCacheSize)
@@ -175,11 +206,11 @@ func openPebbleDB(config config.LogDBConfig, callback kv.LogDBCallback,
 	levelSizeMultiplier := int64(2)
 	//numOfLevels := int64(config.KVNumOfLevels)
 	numOfLevels := int64(7)
-	lopts := make([]pebble.LevelOptions, 0)
+	lopts := make([]bitable.LevelOptions, 0)
 	sz := targetFileSizeBase
 	for l := int64(0); l < numOfLevels; l++ {
-		opt := pebble.LevelOptions{
-			Compression:    pebble.SnappyCompression,
+		opt := bitable.LevelOptions{
+			Compression:    bitable.SnappyCompression,
 			BlockSize:      blockSize,
 			TargetFileSize: sz,
 		}
@@ -187,25 +218,26 @@ func openPebbleDB(config config.LogDBConfig, callback kv.LogDBCallback,
 		lopts = append(lopts, opt)
 	}
 	if inMonkeyTesting {
-		writeBufferSize = 1024 * 1024 * 4
+		writeBufferSize = 4 << 20
 	}
-	cache := pebble.NewCache(cacheSize)
-	ro := &pebble.IterOptions{}
-	wo := &pebble.WriteOptions{Sync: false}
-	opts := &pebble.Options{
+	cache := bitable.NewCache(cacheSize)
+	ro := &bitable.IterOptions{}
+	wo := &bitable.WriteOptions{Sync: false}
+	opts := &bitable.Options{
 		Levels:                      lopts,
-		MaxManifestFileSize:         maxLogFileSize,
+		MaxManifestFileSize:         128 << 20,
 		MemTableSize:                writeBufferSize,
 		MemTableStopWritesThreshold: 8,
 		LBaseMaxBytes:               1 << 30,
-		L0CompactionThreshold:       32,
-		L0StopWritesThreshold:       64,
+		L0CompactionThreshold:       48,
+		L0StopWritesThreshold:       96,
 		Cache:                       cache,
-		Logger:                      PebbleLogger,
+		Logger:                      bitableLogger{},
+		LogTag:                      bitableLogTag,
 		MaxOpenFiles:                8000,
 	}
 	if fs != vfs.DefaultFS {
-		opts.FS = vfs.NewPebbleFS(fs)
+		opts.FS = vfs.NewBitableFS(fs)
 	}
 	kv := &KV{
 		ro:       ro,
@@ -219,7 +251,7 @@ func openPebbleDB(config config.LogDBConfig, callback kv.LogDBCallback,
 		kv:      kv,
 		stopper: syncutil.NewStopper(),
 	}
-	opts.EventListener = pebble.EventListener{
+	opts.EventListener = bitable.EventListener{
 		WALCreated:    event.onWALCreated,
 		FlushEnd:      event.onFlushEnd,
 		CompactionEnd: event.onCompactionEnd,
@@ -233,13 +265,18 @@ func openPebbleDB(config config.LogDBConfig, callback kv.LogDBCallback,
 	if err := fileutil.MkdirAll(dir, fs); err != nil {
 		return nil, err
 	}
-	pdb, err := pebble.Open(dir, opts)
+	pdb, err := bitable.Open(dir, opts)
 	if err != nil {
 		return nil, err
 	}
 	cache.Unref()
 	kv.db = pdb
 	kv.setEventListener(event)
+	plog.Infof("bitable open success MemTableSize:%d MemTableStopWritesThreshold:%d MaxManifestFileSize:%d L0StopWritesThreshold:%d",
+		opts.MemTableSize,
+		opts.MemTableStopWritesThreshold,
+		opts.MaxManifestFileSize,
+		opts.L0StopWritesThreshold)
 	return kv, nil
 }
 
@@ -251,7 +288,7 @@ func (r *KV) setEventListener(event *eventListener) {
 	close(r.dbSet)
 	// force a WALCreated event as the one issued when opening the DB didn't get
 	// handled
-	event.onWALCreated(pebble.WALCreateInfo{})
+	event.onWALCreated(bitable.WALCreateInfo{})
 }
 
 // Name returns the IKVStore type name.
@@ -268,7 +305,7 @@ func (r *KV) Close() error {
 	return nil
 }
 
-func iteratorIsValid(iter *pebble.Iterator) bool {
+func iteratorIsValid(iter *bitable.Iterator) bool {
 	v := iter.Valid()
 	if err := iter.Error(); err != nil {
 		plog.Panicf("%+v", err)
@@ -309,7 +346,7 @@ func (r *KV) IterateValue(fk []byte, lk []byte, inc bool,
 // GetValue ...
 func (r *KV) GetValue(key []byte, op func([]byte) error) (err error) {
 	val, closer, err := r.db.Get(key)
-	if err != nil && err != pebble.ErrNotFound {
+	if err != nil && err != bitable.ErrNotFound {
 		return err
 	}
 	defer func() {
@@ -332,7 +369,7 @@ func (r *KV) DeleteValue(key []byte) error {
 
 // GetWriteBatch ...
 func (r *KV) GetWriteBatch() kv.IWriteBatch {
-	return &pebbleWriteBatch{
+	return &bitableWriteBatch{
 		wb: r.db.NewBatch(),
 		db: r.db,
 		wo: r.wo,
@@ -341,7 +378,7 @@ func (r *KV) GetWriteBatch() kv.IWriteBatch {
 
 // CommitWriteBatch ...
 func (r *KV) CommitWriteBatch(wb kv.IWriteBatch) error {
-	pwb, ok := wb.(*pebbleWriteBatch)
+	pwb, ok := wb.(*bitableWriteBatch)
 	if !ok {
 		panic("unknown type")
 	}
@@ -365,7 +402,7 @@ func (r *KV) BulkRemoveEntries(fk []byte, lk []byte) (err error) {
 
 // CompactEntries ...
 func (r *KV) CompactEntries(fk []byte, lk []byte) error {
-	return r.db.Compact(fk, lk)
+	return r.db.Compact(fk, lk, false)
 }
 
 // FullCompaction ...
@@ -376,5 +413,5 @@ func (r *KV) FullCompaction() error {
 		fk[i] = 0
 		lk[i] = 0xFF
 	}
-	return r.db.Compact(fk, lk)
+	return r.db.Compact(fk, lk, false)
 }

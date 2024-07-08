@@ -29,8 +29,10 @@ import (
 	"github.com/zuoyebang/bitalostored/raft/statemachine"
 	"github.com/zuoyebang/bitalostored/stored/internal/config"
 	"github.com/zuoyebang/bitalostored/stored/internal/log"
+	"github.com/zuoyebang/bitalostored/stored/internal/marshal/update"
 	"github.com/zuoyebang/bitalostored/stored/internal/utils"
 	"github.com/zuoyebang/bitalostored/stored/server"
+	"google.golang.org/protobuf/proto"
 )
 
 var raftInstance = &StartRun{}
@@ -77,7 +79,7 @@ func (p *StartRun) LoadConfig(s *server.Server) {
 	logger.GetLogger("grpc").SetLevel(logger.ERROR)
 	logger.GetLogger("logdb").SetLevel(logger.ERROR)
 	logger.GetLogger("raftpb").SetLevel(logger.ERROR)
-	logger.GetLogger("raft").SetLevel(logger.ERROR)
+	logger.GetLogger("dragonboat").SetLevel(logger.ERROR)
 	logger.GetLogger("dbconfig").SetLevel(logger.ERROR)
 	logger.GetLogger("settings").SetLevel(logger.ERROR)
 	logger.GetLogger("order").SetLevel(logger.ERROR)
@@ -110,9 +112,13 @@ func (p *StartRun) LoadConfig(s *server.Server) {
 	p.Nhc.Expert.Engine = dconfig.GetDefaultEngineConfig()
 
 	p.Nhc.Expert.LogDB.Shards = 1
-	p.Nhc.Expert.LogDB.KVWriteBufferSize = 256 << 20
-	p.Nhc.Expert.LogDB.KVTargetFileSizeBase = 32 << 20
+	p.Nhc.Expert.LogDB.KVWriteBufferSize = 128 << 20
+	p.Nhc.Expert.LogDB.KVTargetFileSizeBase = 128 << 20
 	p.Nhc.Expert.Engine.ExecShards = 1
+	p.Nhc.Expert.Engine.CommitShards = 1
+	p.Nhc.Expert.Engine.ApplyShards = 1
+	p.Nhc.Expert.Engine.SnapshotShards = 1
+	p.Nhc.Expert.Engine.CloseShards = 1
 
 	var flushCallback func(uint64)
 	if !s.IsWitness {
@@ -250,16 +256,89 @@ func (p *StartRun) getAddr() string {
 	return p.Addr
 }
 
+func (p *StartRun) Start(s *server.Server) {
+	p.LoadConfig(s)
+
+	p.registerRaftCommand(s)
+	p.registerIsMasterCF(s)
+	p.registerSyncToSlave(s)
+
+	if !config.GlobalConfig.Plugin.OpenRaft || config.GlobalConfig.CheckIsDegradeSingleNode() {
+		s.Info.Cluster.Role = "single"
+		s.Info.Cluster.Status = true
+	} else {
+		node, err := braft.NewNodeHost(p.Nhc)
+		if err != nil {
+			log.Error("new host: ", err)
+			panic(err)
+		}
+		p.Nh = node
+
+		if err := p.Nh.StartOnDiskCluster(p.AddrList, p.Join, func(clusterID uint64, nodeID uint64) statemachine.IOnDiskStateMachine {
+			s.Info.Cluster.ClusterId = clusterID
+			s.Info.Cluster.CurrentNodeId = nodeID
+			return NewDiskKV(clusterID, nodeID, s, p)
+		}, p.Rc); err != nil {
+			log.Error("start cluster: ", err)
+			panic(err)
+		}
+		p.RaftReady = true
+	}
+
+	p.doRaftClusterStat(s)
+}
+
+func (p *StartRun) Stop() {
+	if p != nil && p.Nh != nil {
+		p.StopNodeHost()
+	}
+}
+
+func (p *StartRun) Sync(keyHash uint32, data [][]byte) ([]byte, error) {
+	migrate := false
+
+	b, err := proto.Marshal(&update.ByteSlice{
+		IsMigrate: &migrate,
+		NodeId:    &p.NodeID,
+		Data:      data,
+		KeyHash:   &keyHash,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	if p.AsyncPropose {
+		_, err = p.Propose(b, p.RetryTimes)
+		return nil, err
+	} else {
+		res, err := p.SyncPropose(b)
+		if err != nil {
+			return nil, err
+		}
+
+		if bytes.Equal(res.Data, UpdateSelfNodeDoing) {
+			return nil, nil
+		} else {
+			return res.Data, nil
+		}
+	}
+}
+
 func GetClusterNodeOK(nCluster uint64) bool {
 	return order.G_NodeSates.OK(nCluster)
 }
 
-func Init() {
+func RaftInit(s *server.Server) {
 	logger.SetLoggerFactory(func(name string) logger.ILogger {
 		return DefaultLogger
 	})
-	addPluginStartInitRaft(raftInstance)
-	addPluginPreparePropose(raftInstance)
+
+	s.DoRaftSync = raftInstance.Sync
+	s.DoRaftStop = raftInstance.Stop
+}
+
+func RaftStart(s *server.Server) {
+	raftInstance.Start(s)
 }
 
 func ReraftInit(s *server.Server, port string) error {
@@ -271,7 +350,7 @@ func ReraftInit(s *server.Server, port string) error {
 
 	node, err := braft.NewNodeHost(raftInstance.Nhc)
 	if err != nil {
-		log.Error("new host: ", err)
+		log.Errorf("new node host fail err:%v", err)
 		return err
 	}
 	raftInstance.Nh = node
@@ -283,7 +362,7 @@ func ReraftInit(s *server.Server, port string) error {
 		config.GlobalConfig.Server.DegradeSingleNode = false
 		return NewDiskKV(clusterID, nodeID, s, raftInstance)
 	}, raftInstance.Rc); err != nil {
-		log.Error("start cluster: ", err)
+		log.Errorf("start cluster fail err:%v", err)
 		return err
 	}
 	raftInstance.RaftReady = true

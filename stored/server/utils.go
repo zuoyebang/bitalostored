@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package resp
+package server
 
 import (
 	"bufio"
@@ -55,7 +55,7 @@ func ParseSetArgs(args [][]byte) (e ExpireType, t int64, c SetCondition, err err
 		switch strings.ToUpper(unsafe2.String(args[i])) {
 		case "EX":
 			if i+1 >= len(args) {
-				err = ErrSyntax
+				err = errn.ErrSyntax
 				return
 			}
 
@@ -67,7 +67,7 @@ func ParseSetArgs(args [][]byte) (e ExpireType, t int64, c SetCondition, err err
 			i++
 		case "PX":
 			if i+1 >= len(args) {
-				err = ErrSyntax
+				err = errn.ErrSyntax
 				return
 			}
 
@@ -82,7 +82,7 @@ func ParseSetArgs(args [][]byte) (e ExpireType, t int64, c SetCondition, err err
 		case "XX":
 			c = XX
 		default:
-			err = ErrSyntax
+			err = errn.ErrSyntax
 			return
 		}
 		i++

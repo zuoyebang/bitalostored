@@ -12,9 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// ARM64 version of md5block.go
-// derived from crypto/md5/md5block_amd64.s
-
 #include "textflag.h"
 
 TEXT	·block(SB),NOSPLIT,$0-32

@@ -26,12 +26,8 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/zuoyebang/bitalostored/raft/config"
-	"github.com/zuoyebang/bitalostored/raft/logger"
-	"github.com/zuoyebang/bitalostored/raft/raftio"
-
 	"github.com/cockroachdb/errors"
-
+	"github.com/zuoyebang/bitalostored/raft/config"
 	"github.com/zuoyebang/bitalostored/raft/internal/fileutil"
 	"github.com/zuoyebang/bitalostored/raft/internal/logdb"
 	"github.com/zuoyebang/bitalostored/raft/internal/rsm"
@@ -39,6 +35,8 @@ import (
 	"github.com/zuoyebang/bitalostored/raft/internal/settings"
 	"github.com/zuoyebang/bitalostored/raft/internal/utils"
 	"github.com/zuoyebang/bitalostored/raft/internal/vfs"
+	"github.com/zuoyebang/bitalostored/raft/logger"
+	"github.com/zuoyebang/bitalostored/raft/raftio"
 	pb "github.com/zuoyebang/bitalostored/raft/raftpb"
 )
 

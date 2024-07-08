@@ -19,14 +19,12 @@ import (
 	"strconv"
 
 	"github.com/zuoyebang/bitalostored/stored/internal/errn"
-	"github.com/zuoyebang/bitalostored/stored/internal/resp"
-
 	"github.com/zuoyebang/bitalostored/stored/internal/log"
 )
 
 func migrateSlots(c *Client) error {
 	if len(c.Args) < 3 {
-		return resp.CmdParamsErr("migrateslots")
+		return errn.CmdParamsErr("migrateslots")
 	}
 	slot, e := strconv.ParseUint(string(c.Args[2]), 10, 32)
 	if e != nil {
@@ -34,12 +32,12 @@ func migrateSlots(c *Client) error {
 	}
 
 	host := fmt.Sprintf("%s:%s", string(c.Args[0]), string(c.Args[1]))
-	if _, e := c.DB.MigrateStart(c.server.address, host, uint32(slot), c.server.IsMaster, c.server.MigrateDelToSlave); e != nil {
+	if _, e := c.DB.MigrateStart(c.server.laddr, host, uint32(slot), c.server.IsMaster, c.server.MigrateDelToSlave); e != nil {
 		log.Warn("migrate error tohost: ", host, " slots: ", slot, " error: ", e)
 		return e
 	}
 
-	c.RespWriter.WriteStatus("OK")
+	c.Writer.WriteStatus("OK")
 	return nil
 }
 
@@ -53,16 +51,16 @@ func migrateStatus(c *Client) error {
 	}
 
 	if c.DB.Migrate != nil {
-		c.RespWriter.WriteStatus(c.DB.Migrate.Info())
+		c.Writer.WriteStatus(c.DB.Migrate.Info())
 	} else {
-		c.RespWriter.WriteStatus("{}")
+		c.Writer.WriteStatus("{}")
 	}
 	return nil
 }
 
 func migrateEnd(c *Client) error {
 	if len(c.Args) < 1 {
-		return resp.CmdParamsErr("migrateend")
+		return errn.CmdParamsErr("migrateend")
 	}
 	slot, e := strconv.ParseUint(string(c.Args[0]), 10, 32)
 	if e != nil {
@@ -73,7 +71,7 @@ func migrateEnd(c *Client) error {
 		return e
 	}
 
-	c.RespWriter.WriteStatus("OK")
+	c.Writer.WriteStatus("OK")
 	return nil
 }
 

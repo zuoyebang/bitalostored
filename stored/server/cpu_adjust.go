@@ -16,53 +16,79 @@ package server
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"time"
 
+	"github.com/zuoyebang/bitalostored/stored/internal/config"
 	"github.com/zuoyebang/bitalostored/stored/internal/log"
+	"github.com/zuoyebang/bitalostored/stored/internal/trycatch"
 )
 
-const cpuProcMax = 32
-
 type cpuAdjust struct {
-	path       string
 	periodPath string
 	quotaPath  string
-	lastCpuNum int
+	lastCores  int
+	optCores   int
 }
 
-func NewCpuAdjust(path string, lastCpuNum int) *cpuAdjust {
-	c := &cpuAdjust{}
+func RunCpuAdjuster(s *Server) {
+	var addr string
+	if len(s.laddr) > 1 {
+		addr = s.laddr[1:]
+	}
+	path := fmt.Sprintf("/sys/fs/cgroup/cpu/stored/server_%s_%s", config.GlobalConfig.Server.ProductName, addr)
+	log.Infof("cpu cgroup base path %s", path)
 
-	log.Infof("cpu cgroup base path: %s", path)
-	c.periodPath = filepath.Join(path, "cpu.cfs_period_us")
-	c.quotaPath = filepath.Join(path, "cpu.cfs_quota_us")
-	c.lastCpuNum = lastCpuNum
+	c := &cpuAdjust{
+		periodPath: filepath.Join(path, "cpu.cfs_period_us"),
+		quotaPath:  filepath.Join(path, "cpu.cfs_quota_us"),
+	}
 
-	return c
-}
+	if config.GlobalConfig.Server.Maxprocs > 1 {
+		c.optCores = config.GlobalConfig.Server.Maxprocs / 2
+	}
 
-func (c *cpuAdjust) Run(s *Server) {
-	var cpuNum int
+	c.setGoMaxProcs()
+
 	go func() {
 		for {
-			cpuNum = c.getCpuNum()
-			if cpuNum > cpuProcMax {
-				log.Warnf("cpu procs exceed limit. num: %d", cpuNum)
-				cpuNum = cpuProcMax
+			if s.IsClosed() {
+				return
 			}
-			if cpuNum != c.lastCpuNum && cpuNum > 0 {
-				runtime.GOMAXPROCS(cpuNum)
-				log.Infof("cpu procs change. %d => %d", c.lastCpuNum, cpuNum)
-				c.lastCpuNum = cpuNum
-			}
-			s.Info.RuntimeStats.NumProcs = cpuNum
+
+			c.setGoMaxProcs()
+			s.Info.RuntimeStats.NumProcs = c.lastCores * 2
 			time.Sleep(60 * time.Second)
 		}
 	}()
+}
+
+func (c *cpuAdjust) setGoMaxProcs() {
+	defer func() {
+		trycatch.Panic("cpuAdjust", recover())
+	}()
+
+	cores := c.getCpuNum()
+	if cores == 0 && c.optCores > 0 {
+		cores = c.optCores
+	}
+	if cores < config.MinCores {
+		log.Warnf("cpu procs less than(%d). num: %d", config.MinCores, cores)
+		cores = config.MinCores
+	}
+	if cores > config.MaxCores {
+		log.Warnf("cpu procs exceed limit(%d). num: %d", config.MaxCores, cores)
+		cores = config.MaxCores
+	}
+	if cores != c.lastCores && cores > 0 {
+		runtime.GOMAXPROCS(cores * 2)
+		log.Infof("cpu procs change: %d => %d, GOMAXPROCS: %d => %d", c.lastCores, cores, c.lastCores*2, cores*2)
+		c.lastCores = cores
+	}
 }
 
 func (c *cpuAdjust) getCpuNum() int {

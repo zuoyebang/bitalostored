@@ -1,3 +1,17 @@
+// Copyright 2019-2024 Xu Ruibo (hustxurb@163.com) and Contributors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package md5hash
 
 import (
@@ -6,10 +20,10 @@ import (
 	"hash"
 )
 
-// Size The size of an MD5 checksum in bytes.
+// The size of an MD5 checksum in bytes.
 const Size = 16
 
-// BlockSize The blocksize of MD5 in bytes.
+// The blocksize of MD5 in bytes.
 const BlockSize = 64
 
 const (
@@ -184,10 +198,12 @@ func MD5Hash(data []byte) (h []byte, hi, lo uint64) {
 }
 
 //go:inline
-func MD5Sum(p []byte) (h []byte, hi, lo uint64) {
-	var d = digest{s: [4]uint32{init0, init1, init2, init3}}
+func MD5Sum(p []byte, h []byte) (hi, lo uint64) {
+	var d = digest{
+		s:   [4]uint32{init0, init1, init2, init3},
+		len: uint64(len(p)),
+	}
 	// Write
-	d.len += uint64(len(p))
 	if d.nx > 0 {
 		n := copy(d.x[d.nx:], p)
 		d.nx += n
@@ -251,7 +267,6 @@ func MD5Sum(p []byte) (h []byte, hi, lo uint64) {
 		panic("d.nx != 0")
 	}
 
-	h = make([]byte, Size)
 	binary.LittleEndian.PutUint32(h[0:], d.s[0])
 	binary.LittleEndian.PutUint32(h[4:], d.s[1])
 	binary.LittleEndian.PutUint32(h[8:], d.s[2])

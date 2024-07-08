@@ -16,24 +16,24 @@ package server
 
 import (
 	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/btools"
+	"github.com/zuoyebang/bitalostored/stored/internal/errn"
 	"github.com/zuoyebang/bitalostored/stored/internal/resp"
 	"github.com/zuoyebang/bitalostored/stored/internal/utils"
 )
 
 func init() {
 	AddCommand(map[string]*Cmd{
-		resp.HDEL:    {Sync: resp.IsWriteCmd(resp.HDEL), Handler: hdelCommand},
-		resp.HINCRBY: {Sync: resp.IsWriteCmd(resp.HINCRBY), Handler: hincrbyCommand},
-		resp.HMSET:   {Sync: resp.IsWriteCmd(resp.HMSET), Handler: hmsetCommand},
-		resp.HSET:    {Sync: resp.IsWriteCmd(resp.HSET), Handler: hsetCommand},
-		resp.HVALS:   {Sync: resp.IsWriteCmd(resp.HVALS), Handler: hvalsCommand},
-		resp.HEXISTS: {Sync: resp.IsWriteCmd(resp.HEXISTS), Handler: hexistsCommand},
-		resp.HGET:    {Sync: resp.IsWriteCmd(resp.HGET), Handler: hgetCommand},
-		resp.HGETALL: {Sync: resp.IsWriteCmd(resp.HGETALL), Handler: hgetallCommand},
-		resp.HKEYS:   {Sync: resp.IsWriteCmd(resp.HKEYS), Handler: hkeysCommand},
-		resp.HLEN:    {Sync: resp.IsWriteCmd(resp.HLEN), Handler: hlenCommand},
-		resp.HMGET:   {Sync: resp.IsWriteCmd(resp.HMGET), Handler: hmgetCommand},
-
+		resp.HDEL:       {Sync: resp.IsWriteCmd(resp.HDEL), Handler: hdelCommand},
+		resp.HINCRBY:    {Sync: resp.IsWriteCmd(resp.HINCRBY), Handler: hincrbyCommand},
+		resp.HMSET:      {Sync: resp.IsWriteCmd(resp.HMSET), Handler: hmsetCommand},
+		resp.HSET:       {Sync: resp.IsWriteCmd(resp.HSET), Handler: hsetCommand},
+		resp.HVALS:      {Sync: resp.IsWriteCmd(resp.HVALS), Handler: hvalsCommand},
+		resp.HEXISTS:    {Sync: resp.IsWriteCmd(resp.HEXISTS), Handler: hexistsCommand},
+		resp.HGET:       {Sync: resp.IsWriteCmd(resp.HGET), Handler: hgetCommand},
+		resp.HGETALL:    {Sync: resp.IsWriteCmd(resp.HGETALL), Handler: hgetallCommand},
+		resp.HKEYS:      {Sync: resp.IsWriteCmd(resp.HKEYS), Handler: hkeysCommand},
+		resp.HLEN:       {Sync: resp.IsWriteCmd(resp.HLEN), Handler: hlenCommand},
+		resp.HMGET:      {Sync: resp.IsWriteCmd(resp.HMGET), Handler: hmgetCommand},
 		resp.HCLEAR:     {Sync: resp.IsWriteCmd(resp.HCLEAR), Handler: hclearCommand, KeySkip: 1},
 		resp.HEXPIRE:    {Sync: resp.IsWriteCmd(resp.HEXPIRE), Handler: hexpireCommand},
 		resp.HEXPIREAT:  {Sync: resp.IsWriteCmd(resp.HEXPIREAT), Handler: hexpireAtCommand},
@@ -46,13 +46,13 @@ func init() {
 func hsetCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 3 {
-		return resp.CmdParamsErr(resp.HSET)
+		return errn.CmdParamsErr(resp.HSET)
 	}
 
 	if n, err := c.DB.HSet(args[0], c.KeyHash, args[1], args[2]); err != nil {
 		return err
 	} else {
-		c.RespWriter.WriteInteger(n)
+		c.Writer.WriteInteger(n)
 	}
 
 	return nil
@@ -61,7 +61,7 @@ func hsetCommand(c *Client) error {
 func hgetCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 2 {
-		return resp.CmdParamsErr(resp.HGET)
+		return errn.CmdParamsErr(resp.HGET)
 	}
 
 	v, vCloser, err := c.DB.HGet(args[0], c.KeyHash, args[1])
@@ -74,14 +74,14 @@ func hgetCommand(c *Client) error {
 		return err
 	}
 
-	c.RespWriter.WriteBulk(v)
+	c.Writer.WriteBulk(v)
 	return nil
 }
 
 func hexistsCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 2 {
-		return resp.CmdParamsErr(resp.HEXISTS)
+		return errn.CmdParamsErr(resp.HEXISTS)
 	}
 
 	var n int64 = 1
@@ -99,7 +99,7 @@ func hexistsCommand(c *Client) error {
 			n = 0
 		}
 
-		c.RespWriter.WriteInteger(n)
+		c.Writer.WriteInteger(n)
 	}
 	return nil
 }
@@ -107,13 +107,13 @@ func hexistsCommand(c *Client) error {
 func hdelCommand(c *Client) error {
 	args := c.Args
 	if len(args) < 2 {
-		return resp.CmdParamsErr(resp.HDEL)
+		return errn.CmdParamsErr(resp.HDEL)
 	}
 
 	if n, err := c.DB.HDel(args[0], c.KeyHash, args[1:]...); err != nil {
 		return err
 	} else {
-		c.RespWriter.WriteInteger(n)
+		c.Writer.WriteInteger(n)
 	}
 
 	return nil
@@ -122,13 +122,13 @@ func hdelCommand(c *Client) error {
 func hlenCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 1 {
-		return resp.CmdParamsErr(resp.HLEN)
+		return errn.CmdParamsErr(resp.HLEN)
 	}
 
 	if n, err := c.DB.HLen(args[0], c.KeyHash); err != nil {
 		return err
 	} else {
-		c.RespWriter.WriteInteger(n)
+		c.Writer.WriteInteger(n)
 	}
 
 	return nil
@@ -137,13 +137,13 @@ func hlenCommand(c *Client) error {
 func hincrbyCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 3 {
-		return resp.CmdParamsErr(resp.HINCRBY)
+		return errn.CmdParamsErr(resp.HINCRBY)
 	}
 
 	delta, err := utils.ByteToInt64(args[2])
 
 	if err != nil {
-		return resp.ErrValue
+		return errn.ErrValue
 	}
 
 	var n int64
@@ -151,7 +151,7 @@ func hincrbyCommand(c *Client) error {
 	if n, err = c.DB.HIncrBy(args[0], c.KeyHash, args[1], delta); err != nil {
 		return err
 	} else {
-		c.RespWriter.WriteInteger(n)
+		c.Writer.WriteInteger(n)
 	}
 	return nil
 }
@@ -159,11 +159,11 @@ func hincrbyCommand(c *Client) error {
 func hmsetCommand(c *Client) error {
 	args := c.Args
 	if len(args) < 3 {
-		return resp.CmdParamsErr(resp.HMSET)
+		return errn.CmdParamsErr(resp.HMSET)
 	}
 
 	if len(args[1:])%2 != 0 {
-		return resp.CmdParamsErr(resp.HMSET)
+		return errn.CmdParamsErr(resp.HMSET)
 	}
 
 	key := args[0]
@@ -179,7 +179,7 @@ func hmsetCommand(c *Client) error {
 	if err := c.DB.HMset(key, c.KeyHash, kvs...); err != nil {
 		return err
 	} else {
-		c.RespWriter.WriteStatus(resp.ReplyOK)
+		c.Writer.WriteStatus(resp.ReplyOK)
 	}
 
 	return nil
@@ -188,7 +188,7 @@ func hmsetCommand(c *Client) error {
 func hmgetCommand(c *Client) error {
 	args := c.Args
 	if len(args) < 2 {
-		return resp.CmdParamsErr(resp.HMGET)
+		return errn.CmdParamsErr(resp.HMGET)
 	}
 
 	v, vClosers, err := c.DB.HMget(args[0], c.KeyHash, args[1:]...)
@@ -203,14 +203,14 @@ func hmgetCommand(c *Client) error {
 		return err
 	}
 
-	c.RespWriter.WriteSliceArray(v)
+	c.Writer.WriteSliceArray(v)
 	return nil
 }
 
 func hgetallCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 1 {
-		return resp.CmdParamsErr(resp.HGETALL)
+		return errn.CmdParamsErr(resp.HGETALL)
 	}
 
 	v, closers, err := c.DB.HGetAll(args[0], c.KeyHash)
@@ -225,14 +225,14 @@ func hgetallCommand(c *Client) error {
 		return err
 	}
 
-	c.RespWriter.WriteFVPairArray(v)
+	c.Writer.WriteFVPairArray(v)
 	return nil
 }
 
 func hkeysCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 1 {
-		return resp.CmdParamsErr(resp.HKEYS)
+		return errn.CmdParamsErr(resp.HKEYS)
 	}
 
 	v, closers, err := c.DB.HKeys(args[0], c.KeyHash)
@@ -247,14 +247,14 @@ func hkeysCommand(c *Client) error {
 		return err
 	}
 
-	c.RespWriter.WriteSliceArray(v)
+	c.Writer.WriteSliceArray(v)
 	return nil
 }
 
 func hvalsCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 1 {
-		return resp.CmdParamsErr(resp.HVALS)
+		return errn.CmdParamsErr(resp.HVALS)
 	}
 
 	v, closers, err := c.DB.HValues(args[0], c.KeyHash)
@@ -269,20 +269,20 @@ func hvalsCommand(c *Client) error {
 		return err
 	}
 
-	c.RespWriter.WriteSliceArray(v)
+	c.Writer.WriteSliceArray(v)
 	return nil
 }
 
 func hclearCommand(c *Client) error {
 	args := c.Args
 	if len(args) < 1 {
-		return resp.CmdParamsErr(resp.HCLEAR)
+		return errn.CmdParamsErr(resp.HCLEAR)
 	}
 
 	if n, err := c.DB.HClear(c.KeyHash, args...); err != nil {
 		return err
 	} else {
-		c.RespWriter.WriteInteger(n)
+		c.Writer.WriteInteger(n)
 	}
 
 	return nil
@@ -291,12 +291,12 @@ func hclearCommand(c *Client) error {
 func hexpireCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 2 {
-		return resp.CmdParamsErr(resp.HEXPIRE)
+		return errn.CmdParamsErr(resp.HEXPIRE)
 	}
 
 	duration, err := utils.ByteToInt64(args[1])
 	if err != nil {
-		return resp.ErrValue
+		return errn.ErrValue
 	}
 
 	var n int64
@@ -304,19 +304,19 @@ func hexpireCommand(c *Client) error {
 	if err != nil {
 		return err
 	}
-	c.RespWriter.WriteInteger(n)
+	c.Writer.WriteInteger(n)
 	return nil
 }
 
 func hexpireAtCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 2 {
-		return resp.CmdParamsErr(resp.HEXPIREAT)
+		return errn.CmdParamsErr(resp.HEXPIREAT)
 	}
 
 	when, err := utils.ByteToInt64(args[1])
 	if err != nil {
-		return resp.ErrValue
+		return errn.ErrValue
 	}
 
 	var n int64
@@ -324,20 +324,20 @@ func hexpireAtCommand(c *Client) error {
 	if err != nil {
 		return err
 	}
-	c.RespWriter.WriteInteger(n)
+	c.Writer.WriteInteger(n)
 	return nil
 }
 
 func httlCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 1 {
-		return resp.CmdParamsErr(resp.HTTL)
+		return errn.CmdParamsErr(resp.HTTL)
 	}
 
 	if v, err := c.DB.TTl(args[0], c.KeyHash); err != nil {
 		return err
 	} else {
-		c.RespWriter.WriteInteger(v)
+		c.Writer.WriteInteger(v)
 	}
 
 	return nil
@@ -346,13 +346,13 @@ func httlCommand(c *Client) error {
 func hpersistCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 1 {
-		return resp.CmdParamsErr(resp.HPERSIST)
+		return errn.CmdParamsErr(resp.HPERSIST)
 	}
 
 	if n, err := c.DB.Persist(args[0], c.KeyHash); err != nil {
 		return err
 	} else {
-		c.RespWriter.WriteInteger(n)
+		c.Writer.WriteInteger(n)
 	}
 
 	return nil
@@ -361,13 +361,13 @@ func hpersistCommand(c *Client) error {
 func hkeyexistsCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 1 {
-		return resp.CmdParamsErr(resp.HKEYEXISTS)
+		return errn.CmdParamsErr(resp.HKEYEXISTS)
 	}
 
 	if n, err := c.DB.Exists(args[0], c.KeyHash); err != nil {
 		return err
 	} else {
-		c.RespWriter.WriteInteger(n)
+		c.Writer.WriteInteger(n)
 	}
 	return nil
 }

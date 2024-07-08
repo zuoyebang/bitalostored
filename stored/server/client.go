@@ -15,9 +15,7 @@
 package server
 
 import (
-	"errors"
 	"fmt"
-	"net"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -50,22 +48,25 @@ const (
 var raftClientPool sync.Pool
 
 type Client struct {
-	*resp.Session
-
+	Cmd            string
+	Args           [][]byte
+	Keys           []byte
+	Data           [][]byte
+	ParseMarks     []int
+	Reader         *resp.Reader
+	Writer         *resp.Writer
 	DB             *engine.Bitalos
 	QueryStartTime time.Time
 	KeyHash        uint32
 	IsMaster       func() bool
 
-	server *Server
-	closed atomic.Bool
-	conn   net.Conn
-
-	txState         int
-	txCommandQueued bool
-	watchKeys       map[string]int64
-	commandQueue    [][][]byte
-
+	server            *Server
+	remoteAddr        string
+	closed            atomic.Bool
+	txState           int
+	txCommandQueued   bool
+	watchKeys         map[string]int64
+	commandQueue      [][][]byte
 	hasPrepareLock    atomic.Bool
 	prepareState      atomic.Int32
 	prepareUnlockSig  chan struct{}
@@ -76,9 +77,7 @@ type Client struct {
 func init() {
 	raftClientPool = sync.Pool{
 		New: func() interface{} {
-			return &Client{
-				Session: resp.NewSession(nil, 0),
-			}
+			return newRaftClient()
 		},
 	}
 	for i := 0; i < 128; i++ {
@@ -105,84 +104,49 @@ func GetVmFromPool(s *Server) *Client {
 }
 
 func PutRaftClientToPool(c *Client) {
-	c.RespWriter.FlushBytesEmpty()
+	c.Writer.Reset()
 	raftClientPool.Put(c)
 }
 
-func NewClientRESP(conn net.Conn, s *Server) *Client {
-	c := new(Client)
-	s.connWait.Add(1)
+func newRaftClient() *Client {
+	return &Client{
+		Writer: resp.NewWriter(),
+	}
+}
 
-	keepAlive := config.GlobalConfig.Server.Keepalive.Duration()
+func newConnClient(s *Server, remoteAddr string) *Client {
+	c := &Client{
+		DB:         s.GetDB(),
+		IsMaster:   s.IsMaster,
+		ParseMarks: make([]int, 0, 1<<4),
+		Reader:     resp.NewReader(),
+		Writer:     resp.NewWriter(),
+		remoteAddr: remoteAddr,
+		server:     s,
+	}
 
-	c.conn = conn
-	c.Session = resp.NewSession(conn, keepAlive)
-	c.DB = s.GetDB()
-	c.IsMaster = s.IsMaster
-	c.KeyHash = 0
-	c.server = s
+	s.Info.Client.ClientTotal.Add(1)
+	s.Info.Client.ClientAlive.Add(1)
+
 	if s.openDistributedTx {
 		c.prepareUnlockSig = make(chan struct{}, 1)
 		c.queueCommandDone = make(chan struct{}, 1)
 		c.prepareUnlockDone = make(chan struct{}, 1)
 	}
+
 	return c
 }
 
 func (c *Client) Close() {
-	if c.closed.Load() {
+	if !c.closed.CompareAndSwap(false, true) {
 		return
 	}
-
-	c.closed.Store(true)
 
 	if c.server.openDistributedTx {
 		c.discard()
 	}
-	c.Session.Close()
-}
 
-func (c *Client) run() {
-	c.server.addRespClient(c)
-
-	defer func() {
-		c.Close()
-
-		c.server.delRespClient(c)
-		c.server.connWait.Done()
-		runPluginDisconn(c.server, c, recover())
-	}()
-
-	runPluginConnect(c.server, c)
-
-	isPlugin := config.GlobalConfig.Plugin.OpenRaft
-
-	for {
-		c.Session.SetReadDeadline()
-
-		c.Cmd = ""
-		c.Args = nil
-		reqData, err := c.RespReader.ParseRequest()
-		if err != nil {
-			return
-		}
-
-		if c.server.Info.Stats.DbSyncStatus == DB_SYNC_RECVING_FAIL || c.server.Info.Stats.DbSyncStatus == DB_SYNC_RECVING {
-			c.RespWriter.WriteError(errors.New("ERR db syncing/fail, refuse request"))
-			n, err := c.RespWriter.FlushToWriterIO(c.conn)
-			if err != nil {
-				log.Errorf("FlushToWriterIO length:%d error:%v", n, err)
-			}
-			log.Info("db syncing/fail, refuse request")
-		} else {
-			if err = c.HandleRequest(isPlugin, reqData, false); err != nil {
-				log.Errorf("handleRequest error:%v", err)
-			}
-			if n, err := c.RespWriter.FlushToWriterIO(c.conn); err != nil {
-				log.Errorf("FlushToWriterIO length:%d error:%v", n, err)
-			}
-		}
-	}
+	c.server.Info.Client.ClientAlive.Add(-1)
 }
 
 func (c *Client) ResetQueryStartTime() {
@@ -192,11 +156,13 @@ func (c *Client) ResetQueryStartTime() {
 func (c *Client) FormatData(reqData [][]byte) {
 	c.ResetQueryStartTime()
 	c.Data = reqData
-	if c.Cmd = ""; len(reqData) == 0 {
+	c.Cmd = ""
+	if len(reqData) == 0 {
 		c.Args = reqData[0:0]
 	} else {
-		c.Cmd = unsafe2.String(resp.LowerSlice(reqData[0]))
-		if c.Args = reqData[1:]; len(c.Args) > 0 {
+		c.Cmd = unsafe2.String(LowerSlice(reqData[0]))
+		c.Args = reqData[1:]
+		if len(c.Args) > 0 {
 			c.Keys = c.Args[0]
 		} else {
 			c.Keys = c.Keys[0:0]
@@ -204,17 +170,22 @@ func (c *Client) FormatData(reqData [][]byte) {
 	}
 }
 
-func (c *Client) HandleRequest(plugin bool, reqData [][]byte, isHashTag bool) (err error) {
+func (c *Client) HandleRequest(reqData [][]byte, isHashTag bool) (err error) {
 	c.FormatData(reqData)
+
 	if len(c.Cmd) == 0 {
-		err = resp.CmdEmptyErr(c.Cmd)
-		c.RespWriter.WriteError(err)
+		err = errn.CmdEmptyErr(c.Cmd)
+		c.Writer.WriteError(err)
 		return err
 	}
 
 	if c.server.openDistributedTx && c.checkCommandEnterQueue() {
-		c.commandQueue = append(c.commandQueue, reqData)
-		c.RespWriter.WriteStatus(resp.ReplyQUEUED)
+		txReqData := make([][]byte, len(reqData))
+		for i := range reqData {
+			txReqData[i] = append([]byte{}, reqData[i]...)
+		}
+		c.commandQueue = append(c.commandQueue, txReqData)
+		c.Writer.WriteStatus(resp.ReplyQUEUED)
 		return nil
 	}
 
@@ -231,20 +202,20 @@ func (c *Client) HandleRequest(plugin bool, reqData [][]byte, isHashTag bool) (e
 
 	if c.Cmd == "script" {
 		if len(c.Args) < 1 {
-			err = resp.CmdParamsErr(c.Cmd)
-			c.RespWriter.WriteError(err)
+			err = errn.CmdParamsErr(c.Cmd)
+			c.Writer.WriteError(err)
 			return err
 		}
-		c.Cmd = c.Cmd + unsafe2.String(resp.LowerSlice(c.Args[0]))
+		c.Cmd = c.Cmd + unsafe2.String(LowerSlice(c.Args[0]))
 	}
 
 	if c.Cmd == "QUIT" {
-		c.RespWriter.WriteStatus(resp.ReplyOK)
+		c.Writer.WriteStatus(resp.ReplyOK)
 		return errn.ErrClientQuit
 	}
 
-	if !c.checkCommand(c.Cmd) {
-		c.RespWriter.WriteBulk(nil)
+	if !c.checkCommand() {
+		c.Writer.WriteBulk(nil)
 		return nil
 	}
 
@@ -252,28 +223,27 @@ func (c *Client) HandleRequest(plugin bool, reqData [][]byte, isHashTag bool) (e
 	var execCmd *Cmd
 
 	if execCmd, ok = commands[c.Cmd]; !ok {
-		err = resp.CmdEmptyErr(c.Cmd)
-		c.RespWriter.WriteError(err)
+		err = errn.CmdEmptyErr(c.Cmd)
+		c.Writer.WriteError(err)
 		return err
 	}
 	if c.server.openDistributedTx && c.txState&TxStateMulti != 0 && execCmd.NotAllowedInTx {
 		err = fmt.Errorf("ERR %s inside MULTI is not allowed", c.Cmd)
-		c.RespWriter.WriteError(err)
+		c.Writer.WriteError(err)
 		return err
 	}
 	if c.server.IsWitness {
 		err = c.ApplyDB(0)
 		if err != nil {
-			c.RespWriter.WriteError(err)
+			c.Writer.WriteError(err)
 		}
 		return err
 	}
 
-	if plugin && c.server.slowQuery != nil && c.server.slowQuery.CheckSlowShield(c.Cmd, c.Keys) {
-		c.RespWriter.WriteError(resp.ErrSlowShield)
-		return resp.ErrSlowShield
+	if c.server.isOpenRaft && c.server.slowQuery != nil && c.server.slowQuery.CheckSlowShield(c.Cmd, c.Keys) {
+		c.Writer.WriteError(errn.ErrSlowShield)
+		return errn.ErrSlowShield
 	}
-	defer runPluginHandled(c, execCmd, c.Cmd)
 
 	if !isHashTag {
 		c.KeyHash = hash.Fnv32(c.Keys)
@@ -293,19 +263,34 @@ func (c *Client) HandleRequest(plugin bool, reqData [][]byte, isHashTag bool) (e
 		if c.server.openDistributedTx {
 			updateKeyModifyTs = c.markWatchKeyModified(execCmd)
 		}
-		err = c.DB.Redirect(c.Cmd, c.Keys, reqData, c.RespWriter)
+		err = c.DB.Redirect(c.Cmd, c.Keys, reqData, c.Writer)
 		if updateKeyModifyTs != nil {
 			updateKeyModifyTs()
 		}
-	} else if plugin && execCmd.Sync && !config.GlobalConfig.CheckIsDegradeSingleNode() {
-		err = runPluginRaft(c, execCmd, c.Cmd)
+	} else if c.server.isOpenRaft && execCmd.Sync && !config.GlobalConfig.CheckIsDegradeSingleNode() {
+		err = c.RaftSync()
 	} else {
 		err = c.ApplyDB(0)
 	}
 	if err != nil {
-		c.RespWriter.WriteError(err)
+		c.Writer.WriteError(err)
 	}
 	return err
+}
+
+func (c *Client) RaftSync() error {
+	start := time.Now()
+	resData, err := c.server.DoRaftSync(c.KeyHash, c.Data)
+	if err != nil {
+		return err
+	}
+
+	if resData == nil {
+		return c.ApplyDB(time.Since(start).Nanoseconds())
+	} else {
+		c.Writer.WriteBytes(resData)
+		return nil
+	}
 }
 
 func (c *Client) ApplyDB(raftSyncCostNs int64) error {
@@ -314,7 +299,7 @@ func (c *Client) ApplyDB(raftSyncCostNs int64) error {
 	var execCmd *Cmd
 
 	if execCmd, ok = commands[c.Cmd]; !ok {
-		err = resp.CmdEmptyErr(c.Cmd)
+		err = errn.CmdEmptyErr(c.Cmd)
 		return err
 	}
 
@@ -342,11 +327,7 @@ func (c *Client) ApplyDB(raftSyncCostNs int64) error {
 		}
 		costUs := costNs / 1000
 		raftSyncCostUs := raftSyncCostNs / 1000
-		if c.conn == nil {
-			log.SlowLog("", costUs, raftSyncCostUs, c.Data, err)
-		} else {
-			log.SlowLog(c.conn.RemoteAddr().String(), costUs, raftSyncCostUs, c.Data, err)
-		}
+		log.SlowLog(c.remoteAddr, costUs, raftSyncCostUs, c.Data, err)
 	}
 	return err
 }
@@ -355,7 +336,7 @@ func (c *Client) GetInfo() *SInfo {
 	return c.server.Info
 }
 
-func (c *Client) checkCommand(command string) bool {
+func (c *Client) checkCommand() bool {
 	if !c.server.IsWitness {
 		return true
 	}
@@ -367,7 +348,7 @@ func (c *Client) checkCommand(command string) bool {
 		return true
 	case resp.ECHO:
 		return true
-	case "shutdown":
+	case resp.SHUTDOWN:
 		return true
 	default:
 		return false
@@ -460,7 +441,7 @@ func (c *Client) resetTx() {
 }
 
 func (c *Client) addWatchKey(txLock *TxLocker, key []byte, ts time.Time) {
-	keyStr := unsafe2.String(key)
+	keyStr := string(key)
 	txLock.addWatchKey(c, keyStr, true)
 
 	if len(c.watchKeys) == 0 {

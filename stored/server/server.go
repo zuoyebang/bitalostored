@@ -15,197 +15,91 @@
 package server
 
 import (
+	"context"
 	"fmt"
-	"net"
 	"os"
 	"sync"
 	"sync/atomic"
 
 	"github.com/cockroachdb/errors"
+	"github.com/panjf2000/gnet/v2"
 	"github.com/zuoyebang/bitalostored/stored/engine"
+	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/bitsdb"
 	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/btools"
 	"github.com/zuoyebang/bitalostored/stored/internal/config"
+	"github.com/zuoyebang/bitalostored/stored/internal/errn"
 	"github.com/zuoyebang/bitalostored/stored/internal/log"
+	"github.com/zuoyebang/bitalostored/stored/internal/resp"
 	"github.com/zuoyebang/bitalostored/stored/internal/slowshield"
+	"github.com/zuoyebang/bitalostored/stored/internal/trycatch"
 	"github.com/zuoyebang/bitalostored/stored/internal/utils"
-	"golang.org/x/net/netutil"
 )
 
-const (
-	StatusPrepare = iota
-	StatusStart
-	StatusRunning
-	StatusClose
-	StatusExited
-)
+const errorReadEOF = "read: EOF"
 
 type Server struct {
-	closed         atomic.Bool
-	status         int
-	quit           chan struct{}
-	isDebug        bool
-	address        string
-	listener       net.Listener
-	dbSyncListener net.Listener
-	connWait       sync.WaitGroup
-	rcm            sync.RWMutex
-	rcs            map[*Client]struct{}
-	db             *engine.Bitalos
-	slowQuery      *slowshield.SlowShield
-	recoverLock    sync.Mutex
-	syncDataDoing  atomic.Int32
-	dbSyncing      atomic.Int32
-	luaMu          []*sync.Mutex
-	expireClosedCh chan struct{}
-	expireWg       sync.WaitGroup
-
+	*gnet.BuiltinEventEngine
+	eng               gnet.Engine
 	Info              *SInfo
 	IsMaster          func() bool
 	MigrateDelToSlave func(keyHash uint32, data [][]byte) error
 	IsWitness         bool
-
+	DoRaftSync        func(keyHash uint32, data [][]byte) ([]byte, error)
+	DoRaftStop        func()
+	laddr             string
+	db                *engine.Bitalos
+	closed            atomic.Bool
+	quit              chan struct{}
+	isDebug           bool
+	isOpenRaft        bool
+	slowQuery         *slowshield.SlowShield
+	recoverLock       sync.Mutex
+	syncDataDoing     atomic.Int32
+	dbSyncing         atomic.Int32
+	luaMu             []*sync.Mutex
+	expireClosedCh    chan struct{}
+	expireWg          sync.WaitGroup
 	openDistributedTx bool
 	txLocks           *TxShardLocker
 	txParallelCounter atomic.Int32
 	txPrepareWg       sync.WaitGroup
-}
-
-func (s *Server) GetDB() *engine.Bitalos {
-	if s.IsWitness {
-		return nil
-	}
-	return s.db
-}
-
-func (s *Server) FlushCallback(compactIndex uint64) {
-	db := s.GetDB()
-	if db == nil {
-		return
-	}
-	if !db.IsOpenRaftRestore() {
-		return
-	}
-	db.Flush(btools.FlushTypeRemoveLog, compactIndex)
-}
-
-func (s *Server) addRespClient(c *Client) {
-	s.rcm.Lock()
-	s.Info.Client.ClientTotal.Add(1)
-	s.Info.Client.ClientAlive.Add(1)
-	s.rcs[c] = struct{}{}
-	s.rcm.Unlock()
-}
-
-func (s *Server) delRespClient(c *Client) {
-	s.rcm.Lock()
-	s.Info.Client.ClientAlive.Add(-1)
-	delete(s.rcs, c)
-	s.rcm.Unlock()
-}
-
-func (s *Server) closeAllRespClients() {
-	s.rcm.Lock()
-	for c := range s.rcs {
-		c.Close()
-	}
-	s.rcm.Unlock()
-	s.txPrepareWg.Wait()
-}
-
-func (s *Server) Run() {
-	l, err := net.Listen("tcp", s.address)
-	if err != nil {
-		log.Errorf("net listen fail err:%s", err.Error())
-		return
-	}
-
-	s.Info.Server.ConfigFile = config.GlobalConfig.Server.ConfigFile
-	s.Info.Server.StartTime = utils.GetCurrentTimeString()
-	s.Info.Server.ServerAddress = s.address
-	s.Info.Server.GitVersion = utils.Version
-	s.Info.Server.Compile = utils.Compile
-	s.Info.Server.MaxClient = config.GlobalConfig.Server.Maxclient
-	s.Info.Server.MaxProcs = config.GlobalConfig.Server.Maxprocs
-	s.Info.Server.ProcessId = os.Getpid()
-	s.Info.Server.UpdateCache()
-
-	productName := config.GlobalConfig.Server.ProductName
-	var addr string
-	if len(config.GlobalConfig.Server.Address) > 1 {
-		addr = config.GlobalConfig.Server.Address[1:]
-	}
-	cpuCgroupPath := fmt.Sprintf("/sys/fs/cgroup/cpu/stored/server_%s_%s", productName, addr)
-	cpuAdjuster := NewCpuAdjust(cpuCgroupPath, config.GlobalConfig.Server.Maxprocs)
-	cpuAdjuster.Run(s)
-
-	maxClientNum := int(config.GlobalConfig.Server.Maxclient)
-	s.listener = netutil.LimitListener(l, maxClientNum)
-
-	log.Infof("listen:%s maxClientNum:%d", s.address, maxClientNum)
-	s.status = StatusStart
-	runPluginStart(s)
-	s.status = StatusRunning
-
-	defer func() {
-		s.status = StatusClose
-	}()
-
-	for {
-		select {
-		case <-s.quit:
-			log.Info("bitalos server receive quit signal")
-			return
-		default:
-			if c, e := s.listener.Accept(); e != nil {
-				log.Errorf("accept err:%s", e.Error())
-				continue
-			} else {
-				go NewClientRESP(c, s).run()
-			}
-		}
-	}
-}
-
-func (s *Server) Close() {
-	if s.closed.Load() {
-		return
-	}
-
-	close(s.quit)
-	close(s.expireClosedCh)
-
-	s.listener.Close()
-	s.closeAllRespClients()
-	s.connWait.Wait()
-	runPluginStop(s, recover())
-
-	if !s.IsWitness {
-		s.expireWg.Wait()
-		s.GetDB().Close()
-	}
-
-	s.closed.Store(true)
-	s.status = StatusExited
-}
-
-func (s *Server) GetIsClosed() bool {
-	return s.closed.Load()
+	cpu               *cpuAdjust
 }
 
 func NewServer() (*Server, error) {
 	s := &Server{
-		address:           config.GlobalConfig.Server.Address,
+		laddr:             config.GlobalConfig.Server.Address,
 		isDebug:           config.GlobalConfig.Log.IsDebug,
 		slowQuery:         slowshield.NewSlowShield(),
 		quit:              make(chan struct{}),
-		rcm:               sync.RWMutex{},
-		rcs:               make(map[*Client]struct{}, 128),
 		recoverLock:       sync.Mutex{},
 		expireClosedCh:    make(chan struct{}),
 		openDistributedTx: config.GlobalConfig.Server.OpenDistributedTx,
+		isOpenRaft:        config.GlobalConfig.Plugin.OpenRaft,
 		IsWitness:         config.GlobalConfig.RaftCluster.IsWitness,
-		Info:              NewSinfo(),
 	}
+	s.Info = &SInfo{
+		Client:         SinfoClient{cache: make([]byte, 0, 256)},
+		Cluster:        SinfoCluster{cache: make([]byte, 0, 2048)},
+		Stats:          SinfoStats{cache: make([]byte, 0, 2048)},
+		Data:           SinfoData{cache: make([]byte, 0, 1024)},
+		RuntimeStats:   SRuntimeStats{cache: make([]byte, 0, 3072)},
+		BitalosdbUsage: bitsdb.NewBitsUsage(),
+		Server: SinfoServer{
+			cache:         make([]byte, 0, 2048),
+			AutoCompact:   true,
+			ConfigFile:    config.GlobalConfig.Server.ConfigFile,
+			StartTime:     utils.GetCurrentTimeString(),
+			ServerAddress: s.laddr,
+			GitVersion:    utils.Version,
+			Compile:       utils.Compile,
+			MaxClient:     config.GlobalConfig.Server.Maxclient,
+			ProcessId:     os.Getpid(),
+		},
+	}
+	s.Info.Server.UpdateCache()
+
+	RunCpuAdjuster(s)
 
 	if s.IsWitness {
 		return s, nil
@@ -234,4 +128,157 @@ func NewServer() (*Server, error) {
 	s.RunDeleteExpireDataTask()
 
 	return s, nil
+}
+
+func (s *Server) GetDB() *engine.Bitalos {
+	if s.IsWitness {
+		return nil
+	}
+	return s.db
+}
+
+func (s *Server) FlushCallback(compactIndex uint64) {
+	db := s.GetDB()
+	if db == nil {
+		return
+	}
+	if !db.IsOpenRaftRestore() {
+		return
+	}
+	db.Flush(btools.FlushTypeRemoveLog, compactIndex)
+}
+
+func (s *Server) Close() {
+	if !s.closed.CompareAndSwap(false, true) {
+		return
+	}
+
+	close(s.quit)
+	close(s.expireClosedCh)
+
+	if s.eng.Validate() == nil {
+		if err := s.eng.Stop(context.TODO()); err != nil {
+			log.Errorf("server gnet stop error %s", err)
+		}
+	}
+
+	s.txPrepareWg.Wait()
+	s.DoRaftStop()
+
+	if !s.IsWitness {
+		s.expireWg.Wait()
+		s.GetDB().Close()
+	}
+}
+
+func (s *Server) IsClosed() bool {
+	return s.closed.Load()
+}
+
+func (s *Server) ListenAndServe() {
+	gnetOptions := gnet.Options{
+		Logger:          log.GetLogger(),
+		Multicore:       true,
+		ReusePort:       true,
+		ReuseAddr:       true,
+		EdgeTriggeredIO: config.GlobalConfig.Server.DisableEdgeTriggered,
+	}
+
+	if config.GlobalConfig.Server.NetEventLoopNum > 0 {
+		gnetOptions.NumEventLoop = config.GlobalConfig.Server.NetEventLoopNum
+	}
+
+	if config.GlobalConfig.Server.NetWriteBuffer > 0 {
+		gnetOptions.WriteBufferCap = config.GlobalConfig.Server.NetWriteBuffer.AsInt()
+	}
+
+	log.Infof("server gnet options NumEventLoop:%d EdgeTriggeredIO:%v WriteBufferCap:%d",
+		gnetOptions.NumEventLoop, gnetOptions.EdgeTriggeredIO, gnetOptions.WriteBufferCap)
+
+	if err := gnet.Run(s, fmt.Sprintf("tcp://%s", s.laddr), gnet.WithOptions(gnetOptions)); err != nil {
+		log.Errorf("server gnet run error %s", err)
+	}
+}
+
+func (s *Server) OnBoot(eng gnet.Engine) (action gnet.Action) {
+	s.eng = eng
+	return gnet.None
+}
+
+func (s *Server) OnOpen(conn gnet.Conn) (out []byte, action gnet.Action) {
+	client := newConnClient(s, conn.RemoteAddr().String())
+	conn.SetContext(client)
+	return
+}
+
+func (s *Server) OnClose(conn gnet.Conn, err error) (action gnet.Action) {
+	if client, ok := conn.Context().(*Client); ok {
+		client.Close()
+	}
+
+	if err != nil && err.Error() != errorReadEOF {
+		log.Errorf("conn OnClose error %s", err)
+	}
+
+	return gnet.None
+}
+
+func (s *Server) OnTraffic(conn gnet.Conn) (action gnet.Action) {
+	defer func() {
+		trycatch.Panic("conn OnTraffic", recover())
+	}()
+
+	client, ok := conn.Context().(*Client)
+	if !ok {
+		log.Error("conn OnTraffic get Client fail")
+		return gnet.Close
+	}
+
+	dbSyncStatus := client.server.Info.Stats.DbSyncStatus
+	if dbSyncStatus == DB_SYNC_RECVING_FAIL || dbSyncStatus == DB_SYNC_RECVING {
+		client.Writer.WriteError(errn.ErrDbSyncFailRefuse)
+		client.Writer.FlushToWriterIO(conn)
+		log.Errorf("conn OnTraffic error %s", errn.ErrDbSyncFailRefuse)
+		return gnet.Close
+	}
+
+	readBuf, _ := conn.Next(-1)
+	if client.Reader.Len() > 0 {
+		client.Reader.Write(readBuf)
+		readBuf = client.Reader.Bytes()
+	}
+
+	cmds, writeBackBytes, err := resp.ParseCommands(readBuf[client.Reader.Offset:], client.ParseMarks[:0])
+	if err != nil {
+		client.Writer.WriteError(err)
+		client.Writer.FlushToWriterIO(conn)
+		log.Errorf("conn OnTraffic parse commands error %s", err)
+		return gnet.Close
+	}
+
+	for i := range cmds {
+		if err = client.HandleRequest(cmds[i].Args, false); err != nil {
+			log.Errorf("conn OnTraffic handle request error %s", err)
+		}
+
+		if _, err = client.Writer.FlushToWriterIO(conn); err != nil {
+			log.Errorf("conn OnTraffic write error %s", err)
+		}
+	}
+
+	writeBackBytesLen := len(writeBackBytes)
+	if writeBackBytesLen > 0 && client.Reader.Len() == 0 {
+		client.Reader.Write(writeBackBytes)
+	}
+
+	if cmds != nil {
+		client.Reader.Offset = client.Reader.Len() - writeBackBytesLen
+	}
+
+	if writeBackBytesLen == 0 {
+		client.Reader.Reset()
+		client.Reader.Offset = 0
+	}
+
+	return gnet.None
 }

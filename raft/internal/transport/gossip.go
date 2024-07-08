@@ -20,11 +20,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/zuoyebang/bitalostored/raft/config"
-
 	"github.com/cockroachdb/errors"
 	"github.com/hashicorp/memberlist"
 	"github.com/lni/goutils/syncutil"
+
+	"github.com/zuoyebang/bitalostored/raft/config"
 )
 
 // NodeHostIDRegistry is a node registry backed by gossip. It is capable of

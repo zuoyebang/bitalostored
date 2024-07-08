@@ -63,9 +63,9 @@ func (zo *ZSetObject) getZsetValue(key []byte, khash uint32, field []byte) ([]by
 	defer base.PutMkvToPool(mkv)
 
 	var ekf [base.DataKeyZsetLength]byte
-	base.EncodeZsetDataKey(ekf[:], mkv.Version(), khash, field)
+	ekfLen := base.EncodeZsetDataKey(ekf[:], mkv.Version(), khash, field, mkv.IsZsetOld())
 
-	return zo.GetDataValue(ekf[:])
+	return zo.GetDataValue(ekf[:ekfLen])
 }
 
 func (zo *ZSetObject) zrank(key []byte, khash uint32, member []byte, reverse bool) (int64, error) {
@@ -87,8 +87,9 @@ func (zo *ZSetObject) zrank(key []byte, khash uint32, member []byte, reverse boo
 	var ekf [base.DataKeyZsetLength]byte
 	keyVersion := mkv.Version()
 	keyKind := mkv.Kind()
-	base.EncodeZsetDataKey(ekf[:], keyVersion, khash, member)
-	_, fexist, fCloser, err := zo.GetDataValue(ekf[:])
+	isZsetOld := mkv.IsZsetOld()
+	ekfLen := base.EncodeZsetDataKey(ekf[:], keyVersion, khash, member, isZsetOld)
+	_, fexist, fCloser, err := zo.GetDataValue(ekf[:ekfLen])
 	defer func() {
 		if fCloser != nil {
 			fCloser()

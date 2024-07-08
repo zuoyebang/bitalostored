@@ -17,6 +17,7 @@ package vectormap
 import (
 	"fmt"
 	"math"
+	"sync"
 	"time"
 
 	"github.com/zuoyebang/bitalostored/butils/md5hash"
@@ -42,6 +43,7 @@ const (
 	minBuckets           int     = 1024
 	maxMemSize           Byte    = 128 << 30
 	minMemSize           Byte    = 1 << 30
+	maxShardMemSize      Byte    = 64 << 20
 	overShortSize        uint32  = 1 << 7
 	overLongSize         uint32  = (1 << 15) - 1
 	overLongStoreH       uint32  = overLongSize >> 8
@@ -52,7 +54,8 @@ const (
 	limitSize            uint32  = 4 << 20
 	storeUintBytes       uint32  = 4
 
-	MinEliminateDuration = 60 * time.Second
+	MinEliminateGoroutines = 1
+	MinEliminateDuration   = 180 * time.Second
 )
 
 const (
@@ -88,9 +91,9 @@ type ILogger interface {
 
 type Option func(vm *VectorMap)
 
-func WithDebug() Option {
+func WithSkipCheck() Option {
 	return func(vm *VectorMap) {
-		vm.debug = true
+		vm.skipCheck = true
 	}
 }
 
@@ -116,22 +119,21 @@ func WithEliminate(memCap Byte, goroutines int, duration time.Duration) Option {
 	return func(vm *VectorMap) {
 		vm.memCap = memCap
 
-		if vm.debug {
+		if vm.skipCheck {
 			if goroutines == 0 {
 				return
 			}
 		}
 		if goroutines <= 0 {
-			goroutines = 1
+			goroutines = MinEliminateGoroutines
 		}
-		if !vm.debug && duration < MinEliminateDuration {
+		if !vm.skipCheck && duration < MinEliminateDuration {
 			duration = MinEliminateDuration
 		}
 
 		vm.eliminateHandler = &eliminateHandler{
-			goroutines:     goroutines,
-			circleDuration: time.Duration(float64(duration) * 0.15),
-			stepDuration:   duration / 1000,
+			goroutines:   goroutines,
+			stepDuration: duration,
 		}
 	}
 }
@@ -157,7 +159,9 @@ type VectorMap struct {
 	memCap           Byte
 	eliminateHandler *eliminateHandler
 	logger           ILogger
-	debug            bool
+	skipCheck        bool
+	stop             bool
+	wg               sync.WaitGroup
 	mtype            MapType
 }
 
@@ -167,7 +171,7 @@ func NewVectorMap(sz uint32, ops ...Option) (vm *VectorMap) {
 		op(vm)
 	}
 
-	if !vm.debug {
+	if !vm.skipCheck {
 		if vm.memCap < minMemSize {
 			vm.memCap = minMemSize
 		} else if vm.memCap > maxMemSize {
@@ -201,7 +205,6 @@ func NewVectorMap(sz uint32, ops ...Option) (vm *VectorMap) {
 	}
 
 	if vm.eliminateHandler != nil {
-		vm.eliminateHandler.stepDuration = time.Duration(int(vm.eliminateHandler.stepDuration) * (vm.buckets / 1000))
 		vm.eliminateHandler.Handle(vm)
 	}
 	return vm
@@ -213,13 +216,15 @@ func (vm *VectorMap) slotAt(hi uint64) Map {
 }
 
 func (vm *VectorMap) Put(k []byte, v []byte) bool {
-	h, hi, lo := md5hash.MD5Sum(k)
-	return vm.slotAt(hi).Put(lo, h, v)
+	var h [16]byte
+	hi, lo := md5hash.MD5Sum(k, h[:])
+	return vm.slotAt(hi).Put(lo, h[:], v)
 }
 
 func (vm *VectorMap) PutMultiValue(k []byte, vlen int, vals ...[]byte) bool {
-	h, hi, lo := md5hash.MD5Sum(k)
-	return vm.slotAt(hi).PutMultiValue(lo, h, uint32(vlen), vals)
+	var h [16]byte
+	hi, lo := md5hash.MD5Sum(k, h[:])
+	return vm.slotAt(hi).PutMultiValue(lo, h[:], uint32(vlen), vals)
 }
 
 func (vm *VectorMap) RePutFails() uint64 {
@@ -236,29 +241,41 @@ func (vm *VectorMap) RePut(k []byte, v []byte) (res bool) {
 		res = false
 		return
 	}
-	h, hi, lo := md5hash.MD5Sum(k)
-	res = vm.slotAt(hi).RePut(lo, h, v)
+	var h [16]byte
+	hi, lo := md5hash.MD5Sum(k, h[:])
+	res = vm.slotAt(hi).RePut(lo, h[:], v)
 	return
 }
 
 func (vm *VectorMap) Get(k []byte) (v []byte, closer func(), ok bool) {
-	h, hi, lo := md5hash.MD5Sum(k)
-	return vm.slotAt(hi).Get(lo, h)
+	var h [16]byte
+	hi, lo := md5hash.MD5Sum(k, h[:])
+	return vm.slotAt(hi).Get(lo, h[:])
 }
 
 func (vm *VectorMap) Delete(k []byte) {
-	h, hi, lo := md5hash.MD5Sum(k)
-	vm.slotAt(hi).Delete(lo, h)
+	var h [16]byte
+	hi, lo := md5hash.MD5Sum(k, h[:])
+	vm.slotAt(hi).Delete(lo, h[:])
 }
 
 func (vm *VectorMap) Has(k []byte) (ok bool) {
-	h, hi, lo := md5hash.MD5Sum(k)
-	return vm.slotAt(hi).Has(lo, h)
+	var h [16]byte
+	hi, lo := md5hash.MD5Sum(k, h[:])
+	return vm.slotAt(hi).Has(lo, h[:])
 }
 
 func (vm *VectorMap) Clear() {
 	for _, m := range vm.shards {
 		m.Clear()
+	}
+}
+
+func (vm *VectorMap) Close() {
+	vm.stop = true
+	vm.wg.Wait()
+	for _, m := range vm.shards {
+		m.Close()
 	}
 }
 
@@ -276,6 +293,10 @@ func (vm *VectorMap) Items() uint32 {
 		sum += m.Items()
 	}
 	return sum
+}
+
+func (vm *VectorMap) Shards() int {
+	return vm.buckets
 }
 
 func (vm *VectorMap) Capacity() int {
@@ -331,12 +352,13 @@ type Map interface {
 	itemsMemUsage() float32
 	memUsage() float32
 	Clear()
+	Close()
 	Count() int
 	Capacity() int
 	QueryCount() uint64
 	MissCount() uint64
 	Eliminate() (delCount int, skipReason int)
-	GCCopy() (deadCount int, gcMem int, subSince bool, skipReason int)
+	GCCopy() (deadCount int, gcMem int, skipReason int)
 	kvholder() *kvHolder
 	Groups() []group
 	Resident() uint32
@@ -367,46 +389,52 @@ const (
 )
 
 type eliminateHandler struct {
-	goroutines     int
-	circleDuration time.Duration
-	stepDuration   time.Duration
+	goroutines   int
+	stepDuration time.Duration
 }
 
 func (h *eliminateHandler) Handle(vm *VectorMap) {
+	d := h.stepDuration / time.Duration(vm.buckets)
 	switch vm.mtype {
 	case MapTypeLFU:
+
 		for i := 0; i < h.goroutines; i++ {
+			vm.wg.Add(1)
 			go func(idx int) {
 				for {
 					start := time.Now()
 					var eliMaps, eliItems, gcMaps, gcItems, gcMem, eliSkipReason, gcSkipReason int
 					for j := idx; j < vm.buckets; j += h.goroutines {
+						if vm.stop {
+							vm.wg.Done()
+							return
+						}
 						ec, reason := vm.shards[j].Eliminate()
 						if ec > 0 {
 							eliMaps++
 							eliItems += ec
 						}
 						eliSkipReason |= reason
-						gcI, gcM, _, rs := vm.shards[j].GCCopy()
+						gcI, gcM, rs := vm.shards[j].GCCopy()
 						if gcI > 0 {
 							gcMaps++
 							gcItems += gcI
 							gcMem += gcM
 						}
 						gcSkipReason |= rs
-						time.Sleep(h.stepDuration)
+						time.Sleep(d)
 					}
 					cost := time.Since(start)
 					if vm.logger != nil {
 						vm.logger.Infof("eliminate index %d cost: %v, eliMaps: %d, eliItems: %d, gcMaps: %d, gcItems: %d, gcMem: %d",
 							idx, cost, eliMaps, eliItems, gcMaps, gcItems, gcMem)
 					}
-					time.Sleep(h.circleDuration)
 				}
 			}(i)
 		}
 	case MapTypeLRU:
 		for i := 0; i < h.goroutines; i++ {
+			vm.wg.Add(1)
 			go func(idx int) {
 				for {
 					start := time.Now()
@@ -414,13 +442,19 @@ func (h *eliminateHandler) Handle(vm *VectorMap) {
 					var minStartTime = time.Now()
 					var topSince uint16
 					for j := idx; j < vm.buckets; j += h.goroutines {
+						if vm.stop {
+							vm.wg.Done()
+							return
+						}
 						ec, reason := vm.shards[j].Eliminate()
 						if ec > 0 {
 							eliMaps++
 							eliItems += ec
 						}
 						eliSkipReason |= reason
-						gcI, gcM, subSince, rs := vm.shards[j].GCCopy()
+						gcI, gcM, rs := vm.shards[j].GCCopy()
+						lruMap := vm.shards[j].(*LRUMap)
+						subSince := lruMap.AdaptStartTime()
 						if gcI > 0 {
 							gcMaps++
 							gcItems += gcI
@@ -429,22 +463,20 @@ func (h *eliminateHandler) Handle(vm *VectorMap) {
 								subTimes++
 							}
 						}
-						lruMap := vm.shards[j].(*LRUMap)
-						if lruMap.startTime.Before(start) {
+						if lruMap.startTime.Before(minStartTime) {
 							minStartTime = lruMap.startTime
 						}
 						if lruMap.minTopSince > topSince {
 							topSince = lruMap.minTopSince
 						}
 						gcSkipReason |= rs
-						time.Sleep(h.stepDuration)
+						time.Sleep(d)
 					}
 					cost := time.Since(start)
 					if vm.logger != nil {
 						vm.logger.Infof("eliminate index %d cost: %v, eliMaps: %d, eliItems: %d, gcMaps: %d, gcItems: %d, gcMem: %d, minStartTime: %s, subTimes: %d, topSince: %d, eliSkipReason: %d, gcSkipReason: %d",
 							idx, cost, eliMaps, eliItems, gcMaps, gcItems, gcMem, minStartTime.Format(time.DateTime), subTimes, topSince, eliSkipReason, gcSkipReason)
 					}
-					time.Sleep(h.circleDuration)
 				}
 			}(i)
 		}

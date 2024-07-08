@@ -20,9 +20,11 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/zuoyebang/bitalostored/stored/internal/log"
+	"github.com/zuoyebang/bitalostored/stored/internal/errn"
 	"github.com/zuoyebang/bitalostored/stored/internal/resp"
 	"github.com/zuoyebang/bitalostored/stored/internal/utils"
+
+	"github.com/zuoyebang/bitalostored/stored/internal/log"
 
 	lua "github.com/yuin/gopher-lua"
 	"github.com/yuin/gopher-lua/parse"
@@ -80,9 +82,9 @@ func init() {
 }
 
 func evalCommand(c *Client) error {
-	args := resp.StringSlice(c.Args)
+	args := StringSlice(c.Args)
 	if len(args) < 2 {
-		return resp.CmdParamsErr(resp.EVAL)
+		return errn.CmdParamsErr(resp.EVAL)
 	}
 
 	script, args := args[0], args[1:]
@@ -137,7 +139,6 @@ func runLuaScript(c *Client, script string, args []string) error {
 		luaClient.Remove(1)
 		luaClient.Remove(lua.GlobalsIndex)
 	}()
-
 	if err := luaClient.DoString(script); err != nil {
 		log.Errorf("ERR Error compiling script (new function): %s", err.Error())
 		return errors.New(ErrLuaParseError(err))
@@ -148,9 +149,9 @@ func runLuaScript(c *Client, script string, args []string) error {
 }
 
 func evalShaCommand(c *Client) error {
-	args := resp.StringSlice(c.Args)
+	args := StringSlice(c.Args)
 	if len(args) < 2 {
-		return resp.CmdParamsErr(resp.EVALSHA)
+		return errn.CmdParamsErr(resp.EVALSHA)
 	}
 
 	sha1, args := args[0], args[1:]
@@ -163,10 +164,10 @@ func evalShaCommand(c *Client) error {
 	}()
 
 	if script == nil {
-		c.RespWriter.WriteError(errors.New(MsgNoScriptFound))
+		c.Writer.WriteError(errors.New(MsgNoScriptFound))
 	} else {
 		if err := runLuaScript(c, string(script), args); err != nil {
-			c.RespWriter.WriteError(err)
+			c.Writer.WriteError(err)
 		}
 	}
 
@@ -174,7 +175,7 @@ func evalShaCommand(c *Client) error {
 }
 
 func scriptLoadCmd(c *Client) error {
-	args := resp.StringSlice(c.Args)
+	args := StringSlice(c.Args)
 	if len(args) != 2 {
 		return errors.New(fmt.Sprintf(MsgFScriptUsage, "LOAD"))
 	}
@@ -184,7 +185,7 @@ func scriptLoadCmd(c *Client) error {
 	if sha1, err = saveLuaScript(c, script); err != nil {
 		return err
 	}
-	c.RespWriter.WriteBulk([]byte(sha1))
+	c.Writer.WriteBulk([]byte(sha1))
 	return nil
 }
 
@@ -204,25 +205,25 @@ func saveLuaScript(c *Client, script string) (string, error) {
 }
 
 func scriptExistsCmd(c *Client) error {
-	args := resp.StringSlice(c.Args)
+	args := StringSlice(c.Args)
 	if len(args) < 2 {
 		return errors.New(fmt.Sprintf(MsgFScriptUsage, "EXISTS"))
 	}
 
 	args = args[1:]
-	c.RespWriter.WriteLen(len(args))
+	c.Writer.WriteLen(len(args))
 	for _, arg := range args {
 		if n, _ := c.DB.ExistsLuaScript([]byte(arg)); n >= 1 {
-			c.RespWriter.WriteInteger(1)
+			c.Writer.WriteInteger(1)
 		} else {
-			c.RespWriter.WriteInteger(0)
+			c.Writer.WriteInteger(0)
 		}
 	}
 	return nil
 }
 
 func scriptFlushCmd(c *Client) error {
-	args := resp.StringSlice(c.Args)
+	args := StringSlice(c.Args)
 	if len(args) != 1 {
 		return errors.New(fmt.Sprintf(MsgFScriptUsage, "FLUSH"))
 	}
@@ -230,13 +231,13 @@ func scriptFlushCmd(c *Client) error {
 	if err := c.DB.FlushLuaScript(); err != nil {
 		return err
 	} else {
-		c.RespWriter.WriteStatus("OK")
+		c.Writer.WriteStatus("OK")
 	}
 	return nil
 }
 
 func scriptLenCmd(c *Client) error {
 	n := c.DB.LuaScriptLen()
-	c.RespWriter.WriteInteger(n)
+	c.Writer.WriteInteger(n)
 	return nil
 }

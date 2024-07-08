@@ -15,9 +15,11 @@
 package server
 
 import (
-	"github.com/zuoyebang/bitalostored/butils/unsafe2"
+	"github.com/zuoyebang/bitalostored/stored/internal/errn"
 	"github.com/zuoyebang/bitalostored/stored/internal/resp"
 	"github.com/zuoyebang/bitalostored/stored/internal/utils"
+
+	"github.com/zuoyebang/bitalostored/butils/unsafe2"
 )
 
 func init() {
@@ -39,13 +41,13 @@ func init() {
 func typeCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 1 {
-		return resp.CmdParamsErr(resp.TYPE)
+		return errn.CmdParamsErr(resp.TYPE)
 	}
 
 	if t, err := c.DB.Type(args[0], c.KeyHash); err != nil {
 		return err
 	} else {
-		c.RespWriter.WriteStatus(t)
+		c.Writer.WriteStatus(t)
 		return nil
 	}
 }
@@ -54,26 +56,26 @@ func delCommand(c *Client) error {
 	args := c.Args
 	argsLen := len(args)
 	if argsLen == 0 {
-		return resp.CmdParamsErr(resp.DEL)
+		return errn.CmdParamsErr(resp.DEL)
 	}
 
 	n, err := c.DB.Del(c.KeyHash, args...)
 	if err != nil {
 		return err
 	}
-	c.RespWriter.WriteInteger(n)
+	c.Writer.WriteInteger(n)
 	return nil
 }
 
 func expireCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 2 {
-		return resp.CmdParamsErr(resp.EXPIRE)
+		return errn.CmdParamsErr(resp.EXPIRE)
 	}
 
 	duration, err := utils.ByteToInt64(args[1])
 	if err != nil {
-		return resp.ErrValue
+		return errn.ErrValue
 	}
 
 	var n int64
@@ -81,19 +83,19 @@ func expireCommand(c *Client) error {
 	if err != nil {
 		return err
 	}
-	c.RespWriter.WriteInteger(n)
+	c.Writer.WriteInteger(n)
 	return nil
 }
 
 func expireAtCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 2 {
-		return resp.CmdParamsErr(resp.EXPIREAT)
+		return errn.CmdParamsErr(resp.EXPIREAT)
 	}
 
 	when, err := utils.ByteToInt64(args[1])
 	if err != nil {
-		return resp.ErrValue
+		return errn.ErrValue
 	}
 
 	var n int64
@@ -101,19 +103,19 @@ func expireAtCommand(c *Client) error {
 	if err != nil {
 		return err
 	}
-	c.RespWriter.WriteInteger(n)
+	c.Writer.WriteInteger(n)
 	return nil
 }
 
 func pexpireCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 2 {
-		return resp.CmdParamsErr(resp.EXPIRE)
+		return errn.CmdParamsErr(resp.EXPIRE)
 	}
 
 	duration, err := utils.ByteToInt64(args[1])
 	if err != nil {
-		return resp.ErrValue
+		return errn.ErrValue
 	}
 
 	var n int64
@@ -121,19 +123,19 @@ func pexpireCommand(c *Client) error {
 	if err != nil {
 		return err
 	}
-	c.RespWriter.WriteInteger(n)
+	c.Writer.WriteInteger(n)
 	return nil
 }
 
 func pexpireAtCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 2 {
-		return resp.CmdParamsErr(resp.EXPIREAT)
+		return errn.CmdParamsErr(resp.EXPIREAT)
 	}
 
 	when, err := utils.ByteToInt64(args[1])
 	if err != nil {
-		return resp.ErrValue
+		return errn.ErrValue
 	}
 
 	var n int64
@@ -141,20 +143,20 @@ func pexpireAtCommand(c *Client) error {
 	if err != nil {
 		return err
 	}
-	c.RespWriter.WriteInteger(n)
+	c.Writer.WriteInteger(n)
 	return nil
 }
 
 func existsCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 1 {
-		return resp.CmdParamsErr(resp.EXISTS)
+		return errn.CmdParamsErr(resp.EXISTS)
 	}
 
 	if n, err := c.DB.Exists(args[0], c.KeyHash); err != nil {
 		return err
 	} else {
-		c.RespWriter.WriteInteger(n)
+		c.Writer.WriteInteger(n)
 		return nil
 	}
 }
@@ -162,13 +164,13 @@ func existsCommand(c *Client) error {
 func ttlCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 1 {
-		return resp.CmdParamsErr(resp.TTL)
+		return errn.CmdParamsErr(resp.TTL)
 	}
 
 	if n, err := c.DB.TTl(args[0], c.KeyHash); err != nil {
 		return err
 	} else {
-		c.RespWriter.WriteInteger(n)
+		c.Writer.WriteInteger(n)
 		return nil
 	}
 }
@@ -176,13 +178,13 @@ func ttlCommand(c *Client) error {
 func pttlCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 1 {
-		return resp.CmdParamsErr(resp.PTTL)
+		return errn.CmdParamsErr(resp.PTTL)
 	}
 
 	if n, err := c.DB.PTTl(args[0], c.KeyHash); err != nil {
 		return err
 	} else {
-		c.RespWriter.WriteInteger(n)
+		c.Writer.WriteInteger(n)
 		return nil
 	}
 }
@@ -190,13 +192,13 @@ func pttlCommand(c *Client) error {
 func persistCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 1 {
-		return resp.CmdParamsErr(resp.PERSIST)
+		return errn.CmdParamsErr(resp.PERSIST)
 	}
 
 	if n, err := c.DB.Persist(args[0], c.KeyHash); err != nil {
 		return err
 	} else {
-		c.RespWriter.WriteInteger(n)
+		c.Writer.WriteInteger(n)
 	}
 	return nil
 }
@@ -223,7 +225,7 @@ func infoCommand(c *Client) error {
 			info = []byte(sinfo.Server.ServerAddress)
 		}
 	}
-	c.RespWriter.WriteBulk(info)
+	c.Writer.WriteBulk(info)
 	if closer != nil {
 		closer()
 	}

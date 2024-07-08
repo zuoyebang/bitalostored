@@ -16,20 +16,18 @@ package server
 
 import (
 	"bytes"
-	"errors"
 	"math"
 	"strconv"
 	"strings"
 
-	"github.com/zuoyebang/bitalostored/butils/extend"
-	"github.com/zuoyebang/bitalostored/butils/unsafe2"
 	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/btools"
 	"github.com/zuoyebang/bitalostored/stored/internal/errn"
 	"github.com/zuoyebang/bitalostored/stored/internal/resp"
 	"github.com/zuoyebang/bitalostored/stored/internal/utils"
-)
 
-var errScoreOverflow = errors.New("zset score overflow")
+	"github.com/zuoyebang/bitalostored/butils/extend"
+	"github.com/zuoyebang/bitalostored/butils/unsafe2"
+)
 
 func init() {
 	AddCommand(map[string]*Cmd{
@@ -50,24 +48,23 @@ func init() {
 		resp.ZLEXCOUNT:        {Sync: resp.IsWriteCmd(resp.ZLEXCOUNT), Handler: zlexcountCommand},
 		resp.ZCOUNT:           {Sync: resp.IsWriteCmd(resp.ZCOUNT), Handler: zcountCommand},
 		resp.ZCARD:            {Sync: resp.IsWriteCmd(resp.ZCARD), Handler: zcardCommand},
-
-		resp.ZCLEAR:     {Sync: resp.IsWriteCmd(resp.ZCLEAR), Handler: zclearCommand, KeySkip: 1},
-		resp.ZKEYEXISTS: {Sync: resp.IsWriteCmd(resp.ZKEYEXISTS), Handler: zkeyexistsCommand},
-		resp.ZEXPIRE:    {Sync: resp.IsWriteCmd(resp.ZEXPIRE), Handler: zexpireCommand},
-		resp.ZEXPIREAT:  {Sync: resp.IsWriteCmd(resp.ZEXPIREAT), Handler: zexpireAtCommand},
-		resp.ZTTL:       {Sync: resp.IsWriteCmd(resp.ZTTL), Handler: zttlCommand},
-		resp.ZPERSIST:   {Sync: resp.IsWriteCmd(resp.ZPERSIST), Handler: zpersistCommand},
+		resp.ZCLEAR:           {Sync: resp.IsWriteCmd(resp.ZCLEAR), Handler: zclearCommand, KeySkip: 1},
+		resp.ZKEYEXISTS:       {Sync: resp.IsWriteCmd(resp.ZKEYEXISTS), Handler: zkeyexistsCommand},
+		resp.ZEXPIRE:          {Sync: resp.IsWriteCmd(resp.ZEXPIRE), Handler: zexpireCommand},
+		resp.ZEXPIREAT:        {Sync: resp.IsWriteCmd(resp.ZEXPIREAT), Handler: zexpireAtCommand},
+		resp.ZTTL:             {Sync: resp.IsWriteCmd(resp.ZTTL), Handler: zttlCommand},
+		resp.ZPERSIST:         {Sync: resp.IsWriteCmd(resp.ZPERSIST), Handler: zpersistCommand},
 	})
 }
 
 func zaddCommand(c *Client) error {
 	args := c.Args
 	if len(args) < 3 {
-		return resp.CmdParamsErr(resp.ZADD)
+		return errn.CmdParamsErr(resp.ZADD)
 	}
 
 	if len(args[1:])&1 != 0 {
-		return resp.CmdParamsErr(resp.ZADD)
+		return errn.CmdParamsErr(resp.ZADD)
 	}
 
 	key := args[0]
@@ -78,7 +75,7 @@ func zaddCommand(c *Client) error {
 
 		score, err := extend.ParseFloat64(unsafe2.String(args[2*i]))
 		if err != nil || score < float64(math.MinInt64) || score > float64(math.MaxInt64) {
-			return resp.ErrValue
+			return errn.ErrValue
 		}
 
 		params[i].Score = score
@@ -88,7 +85,7 @@ func zaddCommand(c *Client) error {
 	n, err := c.DB.ZAdd(key, c.KeyHash, params...)
 
 	if err == nil {
-		c.RespWriter.WriteInteger(n)
+		c.Writer.WriteInteger(n)
 	}
 
 	return err
@@ -97,12 +94,12 @@ func zaddCommand(c *Client) error {
 func zincrbyCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 3 {
-		return resp.CmdParamsErr(resp.ZINCRBY)
+		return errn.CmdParamsErr(resp.ZINCRBY)
 	}
 
 	delta, err := extend.ParseFloat64(unsafe2.String(args[1]))
 	if err != nil {
-		return resp.ErrValue
+		return errn.ErrValue
 	}
 
 	key := args[0]
@@ -110,7 +107,7 @@ func zincrbyCommand(c *Client) error {
 	v, err := c.DB.ZIncrBy(key, c.KeyHash, delta, args[2])
 
 	if err == nil {
-		c.RespWriter.WriteBulk(extend.FormatFloat64ToSlice(v))
+		c.Writer.WriteBulk(extend.FormatFloat64ToSlice(v))
 	}
 
 	return err
@@ -119,13 +116,13 @@ func zincrbyCommand(c *Client) error {
 func zremCommand(c *Client) error {
 	args := c.Args
 	if len(args) < 2 {
-		return resp.CmdParamsErr(resp.ZREM)
+		return errn.CmdParamsErr(resp.ZREM)
 	}
 
 	n, err := c.DB.ZRem(args[0], c.KeyHash, args[1:]...)
 
 	if err == nil {
-		c.RespWriter.WriteInteger(n)
+		c.Writer.WriteInteger(n)
 	}
 
 	return err
@@ -134,7 +131,7 @@ func zremCommand(c *Client) error {
 func zremrangebyscoreCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 3 {
-		return resp.CmdParamsErr(resp.ZREMRANGEBYSCORE)
+		return errn.CmdParamsErr(resp.ZREMRANGEBYSCORE)
 	}
 
 	min, max, leftClose, rightClose, err := zparseScoreRange(args[1], args[2])
@@ -147,7 +144,7 @@ func zremrangebyscoreCommand(c *Client) error {
 	n, err := c.DB.ZRemRangeByScore(key, c.KeyHash, min, max, leftClose, rightClose)
 
 	if err == nil {
-		c.RespWriter.WriteInteger(n)
+		c.Writer.WriteInteger(n)
 	}
 
 	return err
@@ -156,19 +153,19 @@ func zremrangebyscoreCommand(c *Client) error {
 func zremrangebyrankCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 3 {
-		return resp.CmdParamsErr(resp.ZREMRANGEBYRANK)
+		return errn.CmdParamsErr(resp.ZREMRANGEBYRANK)
 	}
 
 	start, stop, err := zparseRange(args[1], args[2])
 	if err != nil {
-		return resp.ErrValue
+		return errn.ErrValue
 	}
 
 	key := args[0]
 	n, err := c.DB.ZRemRangeByRank(key, c.KeyHash, start, stop)
 
 	if err == nil {
-		c.RespWriter.WriteInteger(n)
+		c.Writer.WriteInteger(n)
 	}
 
 	return err
@@ -177,7 +174,7 @@ func zremrangebyrankCommand(c *Client) error {
 func zremrangebylexCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 3 {
-		return resp.CmdParamsErr(resp.ZREMRANGEBYLEX)
+		return errn.CmdParamsErr(resp.ZREMRANGEBYLEX)
 	}
 
 	min, max, leftClose, rightClose, err := zparseLexMemberRange(args[1], args[2])
@@ -190,7 +187,7 @@ func zremrangebylexCommand(c *Client) error {
 	if n, err := c.DB.ZRemRangeByLex(key, c.KeyHash, min, max, leftClose, rightClose); err != nil {
 		return err
 	} else {
-		c.RespWriter.WriteInteger(n)
+		c.Writer.WriteInteger(n)
 	}
 
 	return nil
@@ -211,14 +208,14 @@ func zparseRange(a1 []byte, a2 []byte) (start int64, stop int64, err error) {
 func zrangeGeneric(c *Client, reverse bool, cmd string) error {
 	args := c.Args
 	if len(args) < 3 {
-		return resp.CmdParamsErr(resp.ZRANGE)
+		return errn.CmdParamsErr(resp.ZRANGE)
 	}
 
 	key := args[0]
 
 	start, stop, err := zparseRange(args[1], args[2])
 	if err != nil {
-		return resp.ErrValue
+		return errn.ErrValue
 	}
 
 	args = args[3:]
@@ -226,19 +223,19 @@ func zrangeGeneric(c *Client, reverse bool, cmd string) error {
 
 	if len(args) > 0 {
 		if len(args) != 1 {
-			return resp.CmdParamsErr(cmd)
+			return errn.CmdParamsErr(cmd)
 		}
 		if strings.ToLower(unsafe2.String(args[0])) == "withscores" {
 			withScores = true
 		} else {
-			return resp.ErrSyntax
+			return errn.ErrSyntax
 		}
 	}
 
 	if datas, err := c.DB.ZRangeGeneric(key, c.KeyHash, start, stop, reverse); err != nil {
 		return err
 	} else {
-		c.RespWriter.WriteScorePairArray(datas, withScores)
+		c.Writer.WriteScorePairArray(datas, withScores)
 	}
 	return nil
 }
@@ -254,7 +251,7 @@ func zrevrangeCommand(c *Client) error {
 func zrangebylexCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 3 && len(args) != 6 {
-		return resp.CmdParamsErr(resp.ZRANGEBYLEX)
+		return errn.CmdParamsErr(resp.ZRANGEBYLEX)
 	}
 
 	min, max, leftClose, rightClose, err := zparseLexMemberRange(args[1], args[2])
@@ -267,20 +264,20 @@ func zrangebylexCommand(c *Client) error {
 
 	if len(args) == 6 {
 		if strings.ToLower(unsafe2.String(args[3])) != "limit" {
-			return resp.ErrSyntax
+			return errn.ErrSyntax
 		}
 
 		if offset, err = strconv.Atoi(unsafe2.String(args[4])); err != nil {
-			return resp.ErrValue
+			return errn.ErrValue
 		}
 
 		if offset < 0 {
-			c.RespWriter.WriteSliceArray(make([][]byte, 0, 4))
+			c.Writer.WriteSliceArray(make([][]byte, 0, 4))
 			return nil
 		}
 
 		if count, err = strconv.Atoi(unsafe2.String(args[5])); err != nil {
-			return resp.ErrValue
+			return errn.ErrValue
 		}
 	}
 
@@ -289,7 +286,7 @@ func zrangebylexCommand(c *Client) error {
 	if ay, err := c.DB.ZRangeByLex(key, c.KeyHash, min, max, leftClose, rightClose, offset, count); err != nil {
 		return err
 	} else {
-		c.RespWriter.WriteSliceArray(ay)
+		c.Writer.WriteSliceArray(ay)
 	}
 
 	return nil
@@ -298,7 +295,7 @@ func zrangebylexCommand(c *Client) error {
 func zrangebyscoreGeneric(c *Client, reverse bool) error {
 	args := c.Args
 	if len(args) < 3 {
-		return resp.CmdParamsErr(resp.ZRANGEBYSCORE)
+		return errn.CmdParamsErr(resp.ZRANGEBYSCORE)
 	}
 
 	key := args[0]
@@ -333,19 +330,19 @@ func zrangebyscoreGeneric(c *Client, reverse bool) error {
 
 	if len(args) > 0 {
 		if len(args) < 3 {
-			return resp.CmdParamsErr(resp.ZRANGEBYSCORE)
+			return errn.CmdParamsErr(resp.ZRANGEBYSCORE)
 		}
 
 		if strings.ToLower(unsafe2.String(args[0])) != "limit" {
-			return resp.ErrSyntax
+			return errn.ErrSyntax
 		}
 
 		if offset, err = strconv.Atoi(unsafe2.String(args[1])); err != nil {
-			return resp.ErrValue
+			return errn.ErrValue
 		}
 
 		if count, err = strconv.Atoi(unsafe2.String(args[2])); err != nil {
-			return resp.ErrValue
+			return errn.ErrValue
 		}
 
 		if len(args) == 4 {
@@ -356,14 +353,14 @@ func zrangebyscoreGeneric(c *Client, reverse bool) error {
 	}
 
 	if offset < 0 {
-		c.RespWriter.WriteArray([]interface{}{})
+		c.Writer.WriteArray([]interface{}{})
 		return nil
 	}
 
 	if datas, err := c.DB.ZRangeByScoreGeneric(key, c.KeyHash, min, max, leftClose, rightClose, offset, count, reverse); err != nil {
 		return err
 	} else {
-		c.RespWriter.WriteScorePairArray(datas, withScores)
+		c.Writer.WriteScorePairArray(datas, withScores)
 	}
 
 	return nil
@@ -380,18 +377,18 @@ func zrevrangebyscoreCommand(c *Client) error {
 func zrankCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 2 {
-		return resp.CmdParamsErr(resp.ZRANK)
+		return errn.CmdParamsErr(resp.ZRANK)
 	}
 	if n, err := c.DB.ZRank(args[0], c.KeyHash, args[1]); err != nil {
 		if err == errn.ErrZsetMemberNil {
-			c.RespWriter.WriteBulk(nil)
+			c.Writer.WriteBulk(nil)
 		} else {
 			return err
 		}
 	} else if n == -1 {
-		c.RespWriter.WriteBulk(nil)
+		c.Writer.WriteBulk(nil)
 	} else {
-		c.RespWriter.WriteInteger(n)
+		c.Writer.WriteInteger(n)
 	}
 
 	return nil
@@ -400,19 +397,19 @@ func zrankCommand(c *Client) error {
 func zrevrankCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 2 {
-		return resp.CmdParamsErr(resp.ZREVRANK)
+		return errn.CmdParamsErr(resp.ZREVRANK)
 	}
 
 	if n, err := c.DB.ZRevRank(args[0], c.KeyHash, args[1]); err != nil {
 		if err == errn.ErrZsetMemberNil {
-			c.RespWriter.WriteBulk(nil)
+			c.Writer.WriteBulk(nil)
 		} else {
 			return err
 		}
 	} else if n == -1 {
-		c.RespWriter.WriteBulk(nil)
+		c.Writer.WriteBulk(nil)
 	} else {
-		c.RespWriter.WriteInteger(n)
+		c.Writer.WriteInteger(n)
 	}
 
 	return nil
@@ -421,17 +418,17 @@ func zrevrankCommand(c *Client) error {
 func zscoreCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 2 {
-		return resp.CmdParamsErr(resp.ZSCORE)
+		return errn.CmdParamsErr(resp.ZSCORE)
 	}
 
 	if s, err := c.DB.ZScore(args[0], c.KeyHash, args[1]); err != nil {
 		if err == errn.ErrZsetMemberNil {
-			c.RespWriter.WriteBulk(nil)
+			c.Writer.WriteBulk(nil)
 		} else {
 			return err
 		}
 	} else {
-		c.RespWriter.WriteBulk(extend.FormatFloat64ToSlice(s))
+		c.Writer.WriteBulk(extend.FormatFloat64ToSlice(s))
 	}
 
 	return nil
@@ -440,7 +437,7 @@ func zscoreCommand(c *Client) error {
 func zlexcountCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 3 {
-		return resp.CmdParamsErr(resp.ZLEXCOUNT)
+		return errn.CmdParamsErr(resp.ZLEXCOUNT)
 	}
 
 	min, max, leftClose, rightClose, err := zparseLexMemberRange(args[1], args[2])
@@ -453,7 +450,7 @@ func zlexcountCommand(c *Client) error {
 	if n, err := c.DB.ZLexCount(key, c.KeyHash, min, max, leftClose, rightClose); err != nil {
 		return err
 	} else {
-		c.RespWriter.WriteInteger(n)
+		c.Writer.WriteInteger(n)
 	}
 
 	return nil
@@ -462,24 +459,24 @@ func zlexcountCommand(c *Client) error {
 func zcountCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 3 {
-		return resp.CmdParamsErr(resp.ZCOUNT)
+		return errn.CmdParamsErr(resp.ZCOUNT)
 	}
 
 	min, max, leftClose, rightClose, err := zparseScoreRange(args[1], args[2])
 
 	if err != nil {
-		return resp.ErrValue
+		return errn.ErrValue
 	}
 
 	if min > max {
-		c.RespWriter.WriteInteger(0)
+		c.Writer.WriteInteger(0)
 		return nil
 	}
 
 	if n, err := c.DB.ZCount(args[0], c.KeyHash, min, max, leftClose, rightClose); err != nil {
 		return err
 	} else {
-		c.RespWriter.WriteInteger(n)
+		c.Writer.WriteInteger(n)
 	}
 
 	return nil
@@ -488,13 +485,13 @@ func zcountCommand(c *Client) error {
 func zcardCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 1 {
-		return resp.CmdParamsErr(resp.ZCARD)
+		return errn.CmdParamsErr(resp.ZCARD)
 	}
 
 	if n, err := c.DB.ZCard(args[0], c.KeyHash); err != nil {
 		return err
 	} else {
-		c.RespWriter.WriteInteger(n)
+		c.Writer.WriteInteger(n)
 	}
 
 	return nil
@@ -503,13 +500,13 @@ func zcardCommand(c *Client) error {
 func zkeyexistsCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 1 {
-		return resp.CmdParamsErr(resp.ZKEYEXISTS)
+		return errn.CmdParamsErr(resp.ZKEYEXISTS)
 	}
 
 	if n, err := c.DB.Exists(args[0], c.KeyHash); err != nil {
 		return err
 	} else {
-		c.RespWriter.WriteInteger(n)
+		c.Writer.WriteInteger(n)
 	}
 	return nil
 }
@@ -517,13 +514,13 @@ func zkeyexistsCommand(c *Client) error {
 func zclearCommand(c *Client) error {
 	args := c.Args
 	if len(args) < 1 {
-		return resp.CmdParamsErr(resp.ZCLEAR)
+		return errn.CmdParamsErr(resp.ZCLEAR)
 	}
 
 	n, err := c.DB.ZClear(c.KeyHash, args...)
 
 	if err == nil {
-		c.RespWriter.WriteInteger(n)
+		c.Writer.WriteInteger(n)
 	}
 
 	return err
@@ -532,12 +529,12 @@ func zclearCommand(c *Client) error {
 func zexpireCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 2 {
-		return resp.CmdParamsErr(resp.ZEXPIRE)
+		return errn.CmdParamsErr(resp.ZEXPIRE)
 	}
 
 	duration, err := utils.ByteToInt64(args[1])
 	if err != nil {
-		return resp.ErrValue
+		return errn.ErrValue
 	}
 
 	var n int64
@@ -545,19 +542,19 @@ func zexpireCommand(c *Client) error {
 	if err != nil {
 		return err
 	}
-	c.RespWriter.WriteInteger(n)
+	c.Writer.WriteInteger(n)
 	return nil
 }
 
 func zexpireAtCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 2 {
-		return resp.CmdParamsErr(resp.ZEXPIREAT)
+		return errn.CmdParamsErr(resp.ZEXPIREAT)
 	}
 
 	when, err := utils.ByteToInt64(args[1])
 	if err != nil {
-		return resp.ErrValue
+		return errn.ErrValue
 	}
 
 	var n int64
@@ -565,20 +562,20 @@ func zexpireAtCommand(c *Client) error {
 	if err != nil {
 		return err
 	}
-	c.RespWriter.WriteInteger(n)
+	c.Writer.WriteInteger(n)
 	return nil
 }
 
 func zttlCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 1 {
-		return resp.CmdParamsErr(resp.ZTTL)
+		return errn.CmdParamsErr(resp.ZTTL)
 	}
 
 	if v, err := c.DB.TTl(args[0], c.KeyHash); err != nil {
 		return err
 	} else {
-		c.RespWriter.WriteInteger(v)
+		c.Writer.WriteInteger(v)
 	}
 
 	return nil
@@ -587,13 +584,13 @@ func zttlCommand(c *Client) error {
 func zpersistCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 1 {
-		return resp.CmdParamsErr(resp.ZPERSIST)
+		return errn.CmdParamsErr(resp.ZPERSIST)
 	}
 
 	n, err := c.DB.Persist(args[0], c.KeyHash)
 
 	if err == nil {
-		c.RespWriter.WriteInteger(n)
+		c.Writer.WriteInteger(n)
 	}
 
 	return err
@@ -604,7 +601,7 @@ func zparseLexMemberRange(minBuf []byte, maxBuf []byte) (min []byte, max []byte,
 		min = minBuf
 	} else {
 		if len(minBuf) == 0 {
-			err = resp.ErrInvalidRangeItem
+			err = errn.ErrInvalidRangeItem
 			return
 		}
 
@@ -614,7 +611,7 @@ func zparseLexMemberRange(minBuf []byte, maxBuf []byte) (min []byte, max []byte,
 		} else if minBuf[0] == '[' {
 			min = minBuf[1:]
 		} else {
-			err = resp.ErrInvalidRangeItem
+			err = errn.ErrInvalidRangeItem
 			return
 		}
 	}
@@ -623,7 +620,7 @@ func zparseLexMemberRange(minBuf []byte, maxBuf []byte) (min []byte, max []byte,
 		max = maxBuf
 	} else {
 		if len(maxBuf) == 0 {
-			err = resp.ErrInvalidRangeItem
+			err = errn.ErrInvalidRangeItem
 			return
 		}
 		if maxBuf[0] == '(' {
@@ -632,7 +629,7 @@ func zparseLexMemberRange(minBuf []byte, maxBuf []byte) (min []byte, max []byte,
 		} else if maxBuf[0] == '[' {
 			max = maxBuf[1:]
 		} else {
-			err = resp.ErrInvalidRangeItem
+			err = errn.ErrInvalidRangeItem
 			return
 		}
 	}

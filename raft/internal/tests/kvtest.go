@@ -33,11 +33,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/lni/goutils/random"
 	"github.com/zuoyebang/bitalostored/raft/internal/fileutil"
 	"github.com/zuoyebang/bitalostored/raft/internal/tests/kvpb"
 	sm "github.com/zuoyebang/bitalostored/raft/statemachine"
-
-	"github.com/lni/goutils/random"
 )
 
 // random delays

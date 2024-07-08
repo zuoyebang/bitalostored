@@ -4,10 +4,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/zuoyebang/bitalostored/stored/internal/resp"
+
 	"github.com/gomodule/redigo/redis"
 	"github.com/stretchr/testify/assert"
-	"github.com/zuoyebang/bitalostored/stored/internal/resp"
-	"github.com/zuoyebang/bitalostored/stored/server"
+
+	"bitalos-server/server"
 )
 
 func TestEval(t *testing.T) {

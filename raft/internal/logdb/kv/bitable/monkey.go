@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:build !dragonboat_monkeytest
-// +build !dragonboat_monkeytest
+//go:build dragonboat_monkeytest
+// +build dragonboat_monkeytest
 
-package pebble
+package bitable
 
 const (
-	inMonkeyTesting = false
+	inMonkeyTesting = true
 )

@@ -24,8 +24,8 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/lni/goutils/leaktest"
-	"github.com/zuoyebang/bitalostored/raft/config"
 
+	"github.com/zuoyebang/bitalostored/raft/config"
 	"github.com/zuoyebang/bitalostored/raft/internal/logdb/kv"
 	"github.com/zuoyebang/bitalostored/raft/internal/settings"
 	"github.com/zuoyebang/bitalostored/raft/internal/vfs"

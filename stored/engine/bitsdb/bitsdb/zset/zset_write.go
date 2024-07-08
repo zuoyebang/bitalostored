@@ -25,7 +25,13 @@ import (
 	"github.com/zuoyebang/bitalostored/stored/internal/errn"
 )
 
-func (zo *ZSetObject) ZAdd(key []byte, khash uint32, args ...btools.ScorePair) (int64, error) {
+func setZsetOldDataType(mkv *base.MetaData) {
+	if mkv.GetDataType() != btools.ZSETOLD {
+		mkv.SetDataType(btools.ZSETOLD)
+	}
+}
+
+func (zo *ZSetObject) ZAdd(key []byte, khash uint32, isOld bool, args ...btools.ScorePair) (int64, error) {
 	if err := btools.CheckKeySize(key); err != nil {
 		return 0, err
 	}
@@ -33,13 +39,6 @@ func (zo *ZSetObject) ZAdd(key []byte, khash uint32, args ...btools.ScorePair) (
 	argsNum := len(args)
 	if argsNum == 0 {
 		return 0, errn.ErrArgsEmpty
-	}
-
-	var count int64
-	uniqArgs := make(map[string]btools.ScorePair, argsNum)
-	for i := 0; i < argsNum; i++ {
-		member := args[i].Member
-		uniqArgs[unsafe2.String(member)] = args[i]
 	}
 
 	unlockKey := zo.LockKey(khash)
@@ -57,57 +56,69 @@ func (zo *ZSetObject) ZAdd(key []byte, khash uint32, args ...btools.ScorePair) (
 		return 0, err
 	}
 
-	wb := zo.GetDataWriteBatchFromPool()
-	defer zo.PutWriteBatchToPool(wb)
-	indexWb := zo.GetIndexWriteBatchFromPool()
-	defer zo.PutWriteBatchToPool(indexWb)
-	keyVersion := mkv.Version()
-	keyKind := mkv.Kind()
-	var scoreBuf [base.ScoreLength]byte
-	var ekf [base.DataKeyZsetLength]byte
-	for i := range uniqArgs {
-		err = func() error {
-			score := uniqArgs[i].Score
-			member := uniqArgs[i].Member
-			if e := btools.CheckFieldSize(member); e != nil {
-				return e
-			}
-
-			base.EncodeZsetDataKey(ekf[:], keyVersion, khash, member)
-			value, mbexist, valCloser, e := zo.GetDataValue(ekf[:])
-			defer func() {
-				if valCloser != nil {
-					valCloser()
-				}
-			}()
-			if e != nil {
-				return e
-			}
-
-			if !mbexist {
-				count++
-				mkv.IncrSize(1)
-			} else {
-				oldScore := numeric.ByteSortToFloat64(value)
-				if oldScore == score {
-					return nil
-				}
-
-				_ = zo.deleteZsetIndexKey(indexWb, keyVersion, keyKind, khash, oldScore, member)
-			}
-
-			_ = wb.Put(ekf[:], numeric.Float64ToByteSort(score, scoreBuf[:]))
-
-			_ = zo.setZsetIndexValue(indexWb, keyVersion, keyKind, khash, score, member)
-
-			return nil
-		}()
-		if err != nil {
-			return 0, err
-		}
+	if isOld {
+		setZsetOldDataType(mkv)
 	}
 
-	if err = wb.Commit(); err != nil {
+	dataWb := zo.GetDataWriteBatchFromPool()
+	defer zo.PutWriteBatchToPool(dataWb)
+	indexWb := zo.GetIndexWriteBatchFromPool()
+	defer zo.PutWriteBatchToPool(indexWb)
+
+	var count int64
+	var scoreBuf [base.ScoreLength]byte
+	var ekfBuf [base.DataKeyZsetLength]byte
+	keyVersion := mkv.Version()
+	keyKind := mkv.Kind()
+	isZsetOld := mkv.IsZsetOld()
+
+	zadd := func(score float64, member []byte) error {
+		if e := btools.CheckFieldSize(member); e != nil {
+			return e
+		}
+
+		ekfLen := base.EncodeZsetDataKey(ekfBuf[:], keyVersion, khash, member, isZsetOld)
+		ekf := ekfBuf[:ekfLen]
+		value, exist, closer, e := zo.GetDataValue(ekf)
+		if e != nil {
+			return e
+		}
+		defer func() {
+			if closer != nil {
+				closer()
+			}
+		}()
+
+		if !exist {
+			count++
+			mkv.IncrSize(1)
+		} else {
+			oldScore := numeric.ByteSortToFloat64(value)
+			if oldScore == score {
+				return nil
+			}
+			zo.deleteZsetIndexKey(indexWb, keyVersion, keyKind, khash, oldScore, member)
+		}
+
+		dataWb.Put(ekf, numeric.Float64ToByteSort(score, scoreBuf[:]))
+		zo.setZsetIndexValue(indexWb, keyVersion, keyKind, khash, score, member)
+
+		return nil
+	}
+
+	argsDup := make(map[string]struct{}, argsNum)
+	for i := range args {
+		member := unsafe2.String(args[i].Member)
+		if _, exist := argsDup[member]; exist {
+			continue
+		}
+		if err = zadd(args[i].Score, args[i].Member); err != nil {
+			return 0, err
+		}
+		argsDup[member] = struct{}{}
+	}
+
+	if err = dataWb.Commit(); err != nil {
 		return 0, err
 	}
 	if err = indexWb.Commit(); err != nil {
@@ -120,6 +131,111 @@ func (zo *ZSetObject) ZAdd(key []byte, khash uint32, args ...btools.ScorePair) (
 	}
 
 	return count, err
+}
+
+func (zo *ZSetObject) ZIncrBy(key []byte, khash uint32, isOld bool, delta float64, member []byte) (float64, error) {
+	if err := btools.CheckKeyAndFieldSize(key, member); err != nil {
+		return 0, err
+	}
+
+	unlockKey := zo.LockKey(khash)
+	defer unlockKey()
+
+	mk, mkCloser := base.EncodeMetaKey(key, khash)
+	defer mkCloser()
+	mkv, err := zo.GetMetaDataNoneType(mk)
+	if err != nil {
+		return 0, err
+	}
+	defer base.PutMkvToPool(mkv)
+
+	kexist := mkv.IsAlive()
+	if !kexist {
+		mkv.Reuse(zo.DataType, zo.GetNextKeyId())
+	}
+
+	if isOld {
+		setZsetOldDataType(mkv)
+	}
+
+	dataWb := zo.GetDataWriteBatchFromPool()
+	defer zo.PutWriteBatchToPool(dataWb)
+	indexWb := zo.GetIndexWriteBatchFromPool()
+	defer zo.PutWriteBatchToPool(indexWb)
+	metaWb := zo.GetMetaWriteBatchFromPool()
+	defer zo.PutWriteBatchToPool(metaWb)
+
+	var newScore float64
+	var scoreBuf [base.ScoreLength]byte
+	var ekfBuf [base.DataKeyZsetLength]byte
+	keyVersion := mkv.Version()
+	keyKind := mkv.Kind()
+	isZsetOld := mkv.IsZsetOld()
+	ekfLen := base.EncodeZsetDataKey(ekfBuf[:], keyVersion, khash, member, isZsetOld)
+	ekf := ekfBuf[:ekfLen]
+
+	var updateCache func() = nil
+
+	if !kexist {
+		mkv.IncrSize(1)
+		newScore = delta
+		var meta [base.MetaMixValueLen]byte
+		base.EncodeMetaDbValueForMix(meta[:], mkv)
+		metaWb.Put(mk, meta[:])
+		updateCache = func() {
+			if zo.BaseDb.MetaCache != nil {
+				zo.BaseDb.MetaCache.Put(mk, meta[:])
+			}
+		}
+
+		dataWb.Put(ekf, numeric.Float64ToByteSort(delta, scoreBuf[:]))
+		zo.setZsetIndexValue(indexWb, keyVersion, keyKind, khash, newScore, member)
+	} else {
+		value, mbexist, valCloser, e := zo.GetDataValue(ekf)
+		defer func() {
+			if valCloser != nil {
+				valCloser()
+			}
+		}()
+		if e != nil {
+			return 0, e
+		}
+		oldScore := float64(0)
+		if mbexist {
+			oldScore = numeric.ByteSortToFloat64(value)
+			if delta == 0 {
+				return oldScore, nil
+			}
+		} else {
+			mkv.IncrSize(1)
+			var meta [base.MetaMixValueLen]byte
+			base.EncodeMetaDbValueForMix(meta[:], mkv)
+			metaWb.Put(mk, meta[:])
+			updateCache = func() {
+				if zo.BaseDb.MetaCache != nil {
+					zo.BaseDb.MetaCache.Put(mk, meta[:])
+				}
+			}
+		}
+		zo.deleteZsetIndexKey(indexWb, keyVersion, keyKind, khash, oldScore, member)
+		newScore = oldScore + delta
+		dataWb.Put(ekf, numeric.Float64ToByteSort(newScore, scoreBuf[:]))
+		zo.setZsetIndexValue(indexWb, keyVersion, keyKind, khash, newScore, member)
+	}
+
+	if err = dataWb.Commit(); err != nil {
+		return 0, err
+	}
+	if err = indexWb.Commit(); err != nil {
+		return 0, err
+	}
+	if err = metaWb.Commit(); err != nil {
+		return 0, err
+	} else if updateCache != nil {
+		updateCache()
+	}
+
+	return newScore, nil
 }
 
 func (zo *ZSetObject) ZRem(key []byte, khash uint32, members ...[]byte) (int64, error) {
@@ -145,49 +261,52 @@ func (zo *ZSetObject) ZRem(key []byte, khash uint32, members ...[]byte) (int64, 
 		return 0, nil
 	}
 
-	wb := zo.GetDataWriteBatchFromPool()
-	defer zo.PutWriteBatchToPool(wb)
+	dataWb := zo.GetDataWriteBatchFromPool()
+	defer zo.PutWriteBatchToPool(dataWb)
 	indexWb := zo.GetIndexWriteBatchFromPool()
 	defer zo.PutWriteBatchToPool(indexWb)
 
 	var count int64
+	var ekf [base.DataKeyZsetLength]byte
+
 	keyVersion := mkv.Version()
 	keyKind := mkv.Kind()
-	var ekf [base.DataKeyZsetLength]byte
-	for i := 0; i < len(members); i++ {
-		err = func() error {
-			if e := btools.CheckFieldSize(members[i]); e != nil {
-				return e
-			}
+	isZsetOld := mkv.IsZsetOld()
 
-			base.EncodeZsetDataKey(ekf[:], keyVersion, khash, members[i])
-			value, mbexist, valCloser, e := zo.GetDataValue(ekf[:])
-			defer func() {
-				if valCloser != nil {
-					valCloser()
-				}
-			}()
-			if e != nil {
-				return e
-			}
+	zrem := func(member []byte) error {
+		if e := btools.CheckFieldSize(member); e != nil {
+			return e
+		}
 
-			if mbexist {
-				count++
-				mkv.DecrSize(1)
-				_ = wb.Delete(ekf[:])
-				score := numeric.ByteSortToFloat64(value)
-				_ = zo.deleteZsetIndexKey(indexWb, keyVersion, keyKind, khash, score, members[i])
+		ekfLen := base.EncodeZsetDataKey(ekf[:], keyVersion, khash, member, isZsetOld)
+		value, exist, closer, e := zo.GetDataValue(ekf[:ekfLen])
+		if e != nil {
+			return e
+		}
+		defer func() {
+			if closer != nil {
+				closer()
 			}
-
-			return nil
 		}()
-		if err != nil {
+
+		if exist {
+			count++
+			mkv.DecrSize(1)
+			dataWb.Delete(ekf[:ekfLen])
+			zo.deleteZsetIndexKey(indexWb, keyVersion, keyKind, khash, numeric.ByteSortToFloat64(value), member)
+		}
+
+		return nil
+	}
+
+	for i := range members {
+		if err = zrem(members[i]); err != nil {
 			return 0, err
 		}
 	}
 
 	if count > 0 {
-		if err = wb.Commit(); err != nil {
+		if err = dataWb.Commit(); err != nil {
 			return 0, err
 		}
 		if err = indexWb.Commit(); err != nil {
@@ -198,105 +317,6 @@ func (zo *ZSetObject) ZRem(key []byte, khash uint32, members ...[]byte) (int64, 
 		}
 	}
 	return count, err
-}
-
-func (zo *ZSetObject) ZIncrBy(key []byte, khash uint32, delta float64, member []byte) (float64, error) {
-	if err := btools.CheckKeyAndFieldSize(key, member); err != nil {
-		return 0, err
-	}
-
-	unlockKey := zo.LockKey(khash)
-	defer unlockKey()
-
-	mk, mkCloser := base.EncodeMetaKey(key, khash)
-	defer mkCloser()
-	mkv, err := zo.GetMetaDataNoneType(mk)
-	if err != nil {
-		return 0, err
-	}
-	defer base.PutMkvToPool(mkv)
-
-	kexist := mkv.IsAlive()
-	if !kexist {
-		mkv.Reuse(zo.DataType, zo.GetNextKeyId())
-	}
-
-	wb := zo.GetDataWriteBatchFromPool()
-	defer zo.PutWriteBatchToPool(wb)
-	indexWb := zo.GetIndexWriteBatchFromPool()
-	defer zo.PutWriteBatchToPool(indexWb)
-	metaWb := zo.GetMetaWriteBatchFromPool()
-	defer zo.PutWriteBatchToPool(metaWb)
-
-	var newScore float64
-	var scoreBuf [base.ScoreLength]byte
-	var ekf [base.DataKeyZsetLength]byte
-	keyVersion := mkv.Version()
-	keyKind := mkv.Kind()
-	base.EncodeZsetDataKey(ekf[:], keyVersion, khash, member)
-
-	var updateCache func() = nil
-
-	if !kexist {
-		mkv.IncrSize(1)
-		newScore = delta
-		var meta [base.MetaMixValueLen]byte
-		base.EncodeMetaDbValueForMix(meta[:], mkv)
-		_ = metaWb.Put(mk, meta[:])
-		updateCache = func() {
-			if zo.BaseDb.MetaCache != nil {
-				zo.BaseDb.MetaCache.Put(mk, meta[:])
-			}
-		}
-
-		_ = wb.Put(ekf[:], numeric.Float64ToByteSort(delta, scoreBuf[:]))
-		_ = zo.setZsetIndexValue(indexWb, keyVersion, keyKind, khash, newScore, member)
-	} else {
-		value, mbexist, valCloser, e := zo.GetDataValue(ekf[:])
-		defer func() {
-			if valCloser != nil {
-				valCloser()
-			}
-		}()
-		if e != nil {
-			return 0, e
-		}
-		oldScore := float64(0)
-		if mbexist {
-			oldScore = numeric.ByteSortToFloat64(value)
-			if delta == 0 {
-				return oldScore, nil
-			}
-		} else {
-			mkv.IncrSize(1)
-			var meta [base.MetaMixValueLen]byte
-			base.EncodeMetaDbValueForMix(meta[:], mkv)
-			_ = metaWb.Put(mk, meta[:])
-			updateCache = func() {
-				if zo.BaseDb.MetaCache != nil {
-					zo.BaseDb.MetaCache.Put(mk, meta[:])
-				}
-			}
-		}
-		_ = zo.deleteZsetIndexKey(indexWb, keyVersion, keyKind, khash, oldScore, member)
-		newScore = oldScore + delta
-		_ = wb.Put(ekf[:], numeric.Float64ToByteSort(newScore, scoreBuf[:]))
-		_ = zo.setZsetIndexValue(indexWb, keyVersion, keyKind, khash, newScore, member)
-	}
-
-	if err = wb.Commit(); err != nil {
-		return 0, err
-	}
-	if err = indexWb.Commit(); err != nil {
-		return 0, err
-	}
-	if err = metaWb.Commit(); err != nil {
-		return 0, err
-	} else if updateCache != nil {
-		updateCache()
-	}
-
-	return newScore, nil
 }
 
 func (zo *ZSetObject) ZRemRangeByRank(key []byte, khash uint32, start int64, stop int64) (int64, error) {
@@ -321,19 +341,19 @@ func (zo *ZSetObject) ZRemRangeByRank(key []byte, khash uint32, start int64, sto
 		return 0, nil
 	}
 
-	wb := zo.GetDataWriteBatchFromPool()
+	dataWb := zo.GetDataWriteBatchFromPool()
+	defer zo.PutWriteBatchToPool(dataWb)
 	indexWb := zo.GetIndexWriteBatchFromPool()
-	defer func() {
-		zo.PutWriteBatchToPool(wb)
-		zo.PutWriteBatchToPool(indexWb)
-	}()
+	defer zo.PutWriteBatchToPool(indexWb)
 
 	var index, delCnt int64
 	var dataKey [base.DataKeyZsetLength]byte
 	var lowerBound [base.DataKeyHeaderLength]byte
 	var upperBound [base.IndexKeyScoreLength]byte
+
 	keyVersion := mkv.Version()
 	keyKind := mkv.Kind()
+	isZsetOld := mkv.IsZsetOld()
 	base.EncodeDataKeyLowerBound(lowerBound[:], keyVersion, khash)
 	base.EncodeZsetIndexKeyUpperBound(upperBound[:], keyVersion, khash)
 	iterOpts := &bitskv.IterOptions{
@@ -348,9 +368,9 @@ func (zo *ZSetObject) ZRemRangeByRank(key []byte, khash uint32, start int64, sto
 		if index >= startIndex {
 			indexKey := it.RawKey()
 			_, _, fp := base.DecodeZsetIndexKey(keyKind, indexKey, it.RawValue())
-			base.EncodeZsetDataKey(dataKey[:], keyVersion, khash, fp.Merge())
-			_ = wb.Delete(dataKey[:])
-			_ = indexWb.Delete(indexKey)
+			dataKeyLen := base.EncodeZsetDataKey(dataKey[:], keyVersion, khash, fp.Merge(), isZsetOld)
+			dataWb.Delete(dataKey[:dataKeyLen])
+			indexWb.Delete(indexKey)
 			delCnt++
 		}
 		index++
@@ -360,7 +380,7 @@ func (zo *ZSetObject) ZRemRangeByRank(key []byte, khash uint32, start int64, sto
 	}
 
 	if delCnt > 0 {
-		if err = wb.Commit(); err != nil {
+		if err = dataWb.Commit(); err != nil {
 			return 0, err
 		}
 		if err = indexWb.Commit(); err != nil {
@@ -391,20 +411,20 @@ func (zo *ZSetObject) ZRemRangeByScore(
 		return 0, nil
 	}
 
-	stopIndex := mkv.Size() - 1
-	keyVersion := mkv.Version()
-	keyKind := mkv.Kind()
-	wb := zo.GetDataWriteBatchFromPool()
+	dataWb := zo.GetDataWriteBatchFromPool()
+	defer zo.PutWriteBatchToPool(dataWb)
 	indexWb := zo.GetIndexWriteBatchFromPool()
-	defer func() {
-		zo.PutWriteBatchToPool(wb)
-		zo.PutWriteBatchToPool(indexWb)
-	}()
+	defer zo.PutWriteBatchToPool(indexWb)
 
 	var index, delCnt int64
 	var dataKey [base.DataKeyZsetLength]byte
 	var lowerBound [base.IndexKeyScoreLength]byte
 	var upperBound [base.IndexKeyScoreUpperBoundLength]byte
+
+	stopIndex := mkv.Size() - 1
+	keyVersion := mkv.Version()
+	keyKind := mkv.Kind()
+	isZsetOld := mkv.IsZsetOld()
 	base.EncodeZsetIndexKeyScore(lowerBound[:], keyVersion, khash, min)
 	base.EncodeZsetIndexKeyScoreUpperBound(upperBound[:], keyVersion, khash, max)
 	iterOpts := &bitskv.IterOptions{
@@ -429,10 +449,9 @@ func (zo *ZSetObject) ZRemRangeByScore(
 			rightPass = true
 		}
 		if leftPass && rightPass {
-			base.EncodeZsetDataKey(dataKey[:], mkv.Version(), khash, fp.Merge())
-			_ = wb.Delete(dataKey[:])
-
-			_ = indexWb.Delete(indexKey)
+			dataKeyLen := base.EncodeZsetDataKey(dataKey[:], mkv.Version(), khash, fp.Merge(), isZsetOld)
+			dataWb.Delete(dataKey[:dataKeyLen])
+			indexWb.Delete(indexKey)
 			delCnt++
 		}
 		if !rightPass {
@@ -445,7 +464,7 @@ func (zo *ZSetObject) ZRemRangeByScore(
 	}
 
 	if delCnt > 0 {
-		if err = wb.Commit(); err != nil {
+		if err = dataWb.Commit(); err != nil {
 			return 0, err
 		}
 		if err = indexWb.Commit(); err != nil {
@@ -482,20 +501,20 @@ func (zo *ZSetObject) ZRemRangeByLex(key []byte, khash uint32, min []byte, max [
 		rightNotLimit = true
 	}
 
-	stopIndex := mkv.Size() - 1
-	keyVersion := mkv.Version()
-	keyKind := mkv.Kind()
-	wb := zo.GetDataWriteBatchFromPool()
+	dataWb := zo.GetDataWriteBatchFromPool()
+	defer zo.PutWriteBatchToPool(dataWb)
 	indexWb := zo.GetIndexWriteBatchFromPool()
-	defer func() {
-		zo.PutWriteBatchToPool(wb)
-		zo.PutWriteBatchToPool(indexWb)
-	}()
+	defer zo.PutWriteBatchToPool(indexWb)
 
 	var index, delCnt int64
 	var dataKey [base.DataKeyZsetLength]byte
 	var lowerBound [base.DataKeyHeaderLength]byte
 	var upperBound [base.IndexKeyScoreLength]byte
+
+	stopIndex := mkv.Size() - 1
+	keyVersion := mkv.Version()
+	keyKind := mkv.Kind()
+	isZsetOld := mkv.IsZsetOld()
 	base.EncodeDataKeyLowerBound(lowerBound[:], keyVersion, khash)
 	base.EncodeZsetIndexKeyUpperBound(upperBound[:], keyVersion, khash)
 	iterOpts := &bitskv.IterOptions{
@@ -526,9 +545,9 @@ func (zo *ZSetObject) ZRemRangeByLex(key []byte, khash uint32, min []byte, max [
 			rightPass = true
 		}
 		if leftPass && rightPass {
-			base.EncodeZsetDataKey(dataKey[:], keyVersion, khash, member)
-			_ = wb.Delete(dataKey[:])
-			_ = indexWb.Delete(indexKey)
+			dataKeyLen := base.EncodeZsetDataKey(dataKey[:], keyVersion, khash, member, isZsetOld)
+			dataWb.Delete(dataKey[:dataKeyLen])
+			indexWb.Delete(indexKey)
 			delCnt++
 		}
 		if !rightPass {
@@ -541,7 +560,7 @@ func (zo *ZSetObject) ZRemRangeByLex(key []byte, khash uint32, min []byte, max [
 	}
 
 	if delCnt > 0 {
-		if err = wb.Commit(); err != nil {
+		if err = dataWb.Commit(); err != nil {
 			return 0, err
 		}
 		if err = indexWb.Commit(); err != nil {

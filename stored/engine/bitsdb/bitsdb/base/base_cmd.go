@@ -43,6 +43,12 @@ func (bo *BaseObject) Del(khash uint32, keys ...[]byte) (n int64, err error) {
 			unlockKey := bo.LockKey(khash)
 			defer unlockKey()
 
+			bitmapExist, _ := bo.BaseDb.ClearBitmap(key, true)
+			if bitmapExist {
+				n++
+				return
+			}
+
 			mk, mkCloser := EncodeMetaKey(key, khash)
 			defer mkCloser()
 			mkv, err := bo.BaseDb.BaseGetMetaWithoutValue(mk)
@@ -122,6 +128,10 @@ func (bo *BaseObject) BaseExpireAt(key []byte, khash uint32, when int64) (int64,
 	unlockKey := bo.LockKey(khash)
 	defer unlockKey()
 
+	if ret, ok := bo.bitmapMemExpireAt(key, uint64(when)); ok {
+		return ret, nil
+	}
+
 	mk, mkCloser := EncodeMetaKey(key, khash)
 	mkv, mvCloser, err := bo.BaseDb.BaseGetMetaWithValue(mk)
 	defer func() {
@@ -170,6 +180,13 @@ func (bo *BaseObject) BasePTTL(key []byte, khash uint32, p bool) (int64, error) 
 		return -2, err
 	}
 
+	if ttl, ok := bo.bitmapMemTTL(key); ok {
+		if !p && ttl > 0 {
+			ttl = tclock.SetTtlMilliToSec(ttl)
+		}
+		return ttl, nil
+	}
+
 	mk, mkCloser := EncodeMetaKey(key, khash)
 	defer mkCloser()
 	mkv, err := bo.BaseDb.BaseGetMetaWithoutValue(mk)
@@ -205,6 +222,10 @@ func (bo *BaseObject) BaseExists(key []byte, khash uint32) (int64, error) {
 		return 0, err
 	}
 
+	if ret, ok := bo.bitmapMemExists(key); ok {
+		return ret, nil
+	}
+
 	mkv, err := bo.BaseDb.BaseGetMetaDataCheckAlive(key, khash)
 	if mkv == nil {
 		return 0, err
@@ -217,6 +238,10 @@ func (bo *BaseObject) BaseExists(key []byte, khash uint32) (int64, error) {
 func (bo *BaseObject) BasePersist(key []byte, khash uint32) (int64, error) {
 	if err := btools.CheckKeySize(key); err != nil {
 		return 0, err
+	}
+
+	if ret, ok := bo.bitmapMemPersist(key); ok {
+		return ret, nil
 	}
 
 	unlockKey := bo.LockKey(khash)

@@ -15,11 +15,10 @@
 package raft
 
 import (
+	"github.com/cockroachdb/errors"
 	"github.com/zuoyebang/bitalostored/raft/internal/server"
 	"github.com/zuoyebang/bitalostored/raft/internal/settings"
 	pb "github.com/zuoyebang/bitalostored/raft/raftpb"
-
-	"github.com/cockroachdb/errors"
 )
 
 var (

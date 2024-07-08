@@ -160,6 +160,26 @@ func (mkv *MetaData) SetDataType(dt btools.DataType) {
 	mkv.dt = dt
 }
 
+func (mkv *MetaData) IsWrongType(exp btools.DataType) bool {
+	if exp == btools.NoneType {
+		return false
+	}
+
+	if exp == btools.ZSET {
+		if mkv.dt != btools.ZSET && mkv.dt != btools.ZSETOLD {
+			return true
+		}
+	} else if exp != mkv.dt {
+		return true
+	}
+
+	return false
+}
+
+func (mkv *MetaData) IsZsetOld() bool {
+	return mkv.dt == btools.ZSETOLD
+}
+
 func (mkv *MetaData) DecrSize(delat uint32) {
 	if delat > mkv.size {
 		mkv.size = 0

@@ -18,12 +18,12 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/cockroachdb/errors"
+	"github.com/lni/goutils/logutil"
+
 	"github.com/zuoyebang/bitalostored/raft/config"
 	"github.com/zuoyebang/bitalostored/raft/internal/server"
 	"github.com/zuoyebang/bitalostored/raft/raftio"
-
-	"github.com/cockroachdb/errors"
-	"github.com/lni/goutils/logutil"
 )
 
 var (

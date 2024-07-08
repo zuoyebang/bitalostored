@@ -26,18 +26,15 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/zuoyebang/bitalostored/raft/logger"
-
-	"github.com/zuoyebang/bitalostored/raft/raftio"
-
 	"github.com/cockroachdb/errors"
 	"github.com/lni/goutils/netutil"
 	"github.com/lni/goutils/stringutil"
-
 	"github.com/zuoyebang/bitalostored/raft/internal/fileutil"
 	"github.com/zuoyebang/bitalostored/raft/internal/id"
 	"github.com/zuoyebang/bitalostored/raft/internal/settings"
 	"github.com/zuoyebang/bitalostored/raft/internal/vfs"
+	"github.com/zuoyebang/bitalostored/raft/logger"
+	"github.com/zuoyebang/bitalostored/raft/raftio"
 	pb "github.com/zuoyebang/bitalostored/raft/raftpb"
 )
 
@@ -832,21 +829,21 @@ func getDefaultLogDBConfig() LogDBConfig {
 		KVMaxBackgroundFlushes:             2,
 		KVLRUCacheSize:                     0,
 		KVKeepLogFileNum:                   16,
-		KVWriteBufferSize:                  128 * 1024 * 1024,
-		KVMaxWriteBufferNumber:             6,
+		KVWriteBufferSize:                  128 << 20,
+		KVMaxWriteBufferNumber:             8,
 		KVLevel0FileNumCompactionTrigger:   16,
 		KVLevel0SlowdownWritesTrigger:      24,
-		KVLevel0StopWritesTrigger:          32,
-		KVMaxBytesForLevelBase:             4 * 1024 * 1024 * 1024,
+		KVLevel0StopWritesTrigger:          64,
+		KVMaxBytesForLevelBase:             4 << 30,
 		KVMaxBytesForLevelMultiplier:       2,
-		KVTargetFileSizeBase:               128 * 1024 * 1024,
+		KVTargetFileSizeBase:               128 << 20,
 		KVTargetFileSizeMultiplier:         2,
 		KVLevelCompactionDynamicLevelBytes: 0,
 		KVRecycleLogFileNum:                0,
 		KVNumOfLevels:                      7,
-		KVBlockSize:                        128 * 1024,
-		SaveBufferSize:                     32 * 1024,
-		MaxSaveBufferSize:                  64 * 1024 * 1024,
+		KVBlockSize:                        128 << 10,
+		SaveBufferSize:                     32 << 10,
+		MaxSaveBufferSize:                  64 << 20,
 	}
 }
 
@@ -923,7 +920,7 @@ func GetDefaultExpertConfig() ExpertConfig {
 // unless it is absoloutely necessary.
 type ExpertConfig struct {
 	// LogDBFactory is the factory function used for creating the LogDB instance
-	// used by NodeHost. When not set, the default built-in Pebble based LogDB
+	// used by NodeHost. When not set, the default built-in Bitable based LogDB
 	// implementation is used.
 	LogDBFactory LogDBFactory
 	// TransportFactory is an optional factory type used for creating the custom

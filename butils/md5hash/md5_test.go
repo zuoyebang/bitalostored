@@ -1,6 +1,16 @@
-// Copyright 2009 The Go Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style
-// license that can be found in the LICENSE file.
+// Copyright 2019-2024 Xu Ruibo (hustxurb@163.com) and Contributors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package md5hash
 
@@ -228,9 +238,10 @@ func TestAllocations(t *testing.T) {
 func TestMD5Hash(t *testing.T) {
 	in := []byte("hello, world!")
 	h, hi, lo := MD5Hash(in)
-	h2, hi2, lo2 := MD5Sum(in)
+	var h2 [Size]byte
+	hi2, lo2 := MD5Sum(in, h2[:])
 
-	if !bytes.Equal(h, h2) {
+	if !bytes.Equal(h, h2[:]) {
 		t.Errorf("MD5Hash(in) = %x, want %x", h, h2)
 	}
 	if hi != hi2 {

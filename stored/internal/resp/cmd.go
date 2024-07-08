@@ -15,14 +15,14 @@
 package resp
 
 const (
-	DBSYNC        string = "dbsync"
-	DBSYNCCONNECT string = "dbsyncconnect"
-
-	PING   string = "ping"
-	PONG   string = "pong"
-	ECHO   string = "echo"
-	TYPE   string = "type"
-	CONFIG string = "config"
+	PING     string = "ping"
+	PONG     string = "pong"
+	ECHO     string = "echo"
+	TYPE     string = "type"
+	CONFIG   string = "config"
+	INFO     string = "info"
+	TIME     string = "time"
+	SHUTDOWN string = "shutdown"
 
 	DEL         string = "del"
 	TTL         string = "ttl"
@@ -59,10 +59,8 @@ const (
 	GETRANGE string = "getrange"
 	SETRANGE string = "setrange"
 	STRLEN   string = "strlen"
-	GETSLICE string = "getslice"
 
 	BITCOUNT string = "bitcount"
-	BITOP    string = "bitop"
 	BITPOS   string = "bitpos"
 	GETBIT   string = "getbit"
 	SETBIT   string = "setbit"
@@ -156,10 +154,6 @@ const (
 	XHSCAN string = "xhscan"
 	XSSCAN string = "xsscan"
 	XZSCAN string = "xzscan"
-
-	SELECT string = "select"
-	INFO   string = "info"
-	TIME   string = "time"
 
 	GEOADD            string = "geoadd"
 	GEODIST           string = "geodist"
@@ -348,4 +342,9 @@ func IsWriteCmd(cmd string) bool {
 		return res
 	}
 	return false
+}
+
+type Command struct {
+	Raw  []byte
+	Args [][]byte
 }

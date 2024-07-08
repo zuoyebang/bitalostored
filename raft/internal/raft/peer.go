@@ -210,6 +210,7 @@ func (p *Peer) GetUpdate(moreToApply bool,
 	return ud, nil
 }
 
+// 包含lower 不包含upper
 func (p *Peer) GetUpdateForFlush(lower, upper uint64) ([]pb.Update, error) {
 	if lower >= upper {
 		return []pb.Update{}, nil

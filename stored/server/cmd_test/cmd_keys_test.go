@@ -18,11 +18,12 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/gomodule/redigo/redis"
 	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/btools"
 	"github.com/zuoyebang/bitalostored/stored/internal/errn"
 	"github.com/zuoyebang/bitalostored/stored/internal/resp"
 	"github.com/zuoyebang/bitalostored/stored/internal/tclock"
+
+	"github.com/gomodule/redigo/redis"
 )
 
 func TestKeysCmd(t *testing.T) {

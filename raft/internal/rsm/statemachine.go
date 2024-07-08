@@ -27,6 +27,9 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/errors"
+	"github.com/lni/goutils/logutil"
+
 	"github.com/zuoyebang/bitalostored/raft/config"
 	"github.com/zuoyebang/bitalostored/raft/internal/raft"
 	"github.com/zuoyebang/bitalostored/raft/internal/server"
@@ -36,9 +39,6 @@ import (
 	"github.com/zuoyebang/bitalostored/raft/logger"
 	pb "github.com/zuoyebang/bitalostored/raft/raftpb"
 	sm "github.com/zuoyebang/bitalostored/raft/statemachine"
-
-	"github.com/cockroachdb/errors"
-	"github.com/lni/goutils/logutil"
 )
 
 var (
@@ -386,7 +386,9 @@ func (s *StateMachine) recover(ss pb.Snapshot, init bool) error {
 func (s *StateMachine) doRecover(ss pb.Snapshot, init bool) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
+	//if s.GetLastApplied() >= ss.Index {
+	//	return raft.ErrSnapshotOutOfDate
+	//}
 	if s.aborted {
 		return sm.ErrSnapshotStopped
 	}
@@ -439,6 +441,16 @@ func (s *StateMachine) apply(ss pb.Snapshot, init bool) {
 	defer s.lastApplied.Unlock()
 	s.lastApplied.index, s.lastApplied.term = ss.Index, ss.Term
 	s.index, s.term = ss.Index, ss.Term
+	//s.lastApplied.index, s.lastApplied.term = ss.Index, ss.Term
+	//lastApplied从快照应用的OnDiskIndex开始
+	//if ss.Imported {
+	//	s.lastApplied.index, s.lastApplied.term = ss.Index, ss.Term
+	//	s.index, s.term = ss.Index, ss.Term
+	//} else {
+	//	//s.lastApplied.index, s.lastApplied.term = s.onDiskIndex, ss.Term
+	//	s.lastApplied.term = ss.Term
+	//	s.term = ss.Term
+	//}
 }
 
 func (s *StateMachine) applyOnDisk(ss pb.Snapshot, init bool) {
@@ -724,8 +736,13 @@ func (s *StateMachine) GetSyncedIndex() uint64 {
 }
 
 func (s *StateMachine) setSyncedIndex(index uint64) {
+	//defer func() {
+	//	plog.Infof("stack:%s", string(debug.Stack()))
+	//}()
+	//plog.Infof("synced index, s.GetSyncedIndex(): %d, index: %d", s.GetSyncedIndex(), index)
 	if s.GetSyncedIndex() > index {
 		plog.Panicf("synced index moving backward, s.GetSyncedIndex(): %d, index: %d", s.GetSyncedIndex(), index)
+		// panic("synced index moving backward")
 		return
 	}
 	atomic.StoreUint64(&s.syncedIndex, index)
@@ -931,6 +948,7 @@ func (s *StateMachine) handle(t []Task, a []sm.Entry) error {
 			}
 		}()
 		update, noop := getEntryTypes(entries)
+		// plog.Infof("statemachine get entries originLen:%d, applyLen:%d, batch :%v, update: %v, noop: %v", len(t[idx].Entries), len(entries), batch, update, noop)
 		membershipSnapshot := false
 		if batch && update && noop {
 			if err := s.handleBatch(entries, a, s.index); err != nil {
@@ -938,6 +956,7 @@ func (s *StateMachine) handle(t []Task, a []sm.Entry) error {
 			}
 		} else {
 			for i := range entries {
+				// 非replay的任务需要检查index值
 				if !t[idx].Replay && entries[i].Index <= s.index {
 					continue
 				}
@@ -1073,7 +1092,7 @@ func (s *StateMachine) handleBatch(input []pb.Entry, ents []sm.Entry, applied ui
 			s.setApplied(e.Index, e.Term)
 		}
 	}
-
+	//plog.Infof("StateMachine handleBatch input len:%d, entries len:%d", len(input), len(ents))
 	if len(ents) > 0 {
 		results, err := s.sm.BatchedUpdate(ents)
 		if err != nil {
@@ -1136,6 +1155,7 @@ func (s *StateMachine) noop(e pb.Entry) {
 	}
 }
 
+// result is a tuple of (result, should ignore, rejected, error)
 func (s *StateMachine) update(e pb.Entry) (sm.Result, bool, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

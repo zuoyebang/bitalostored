@@ -125,13 +125,16 @@ type LogConfig struct {
 }
 
 type ServerConfig struct {
-	ProductName string            `toml:"product_name" mapstructure:"product_name"`
-	Address     string            `toml:"address" mapstructure:"address"`
-	Maxclient   int64             `toml:"max_client" mapstructure:"max_client"`
-	Keepalive   timesize.Duration `toml:"keep_alive" mapstructure:"keep_alive"`
-	Maxprocs    int               `toml:"max_procs" mapstructure:"max_procs"`
-	ConfigFile  string            `toml:"config_file" mapstructure:"config_file"`
-	DBPath      string            `toml:"db_path" mapstructure:"db_path"`
+	ProductName          string            `toml:"product_name" mapstructure:"product_name"`
+	Address              string            `toml:"address" mapstructure:"address"`
+	Maxclient            int64             `toml:"max_client" mapstructure:"max_client"`
+	Keepalive            timesize.Duration `toml:"keep_alive" mapstructure:"keep_alive"`
+	Maxprocs             int               `toml:"max_procs" mapstructure:"max_procs"`
+	ConfigFile           string            `toml:"config_file" mapstructure:"config_file"`
+	DBPath               string            `toml:"db_path" mapstructure:"db_path"`
+	DisableEdgeTriggered bool              `toml:"disable_edge_triggered" mapstructure:"disable_edge_triggered"`
+	NetEventLoopNum      int               `toml:"net_event_loop_num" mapstructure:"net_event_loop_num"`
+	NetWriteBuffer       bytesize.Int64    `toml:"net_write_buffer" mapstructure:"net_write_buffer"`
 
 	SlowShield        bool              `toml:"slow_shield" mapstructure:"slow_shield"`
 	SlowTime          timesize.Duration `toml:"slow_time" mapstructure:"slow_time"`
@@ -150,7 +153,9 @@ type BitalosConfig struct {
 	WriteBufferSize                 bytesize.Int64 `toml:"write_buffer_size" mapstructure:"write_buffer_size"`
 	CacheSize                       bytesize.Int64 `toml:"cache_size" mapstructure:"cache_size"`
 	CacheHashSize                   int            `toml:"cache_hash_size" mapstructure:"cache_hash_size"`
+	CacheShardNum                   int            `toml:"cache_shard_num" mapstructure:"cache_shard_num"`
 	CacheEliminateDuration          int            `toml:"cache_eliminate_duration" mapstructure:"cache_eliminate_duration"`
+	EnableMissCache                 bool           `toml:"enable_miss_cache" mapstructure:"enable_miss_cache"`
 	CompactStartTime                int            `toml:"compact_start_time" mapstructure:"compact_start_time"`
 	CompactEndTime                  int            `toml:"compact_end_time" mapstructure:"compact_end_time"`
 	CompactInterval                 int            `toml:"compact_interval" mapstructure:"compact_interval"`
@@ -168,6 +173,8 @@ type BitalosConfig struct {
 	EnablePageBlockCompression      bool           `toml:"enable_page_block_compression" mapstructure:"enable_page_block_compression"`
 	PageBlockCacheSize              bytesize.Int64 `toml:"page_block_cache_size" mapstructure:"page_block_cache_size"`
 	EnableClockCache                bool           `toml:"enable_clock_cache" mapstructure:"enable_clock_cache"`
+	FlushPrefixDeleteKeyMultiplier  int            `toml:"flush_prefix_delete_key_multiplier" mapstructure:"flush_prefixdeletekey_multiplier"`
+	FlushFileLifetime               int            `toml:"flush_file_lifetime" mapstructure:"flush_file_lifetime"`
 }
 
 type RaftQueueConfig struct {
@@ -213,10 +220,8 @@ type RaftClusterConfig struct {
 
 type PluginConfig struct {
 	OpenRaft  bool   `toml:"open_raft" mapstructure:"open_raft"`
-	OpenPanic bool   `toml:"open_panic" mapstructure:"open_panic"`
 	OpenPprof bool   `toml:"open_pprof" mapstructure:"open_pprof"`
 	PprofAddr string `toml:"pprof_addr" mapstructure:"pprof_addr"`
-	OpenGoPs  bool   `toml:"open_gops" mapstructure:"open_gops"`
 }
 
 type DynamicDeadline struct {

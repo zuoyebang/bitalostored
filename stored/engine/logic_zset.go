@@ -19,13 +19,13 @@ import "github.com/zuoyebang/bitalostored/stored/engine/bitsdb/btools"
 func (b *Bitalos) ZAdd(
 	key []byte, khash uint32, args ...btools.ScorePair,
 ) (int64, error) {
-	return b.bitsdb.ZsetObj.ZAdd(key, khash, args...)
+	return b.bitsdb.ZsetObj.ZAdd(key, khash, false, args...)
 }
 
 func (b *Bitalos) ZIncrBy(
 	key []byte, khash uint32, delta float64, member []byte,
 ) (float64, error) {
-	return b.bitsdb.ZsetObj.ZIncrBy(key, khash, delta, member)
+	return b.bitsdb.ZsetObj.ZIncrBy(key, khash, false, delta, member)
 }
 
 func (b *Bitalos) ZRem(

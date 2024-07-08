@@ -24,6 +24,7 @@ import (
 	"github.com/zuoyebang/bitalostored/butils/extend"
 	"github.com/zuoyebang/bitalostored/butils/unsafe2"
 	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/btools"
+	"github.com/zuoyebang/bitalostored/stored/internal/errn"
 	"github.com/zuoyebang/bitalostored/stored/internal/resp"
 )
 
@@ -60,7 +61,7 @@ func parseXScanArgs(args [][]byte) (cursor []byte, match string, count int, err 
 		switch strings.ToUpper(unsafe2.String(args[i])) {
 		case "MATCH":
 			if i+1 >= len(args) {
-				err = resp.CmdParamsErr("scan")
+				err = errn.CmdParamsErr("scan")
 				return
 			}
 
@@ -68,7 +69,7 @@ func parseXScanArgs(args [][]byte) (cursor []byte, match string, count int, err 
 			i++
 		case "COUNT":
 			if i+1 >= len(args) {
-				err = resp.CmdParamsErr("scan")
+				err = errn.CmdParamsErr("scan")
 				return
 			}
 
@@ -105,7 +106,7 @@ func (scg scanCommandGroup) xhscanCommand(c *Client) error {
 	args := c.Args
 
 	if len(args) < 2 {
-		return resp.CmdParamsErr(resp.HSCAN)
+		return errn.CmdParamsErr(resp.HSCAN)
 	}
 
 	key := args[0]
@@ -133,7 +134,7 @@ func (scg scanCommandGroup) xhscanCommand(c *Client) error {
 	data[0] = cursor
 	data[1] = vv
 
-	c.RespWriter.WriteArray(data)
+	c.Writer.WriteArray(data)
 	return nil
 }
 
@@ -141,7 +142,7 @@ func (scg scanCommandGroup) xsscanCommand(c *Client) error {
 	args := c.Args
 
 	if len(args) < 2 {
-		return resp.CmdParamsErr(resp.SSCAN)
+		return errn.CmdParamsErr(resp.SSCAN)
 	}
 
 	key := args[0]
@@ -164,7 +165,7 @@ func (scg scanCommandGroup) xsscanCommand(c *Client) error {
 	data[0] = cursor
 	data[1] = ay
 
-	c.RespWriter.WriteArray(data)
+	c.Writer.WriteArray(data)
 	return nil
 }
 
@@ -172,7 +173,7 @@ func (scg scanCommandGroup) xzscanCommand(c *Client) error {
 	args := c.Args
 
 	if len(args) < 2 {
-		return resp.CmdParamsErr(resp.ZSCAN)
+		return errn.CmdParamsErr(resp.ZSCAN)
 	}
 
 	key := args[0]
@@ -199,14 +200,14 @@ func (scg scanCommandGroup) xzscanCommand(c *Client) error {
 	data[0] = cursor
 	data[1] = vv
 
-	c.RespWriter.WriteArray(data[:])
+	c.Writer.WriteArray(data[:])
 	return nil
 }
 
 func scanCommand(c *Client) error {
 	args := c.Args
 	if len(args) < 1 {
-		return resp.CmdParamsErr(resp.SCAN)
+		return errn.CmdParamsErr(resp.SCAN)
 	}
 
 	cursor, match, count, tp, err := parseGScanArgs(args)
@@ -215,7 +216,7 @@ func scanCommand(c *Client) error {
 	}
 
 	if count < 0 {
-		return resp.ErrSyntax
+		return errn.ErrSyntax
 	} else if count > 5000 {
 		return errors.New("ERR count more than 5000")
 	}
@@ -232,7 +233,7 @@ func scanCommand(c *Client) error {
 	if cur == nil {
 		cur = []byte("0")
 	}
-	c.RespWriter.WriteArray([]interface{}{cur, ks})
+	c.Writer.WriteArray([]interface{}{cur, ks})
 
 	return nil
 }
@@ -248,7 +249,7 @@ func parseGScanArgs(args [][]byte) (cursor []byte, match string, count int, tp s
 		switch strings.ToUpper(unsafe2.String(args[i])) {
 		case "MATCH":
 			if i+1 >= len(args) {
-				err = resp.CmdParamsErr("scan")
+				err = errn.CmdParamsErr("scan")
 				return
 			}
 
@@ -256,7 +257,7 @@ func parseGScanArgs(args [][]byte) (cursor []byte, match string, count int, tp s
 			i++
 		case "COUNT":
 			if i+1 >= len(args) {
-				err = resp.CmdParamsErr("scan")
+				err = errn.CmdParamsErr("scan")
 				return
 			}
 
@@ -268,7 +269,7 @@ func parseGScanArgs(args [][]byte) (cursor []byte, match string, count int, tp s
 			i++
 		case "TYPE":
 			if i+1 >= len(args) {
-				err = resp.CmdParamsErr("scan")
+				err = errn.CmdParamsErr("scan")
 				return
 			}
 

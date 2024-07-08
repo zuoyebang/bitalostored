@@ -12,12 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-/*
-Package logdb implements the persistent log storage used by Dragonboat.
-
-This package is internally used by Dragonboat, applications are not expected
-to import this package.
-*/
 package logdb
 
 import (

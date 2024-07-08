@@ -27,18 +27,17 @@ import (
 	"testing"
 	"time"
 
-	"github.com/zuoyebang/bitalostored/raft/config"
-	"github.com/zuoyebang/bitalostored/raft/raftio"
-	"github.com/zuoyebang/bitalostored/raft/raftpb"
-
 	"github.com/lni/goutils/leaktest"
 	"github.com/lni/goutils/netutil"
 	"github.com/lni/goutils/syncutil"
 
+	"github.com/zuoyebang/bitalostored/raft/config"
 	"github.com/zuoyebang/bitalostored/raft/internal/rsm"
 	"github.com/zuoyebang/bitalostored/raft/internal/server"
 	"github.com/zuoyebang/bitalostored/raft/internal/settings"
 	"github.com/zuoyebang/bitalostored/raft/internal/vfs"
+	"github.com/zuoyebang/bitalostored/raft/raftio"
+	"github.com/zuoyebang/bitalostored/raft/raftpb"
 )
 
 var serverAddress = fmt.Sprintf("localhost:%d", getTestPort())

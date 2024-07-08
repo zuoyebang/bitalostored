@@ -15,6 +15,7 @@
 package server
 
 import (
+	"math"
 	"runtime"
 	"sync"
 	"sync/atomic"
@@ -23,6 +24,7 @@ import (
 	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/bitsdb"
 	"github.com/zuoyebang/bitalostored/stored/internal/bytepools"
 	"github.com/zuoyebang/bitalostored/stored/internal/config"
+	"github.com/zuoyebang/bitalostored/stored/internal/trycatch"
 	"github.com/zuoyebang/bitalostored/stored/internal/utils"
 
 	"github.com/zuoyebang/bitalostored/butils"
@@ -49,20 +51,6 @@ func (sinfo *SInfo) Marshal() ([]byte, func()) {
 	pos += sinfo.BitalosdbUsage.AppendTo(buf, pos)
 	pos += sinfo.RuntimeStats.AppendTo(buf, pos)
 	return buf[:pos], closer
-}
-
-func NewSinfo() *SInfo {
-	sinfo := &SInfo{
-		Server:         SinfoServer{cache: make([]byte, 0, 2048)},
-		Client:         SinfoClient{cache: make([]byte, 0, 256)},
-		Cluster:        SinfoCluster{cache: make([]byte, 0, 2048)},
-		Stats:          SinfoStats{cache: make([]byte, 0, 2048)},
-		Data:           SinfoData{cache: make([]byte, 0, 1024)},
-		RuntimeStats:   SRuntimeStats{cache: make([]byte, 0, 3072)},
-		BitalosdbUsage: bitsdb.NewBitsUsage(),
-	}
-
-	return sinfo
 }
 
 type SinfoCluster struct {
@@ -118,7 +106,6 @@ func (sc *SinfoCluster) UpdateCache() {
 }
 
 type SinfoServer struct {
-	MaxProcs      int    `json:"maxprocs"`
 	ProcessId     int    `json:"process_id"`
 	StartTime     string `json:"start_time"`
 	ServerAddress string `json:"server_address"`
@@ -127,6 +114,7 @@ type SinfoServer struct {
 	GitVersion    string `json:"git_version"`
 	Compile       string `json:"compile"`
 	ConfigFile    string `json:"config_file"`
+	AutoCompact   bool   `json:"auto_compact"`
 
 	mutex sync.RWMutex
 	cache []byte
@@ -155,7 +143,6 @@ func (ss *SinfoServer) UpdateCache() {
 	ss.cache = ss.cache[:0]
 	ss.cache = append(ss.cache, []byte("# Server\n")...)
 
-	ss.cache = utils.AppendInfoInt(ss.cache, "maxprocs:", int64(ss.MaxProcs))
 	ss.cache = utils.AppendInfoInt(ss.cache, "process_id:", int64(ss.ProcessId))
 	ss.cache = utils.AppendInfoString(ss.cache, "start_time:", ss.StartTime)
 	ss.cache = utils.AppendInfoInt(ss.cache, "max_client:", ss.MaxClient)
@@ -164,6 +151,7 @@ func (ss *SinfoServer) UpdateCache() {
 	ss.cache = utils.AppendInfoString(ss.cache, "git_version:", ss.GitVersion)
 	ss.cache = utils.AppendInfoString(ss.cache, "compile:", ss.Compile)
 	ss.cache = utils.AppendInfoString(ss.cache, "config_file:", ss.ConfigFile)
+	ss.cache = utils.AppendInfoString(ss.cache, "auto_compact:", utils.BoolToString(ss.AutoCompact))
 	ss.cache = append(ss.cache, '\n')
 }
 
@@ -490,4 +478,72 @@ func (srs *SRuntimeStats) Samples() {
 	srs.CPU = sysUsage.CPU
 
 	srs.UpdateCache()
+}
+
+const (
+	infoRuntimeInterval = 4
+	infoClientInterval  = 16
+	infoDiskInterval    = 120
+)
+
+func RunInfoCollection(s *Server) {
+	go func() {
+		dataInterval := 60
+		collectInfo := func() {
+			defer func() {
+				trycatch.Panic("plugin doinfo", recover())
+			}()
+
+			start := time.Now()
+			total := s.Info.Stats.TotolCmd.Load()
+
+			time.Sleep(time.Second)
+
+			delta := s.Info.Stats.TotolCmd.Load() - total
+			normalized := math.Max(0, float64(delta)) * float64(time.Second) / float64(time.Since(start))
+			qps := uint64(normalized + 0.5)
+			s.Info.Stats.QPS.Store(qps)
+			db := s.GetDB()
+			if db != nil {
+				db.SetQPS(qps)
+				s.Info.Stats.RaftLogIndex = db.Meta.GetUpdateIndex()
+				if db.Migrate != nil {
+					s.Info.Stats.IsMigrate.Store(db.Migrate.IsMigrate.Load())
+				}
+				s.Info.Stats.IsDelExpire = db.GetIsDelExpire()
+			}
+
+			singleDegradeChange := s.Info.Server.SingleDegrade != config.GlobalConfig.Server.DegradeSingleNode
+			s.Info.Server.SingleDegrade = config.GlobalConfig.Server.DegradeSingleNode
+			if singleDegradeChange {
+				s.Info.Server.UpdateCache()
+			}
+
+			if dataInterval%infoRuntimeInterval == 0 {
+				s.Info.Stats.UpdateCache()
+				s.Info.RuntimeStats.Samples()
+			}
+
+			if dataInterval%infoClientInterval == 0 {
+				s.Info.Client.UpdateCache()
+			}
+
+			if dataInterval%infoDiskInterval == 0 {
+				s.Info.Data.Samples()
+				if db != nil {
+					db.BitalosdbUsage(s.Info.BitalosdbUsage)
+				}
+			}
+
+			dataInterval++
+		}
+
+		for {
+			if s.IsClosed() {
+				return
+			}
+
+			collectInfo()
+		}
+	}()
 }

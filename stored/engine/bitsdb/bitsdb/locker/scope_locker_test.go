@@ -18,13 +18,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/btools"
-
 	"github.com/zuoyebang/bitalostored/butils/hash"
 )
 
 func TestScopeLocker(t *testing.T) {
-	l := NewScopeLocker(btools.KeyLockerPoolCap)
+	l := NewScopeLocker(true)
 	key := []byte("a")
 	khash := hash.Fnv32(key)
 	unlockFunc := l.LockWriteKey(khash)
