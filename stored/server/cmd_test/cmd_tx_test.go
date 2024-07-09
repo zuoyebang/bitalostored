@@ -16,11 +16,11 @@ package cmd_test
 
 import (
 	"bytes"
-	"github.com/zuoyebang/bitalostored/stored/internal/errn"
 	"testing"
 	"time"
 
 	"github.com/gomodule/redigo/redis"
+	"github.com/zuoyebang/bitalostored/stored/internal/errn"
 )
 
 func isSkipTestTx() bool {

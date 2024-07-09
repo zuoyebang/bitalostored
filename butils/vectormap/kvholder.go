@@ -234,8 +234,5 @@ func LoadUint32(buf []byte) (dest uint32) {
 
 //go:inline
 func Cap4Size(vSize uint32) uint32 {
-	if vSize&3 != 0 {
-		return (vSize>>2 + 1) << 2
-	}
-	return vSize
+	return (vSize + 3) &^ 3
 }

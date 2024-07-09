@@ -22,10 +22,9 @@ import (
 	"strings"
 	"sync"
 
+	lua "github.com/yuin/gopher-lua"
 	"github.com/zuoyebang/bitalostored/stored/internal/luajson"
 	"github.com/zuoyebang/bitalostored/stored/internal/utils"
-
-	lua "github.com/yuin/gopher-lua"
 )
 
 var luaClientPool sync.Pool

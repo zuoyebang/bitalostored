@@ -20,9 +20,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/zuoyebang/bitalostored/stored/internal/errn"
-
 	"github.com/zuoyebang/bitalostored/butils/unsafe2"
+	"github.com/zuoyebang/bitalostored/stored/internal/errn"
 )
 
 const (

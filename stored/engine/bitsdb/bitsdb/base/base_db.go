@@ -19,16 +19,14 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/zuoyebang/bitalostored/butils/vectormap"
 	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/bitsdb/locker"
 	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/bitskv"
 	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/bitskv/kv"
 	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/btools"
 	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/dbconfig"
-
 	"github.com/zuoyebang/bitalostored/stored/internal/errn"
 	"github.com/zuoyebang/bitalostored/stored/internal/log"
-
-	"github.com/zuoyebang/bitalostored/butils/vectormap"
 )
 
 const (

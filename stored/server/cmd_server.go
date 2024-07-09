@@ -19,10 +19,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/zuoyebang/bitalostored/butils/extend"
 	"github.com/zuoyebang/bitalostored/stored/internal/errn"
 	"github.com/zuoyebang/bitalostored/stored/internal/resp"
-
-	"github.com/zuoyebang/bitalostored/butils/extend"
 )
 
 func init() {

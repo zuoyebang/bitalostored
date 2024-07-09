@@ -15,8 +15,9 @@
 package locker
 
 import (
-	"github.com/zuoyebang/bitalostored/stored/internal/resp"
 	"sync"
+
+	"github.com/zuoyebang/bitalostored/stored/internal/resp"
 )
 
 const (

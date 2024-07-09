@@ -22,10 +22,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/zuoyebang/bitalostored/stored/internal/resp"
-
 	"github.com/gomodule/redigo/redis"
 	"github.com/stretchr/testify/require"
+	"github.com/zuoyebang/bitalostored/stored/internal/resp"
 )
 
 const defaultValBytes = "1qaz2wsx3edc4rfv5tgb6yhn7ujm8ik9ol0p1qaz2wsx3edc4rfv5tgb6yhn7ujm8ik9ol0p1qaz2wsx3edc4rfv5tgb6yhn7ujm8ik9ol0p"

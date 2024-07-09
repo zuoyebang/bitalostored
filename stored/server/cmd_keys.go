@@ -15,11 +15,10 @@
 package server
 
 import (
+	"github.com/zuoyebang/bitalostored/butils/unsafe2"
 	"github.com/zuoyebang/bitalostored/stored/internal/errn"
 	"github.com/zuoyebang/bitalostored/stored/internal/resp"
 	"github.com/zuoyebang/bitalostored/stored/internal/utils"
-
-	"github.com/zuoyebang/bitalostored/butils/unsafe2"
 )
 
 func init() {

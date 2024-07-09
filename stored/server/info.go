@@ -21,13 +21,12 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/zuoyebang/bitalostored/butils"
 	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/bitsdb"
 	"github.com/zuoyebang/bitalostored/stored/internal/bytepools"
 	"github.com/zuoyebang/bitalostored/stored/internal/config"
 	"github.com/zuoyebang/bitalostored/stored/internal/trycatch"
 	"github.com/zuoyebang/bitalostored/stored/internal/utils"
-
-	"github.com/zuoyebang/bitalostored/butils"
 )
 
 type SInfo struct {
