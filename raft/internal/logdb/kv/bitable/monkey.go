@@ -1,4 +1,4 @@
-// Copyright 2017-2020 Lei Ni (nilei81@gmail.com) and other contributors.
+// Copyright 2017-2019 Lei Ni (nilei81@gmail.com) and other contributors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,10 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:build !dragonboat_rocksdb_test
-// +build !dragonboat_rocksdb_test
+//go:build dragonboat_monkeytest
+// +build dragonboat_monkeytest
 
-package invariants
+package bitable
 
-// DragonboatRocksDBTest is the flag indicating whether it is for rocksdb test
-const DragonboatRocksDBTest = false
+const (
+	inMonkeyTesting = true
+)

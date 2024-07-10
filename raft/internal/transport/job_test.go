@@ -18,10 +18,9 @@ import (
 	"context"
 	"testing"
 
-	"github.com/zuoyebang/bitalostored/raft/config"
-
 	"github.com/lni/goutils/syncutil"
 
+	"github.com/zuoyebang/bitalostored/raft/config"
 	"github.com/zuoyebang/bitalostored/raft/internal/vfs"
 	pb "github.com/zuoyebang/bitalostored/raft/raftpb"
 )

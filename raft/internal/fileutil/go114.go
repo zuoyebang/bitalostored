@@ -23,12 +23,6 @@ import (
 	"os"
 )
 
-// TODO:
-// io/iotuil has been deprecated in go1.16
-// ioutil.Discard, ioutil.TempFile and other functions have been moved to the
-// other stdlib packages (io and os) in go1.16.
-// remove this file when we require go1.16 for dragonboat
-
 // Discard ...
 var Discard = ioutil.Discard
 

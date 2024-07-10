@@ -20,13 +20,12 @@ import (
 	"strings"
 	"unsafe"
 
-	"github.com/zuoyebang/bitalostored/raft/client"
-	"github.com/zuoyebang/bitalostored/raft/logger"
-
 	"github.com/lni/goutils/stringutil"
 
+	"github.com/zuoyebang/bitalostored/raft/client"
 	"github.com/zuoyebang/bitalostored/raft/internal/settings"
 	"github.com/zuoyebang/bitalostored/raft/internal/vfs"
+	"github.com/zuoyebang/bitalostored/raft/logger"
 )
 
 var (

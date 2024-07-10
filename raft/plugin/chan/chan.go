@@ -18,12 +18,12 @@ import (
 	"context"
 	"sync"
 
+	"github.com/cockroachdb/errors"
+	"github.com/lni/goutils/syncutil"
+
 	"github.com/zuoyebang/bitalostored/raft/config"
 	"github.com/zuoyebang/bitalostored/raft/raftio"
 	pb "github.com/zuoyebang/bitalostored/raft/raftpb"
-
-	"github.com/cockroachdb/errors"
-	"github.com/lni/goutils/syncutil"
 )
 
 var (

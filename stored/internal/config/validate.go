@@ -25,6 +25,15 @@ import (
 	"github.com/zuoyebang/bitalostored/stored/internal/log"
 )
 
+const (
+	MinProcs           = 2
+	MaxProcs           = 40
+	MinCores           = 1
+	MaxCores           = 20
+	MinNetEventLoopNum = 8
+	MaxNetEventLoopNum = 256
+)
+
 func (c *Config) Validate() error {
 	if err := c.checkServerConfig(); err != nil {
 		return err
@@ -60,7 +69,7 @@ func (c *Config) checkServerConfig() error {
 	}
 
 	if c.Server.Keepalive <= 0 {
-		c.Server.Keepalive = timesize.Duration(3600 * time.Second)
+		c.Server.Keepalive = timesize.Duration(1800 * time.Second)
 	}
 	if c.Server.SlowTime <= 0 {
 		c.Server.SlowTime = timesize.Duration(30 * time.Millisecond)
@@ -68,8 +77,20 @@ func (c *Config) checkServerConfig() error {
 	if c.Server.Maxclient < 5000 {
 		c.Server.Maxclient = 5000
 	}
-	if c.Server.Maxprocs < 1 {
-		c.Server.Maxprocs = 1
+	if c.Server.Maxprocs < MinProcs {
+		c.Server.Maxprocs = MinProcs
+	}
+	if c.Server.Maxprocs > MaxProcs {
+		c.Server.Maxprocs = MaxProcs
+	}
+	if c.Server.NetEventLoopNum < c.Server.Maxprocs*2 {
+		c.Server.NetEventLoopNum = c.Server.Maxprocs * 2
+	}
+	if c.Server.NetEventLoopNum < MinNetEventLoopNum {
+		c.Server.NetEventLoopNum = MinNetEventLoopNum
+	}
+	if c.Server.NetEventLoopNum > MaxNetEventLoopNum {
+		c.Server.NetEventLoopNum = MaxNetEventLoopNum
 	}
 
 	return nil

@@ -85,7 +85,7 @@ func (bdb *BitsDB) Scan(
 			return nil, nil, err
 		}
 
-		if dt != btools.NoneType && mkv.GetDataType() != dt {
+		if mkv.IsWrongType(dt) {
 			continue
 		}
 

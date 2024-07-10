@@ -22,9 +22,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/zuoyebang/bitalostored/stored/internal/resp"
+
 	"github.com/gomodule/redigo/redis"
 	"github.com/stretchr/testify/require"
-	"github.com/zuoyebang/bitalostored/stored/internal/resp"
 )
 
 func TestHash(t *testing.T) {

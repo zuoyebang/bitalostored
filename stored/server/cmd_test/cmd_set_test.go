@@ -17,8 +17,9 @@ package cmd_test
 import (
 	"testing"
 
+	"github.com/zuoyebang/bitalostored/stored/internal/errn"
+
 	"github.com/gomodule/redigo/redis"
-	"github.com/zuoyebang/bitalostored/stored/internal/resp"
 )
 
 func TestSet(t *testing.T) {
@@ -277,13 +278,13 @@ func TestSetRandMember(t *testing.T) {
 	for i := 0; i < readNum; i++ {
 		if _, err := redis.Values(c.Do("srandmember", key, 2, -1)); err == nil {
 			t.Fatal(" err should not nil")
-		} else if err.Error() != resp.ErrSyntax.Error() {
+		} else if err.Error() != errn.ErrSyntax.Error() {
 			t.Fatal(err)
 		}
 
 		if _, err := redis.Values(c.Do("srandmember", key, 1.3)); err == nil {
 			t.Fatal(" err should not nil")
-		} else if err.Error() != resp.ErrValue.Error() {
+		} else if err.Error() != errn.ErrValue.Error() {
 			t.Fatal(err)
 		}
 

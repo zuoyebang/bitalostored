@@ -15,10 +15,11 @@
 package server
 
 import (
+	"strconv"
 	"strings"
 
 	"github.com/zuoyebang/bitalostored/butils/unsafe2"
-	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/btools"
+	"github.com/zuoyebang/bitalostored/stored/internal/errn"
 	"github.com/zuoyebang/bitalostored/stored/internal/resp"
 )
 
@@ -35,23 +36,39 @@ func init() {
 
 func configCommand(c *Client) error {
 	args := c.Args
-	if len(args) != 2 {
-		return resp.CmdParamsErr(resp.CONFIG)
+	if len(args) < 2 {
+		return errn.CmdParamsErr(resp.CONFIG)
 	}
 
 	op := strings.ToUpper(unsafe2.String(args[0]))
-	if op != CONFIGGET {
-		return resp.ErrNotImplement
+	if op != CONFIGSET {
+		return errn.ErrNotImplement
 	}
 
-	configName := strings.ToLower(unsafe2.String(args[1]))
-	if configName == "maxmemory" {
-		fvPair := btools.FVPair{
-			Field: []byte("maxmemory"),
-			Value: []byte("268435456"),
+	configName := strings.ToUpper(unsafe2.String(args[1]))
+	if configName == "AUTOCOMPACT" {
+		if len(args) < 3 {
+			return errn.CmdParamsErr(resp.CONFIG)
 		}
-		c.RespWriter.WriteFVPairArray([]btools.FVPair{fvPair})
-	}
+		configValue, err := strconv.Atoi(string(args[2]))
+		if err != nil {
+			return err
+		}
 
+		db := c.server.GetDB()
+		if db != nil {
+			if configValue == 1 {
+				db.SetAutoCompact(true)
+				c.server.Info.Server.AutoCompact = true
+			} else {
+				db.SetAutoCompact(false)
+				c.server.Info.Server.AutoCompact = false
+			}
+			c.server.Info.Server.UpdateCache()
+			c.Writer.WriteStatus(resp.ReplyOK)
+		}
+	} else {
+		return errn.ErrNotImplement
+	}
 	return nil
 }

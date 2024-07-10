@@ -18,11 +18,11 @@ import (
 	"io"
 	"sync"
 
+	"github.com/cockroachdb/errors"
+
 	"github.com/zuoyebang/bitalostored/raft/config"
 	pb "github.com/zuoyebang/bitalostored/raft/raftpb"
 	sm "github.com/zuoyebang/bitalostored/raft/statemachine"
-
-	"github.com/cockroachdb/errors"
 )
 
 var (

@@ -20,9 +20,7 @@ import (
 	"errors"
 	"sync"
 	"sync/atomic"
-	"time"
 
-	"github.com/panjf2000/ants/v2"
 	"github.com/zuoyebang/bitalostored/butils"
 	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/bitsdb/base"
 	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/bitsdb/hash"
@@ -47,21 +45,15 @@ type BitsDB struct {
 	SetObj    *set.SetObject
 	ZsetObj   *zset.ZSetObject
 
-	baseDb         *base.BaseDB
-	isDelExpireRun atomic.Int32
-	isCheckpoint   atomic.Bool
-	ckpExpLock     sync.Mutex
-	flushTask      *FlushTask
-	isRaftRestore  bool
-	statQPS        atomic.Uint64
-
-	delExpireStat struct {
-		expireDbKeys     atomic.Uint64
-		metaDbKeys       atomic.Uint64
-		zsetDataDbKeys   atomic.Uint64
-		zsetIndexDbKeys  atomic.Uint64
-		prefixDeleteKeys atomic.Uint64
-	}
+	baseDb            *base.BaseDB
+	isDelExpireRun    atomic.Int32
+	isCheckpoint      atomic.Bool
+	ckpExpLock        sync.Mutex
+	flushTask         *FlushTask
+	isRaftRestore     bool
+	statQPS           atomic.Uint64
+	delExpireKeys     atomic.Uint64
+	delExpireZsetKeys atomic.Uint64
 }
 
 func NewBitsDB(cfg *dbconfig.Config, meta *dbmeta.Meta) (*BitsDB, error) {
@@ -77,7 +69,6 @@ func NewBitsDB(cfg *dbconfig.Config, meta *dbmeta.Meta) (*BitsDB, error) {
 		flushTask:     flushTask,
 		isRaftRestore: cfg.EnableRaftlogRestore,
 	}
-
 	cfg.IOWriteLoadThresholdFunc = bdb.CheckIOWriteLoadThreshold
 	cfg.KvCheckExpireFunc = bdb.CheckKvExpire
 	cfg.KvTimestampFunc = bdb.GetMetaValueTimestamp
@@ -85,24 +76,14 @@ func NewBitsDB(cfg *dbconfig.Config, meta *dbmeta.Meta) (*BitsDB, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	bdb.baseDb = baseDb
 	bdb.StringObj = rstring.NewStringObject(baseDb, cfg)
 	bdb.ZsetObj = zset.NewZSetObject(baseDb, cfg)
 	bdb.HashObj = hash.NewHashObject(baseDb, cfg)
 	bdb.SetObj = set.NewSetObject(baseDb, cfg)
 	bdb.ListObj = list.NewListObject(baseDb, cfg)
-
-	delExpirePool, err := ants.NewPoolWithFunc(cfg.DelExpireDataPoolNum,
-		bdb.deleteExpireDataFunc,
-		ants.WithExpiryDuration(1*time.Hour),
-		ants.WithPreAlloc(true))
-	if err != nil {
-		return nil, err
-	}
-	bdb.baseDb.SetDelExpireDataPool(delExpirePool)
-
 	bdb.flushTask.initTask(bdb)
-
 	bdb.baseDb.SetReady()
 	return bdb, nil
 }
@@ -156,6 +137,7 @@ func (bdb *BitsDB) ClearCache() {
 
 func (bdb *BitsDB) Close() {
 	log.Infof("bitsDB Close start")
+	bdb.baseDb.FlushBitmap()
 	bdb.Flush(btools.FlushTypeDbClose, 0)
 	bdb.flushTask.Close()
 
@@ -333,7 +315,7 @@ func (bdb *BitsDB) Flush(reason btools.FlushType, compactIndex uint64) {
 		task.index = bdb.flushTask.meta.GetUpdateIndex()
 	}
 
-	if flushCh, err := bdb.flushTask.AyncFlush(task); err != nil {
+	if flushCh, err := bdb.flushTask.AsyncFlush(task); err != nil {
 		log.Errorf("async flush err:%s", err)
 	} else {
 		<-flushCh

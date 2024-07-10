@@ -38,9 +38,8 @@ import (
 	"sort"
 	"testing"
 
-	pb "github.com/zuoyebang/bitalostored/raft/raftpb"
-
 	"github.com/zuoyebang/bitalostored/raft/logger"
+	pb "github.com/zuoyebang/bitalostored/raft/raftpb"
 )
 
 func TestFollowerUpdateTermFromMessage(t *testing.T) {

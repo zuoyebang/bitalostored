@@ -83,7 +83,7 @@ func (bo *BaseObject) DeleteZsetIndexKeyByExpire(keyVersion uint64, keyHash uint
 	return wb.Commit()
 }
 
-func (bo *BaseObject) DeleteZsetKeyByExpire(keyVersion uint64, keyKind uint8, khash uint32) (bool, uint64, error) {
+func (bo *BaseObject) DeleteZsetOldKeyByExpire(keyVersion uint64, keyKind uint8, khash uint32) (bool, uint64, error) {
 	var cnt uint64
 	var dataKey [DataKeyZsetLength]byte
 	var lowerBound [DataKeyHeaderLength]byte
@@ -99,17 +99,17 @@ func (bo *BaseObject) DeleteZsetKeyByExpire(keyVersion uint64, keyKind uint8, kh
 	indexWb := bo.GetIndexWriteBatchFromPool()
 	dataWb := bo.GetDataWriteBatchFromPool()
 	defer func() {
+		it.Close()
 		bo.PutWriteBatchToPool(indexWb)
 		bo.PutWriteBatchToPool(dataWb)
-		it.Close()
 	}()
 
 	for it.Seek(lowerBound[:]); it.Valid() && it.ValidForPrefix(lowerBound[:]); it.Next() {
 		indexKey := it.RawKey()
 		_ = indexWb.Delete(indexKey)
 		_, _, fp := DecodeZsetIndexKey(keyKind, indexKey, it.RawValue())
-		EncodeZsetDataKey(dataKey[:], keyVersion, khash, fp.Merge())
-		_ = dataWb.Delete(dataKey[:])
+		dataKeyLen := EncodeZsetDataKey(dataKey[:], keyVersion, khash, fp.Merge(), true)
+		_ = dataWb.Delete(dataKey[:dataKeyLen])
 		cnt++
 		if cnt >= DeleteMixFieldMaxNum {
 			break
@@ -119,11 +119,9 @@ func (bo *BaseObject) DeleteZsetKeyByExpire(keyVersion uint64, keyKind uint8, kh
 	if cnt == 0 {
 		return true, 0, nil
 	}
-
 	if err := dataWb.Commit(); err != nil {
 		return false, 0, err
 	}
-
 	if err := indexWb.Commit(); err != nil {
 		return false, 0, err
 	}

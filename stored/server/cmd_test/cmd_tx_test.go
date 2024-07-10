@@ -20,9 +20,18 @@ import (
 	"time"
 
 	"github.com/gomodule/redigo/redis"
+	"github.com/zuoyebang/bitalostored/stored/internal/errn"
 )
 
+func isSkipTestTx() bool {
+	return skipTx
+}
+
 func TestTxMulti(t *testing.T) {
+	if isSkipTestTx() {
+		return
+	}
+
 	c := getTestConn()
 	defer c.Close()
 
@@ -36,6 +45,10 @@ func TestTxMulti(t *testing.T) {
 }
 
 func TestTxMultiNested(t *testing.T) {
+	if isSkipTestTx() {
+		return
+	}
+
 	c := getTestConn()
 	defer c.Close()
 
@@ -47,13 +60,17 @@ func TestTxMultiNested(t *testing.T) {
 		}
 	}
 	if _, err := c.Do("multi"); err != nil {
-		if err.Error() != "ERR MULTI calls can not be nested" {
+		if err.Error() != errn.ErrMultiNested.Error() {
 			t.Fatal(err)
 		}
 	}
 }
 
 func TestTxPrepareExecNoWatch(t *testing.T) {
+	if isSkipTestTx() {
+		return
+	}
+
 	c := getTestConn()
 	defer c.Close()
 
@@ -88,20 +105,23 @@ func TestTxPrepareExecNoWatch(t *testing.T) {
 		}
 	}
 
-	if res, err := redis.Values(c.Do("exec")); err != nil {
+	if res, err := redis.ByteSlices(c.Do("exec")); err != nil {
 		t.Fatal(err)
 	} else {
 		if len(res) != 1 {
 			t.Fatal("res len != 1", len(res))
 		}
-		getv := res[0].([]byte)
-		if !bytes.Equal(getv, []byte(val)) {
-			t.Fatalf("res actual:%s expect:%s", getv, val)
+		if !bytes.Equal(res[0], []byte(val)) {
+			t.Fatalf("res actual:%s expect:%s", res[0], val)
 		}
 	}
 }
 
 func TestTxPrepareDiscardNoWatch(t *testing.T) {
+	if isSkipTestTx() {
+		return
+	}
+
 	c := getTestConn()
 	defer c.Close()
 
@@ -146,6 +166,10 @@ func TestTxPrepareDiscardNoWatch(t *testing.T) {
 }
 
 func TestTxPrepareExecWatchNoChange(t *testing.T) {
+	if isSkipTestTx() {
+		return
+	}
+
 	c := getTestConn()
 	defer c.Close()
 
@@ -184,20 +208,23 @@ func TestTxPrepareExecWatchNoChange(t *testing.T) {
 		}
 	}
 
-	if res, err := redis.Values(c.Do("exec")); err != nil {
+	if res, err := redis.ByteSlices(c.Do("exec")); err != nil {
 		t.Fatal(err)
 	} else {
 		if len(res) != 1 {
 			t.Fatal("res len != 1", len(res))
 		}
-		getv := res[0].([]byte)
-		if !bytes.Equal(getv, []byte(val)) {
-			t.Fatalf("res actual:%s expect:%s", getv, val)
+		if !bytes.Equal(res[0], []byte(val)) {
+			t.Fatalf("res actual:%s expect:%s", res[0], val)
 		}
 	}
 }
 
 func TestTxWatch(t *testing.T) {
+	if isSkipTestTx() {
+		return
+	}
+
 	c := getTestConn()
 	defer c.Close()
 
@@ -242,20 +269,23 @@ func TestTxWatch(t *testing.T) {
 		}
 	}
 
-	if res, err := redis.Values(c.Do("exec")); err != nil {
+	if res, err := redis.ByteSlices(c.Do("exec")); err != nil {
 		t.Fatal(err)
 	} else {
 		if len(res) != 1 {
 			t.Fatal("res len != 1", len(res))
 		}
-		getv := res[0].([]byte)
-		if !bytes.Equal(getv, []byte(val)) {
-			t.Fatalf("res actual:%s expect:%s", getv, val)
+		if !bytes.Equal(res[0], []byte(val)) {
+			t.Fatalf("res actual:%s expect:%s", res[0], val)
 		}
 	}
 }
 
 func TestTxWatchInMulti(t *testing.T) {
+	if isSkipTestTx() {
+		return
+	}
+
 	c := getTestConn()
 	defer c.Close()
 
@@ -282,6 +312,10 @@ func TestTxWatchInMulti(t *testing.T) {
 }
 
 func TestTxUnwatchInMulti(t *testing.T) {
+	if isSkipTestTx() {
+		return
+	}
+
 	c := getTestConn()
 	defer c.Close()
 
@@ -308,6 +342,10 @@ func TestTxUnwatchInMulti(t *testing.T) {
 }
 
 func TestTxUnwatchFirst(t *testing.T) {
+	if isSkipTestTx() {
+		return
+	}
+
 	c := getTestConn()
 	defer c.Close()
 
@@ -338,6 +376,10 @@ func TestTxUnwatchFirst(t *testing.T) {
 }
 
 func TestTxUnwatchBeforeMulti(t *testing.T) {
+	if isSkipTestTx() {
+		return
+	}
+
 	c := getTestConn()
 	defer c.Close()
 
@@ -380,20 +422,23 @@ func TestTxUnwatchBeforeMulti(t *testing.T) {
 		}
 	}
 
-	if res, err := redis.Values(c.Do("exec")); err != nil {
+	if res, err := redis.ByteSlices(c.Do("exec")); err != nil {
 		t.Fatal(err)
 	} else {
 		if len(res) != 1 {
 			t.Fatal("res len != 1", len(res))
 		}
-		getv := res[0].([]byte)
-		if !bytes.Equal(getv, []byte(val)) {
-			t.Fatalf("res actual:%s expect:%s", getv, val)
+		if !bytes.Equal(res[0], []byte(val)) {
+			t.Fatalf("res actual:%s expect:%s", res[0], val)
 		}
 	}
 }
 
 func TestTxWatchAndSet(t *testing.T) {
+	if isSkipTestTx() {
+		return
+	}
+
 	c := getTestConn()
 	defer c.Close()
 
@@ -450,16 +495,22 @@ func TestTxWatchAndSet(t *testing.T) {
 	}
 
 	if res, err := redis.Values(c.Do("exec")); err != nil {
-		t.Fatal(err)
+		t.Fatal(res, err)
 	} else {
 		if len(res) != 3 {
 			t.Fatal("res len != 3", len(res))
 		}
-		getv := res[0].([]byte)
+		getv, ok := res[0].([]byte)
+		if !ok {
+			t.Fatal(res[0])
+		}
 		if !bytes.Equal(getv, []byte(val)) {
 			t.Fatalf("res actual:%s expect:%s", getv, val)
 		}
-		getv = res[2].([]byte)
+		getv, ok = res[2].([]byte)
+		if !ok {
+			t.Fatal(res[2])
+		}
 		if !bytes.Equal(getv, []byte(newVal)) {
 			t.Fatalf("res actual:%s expect:%s", getv, newVal)
 		}
@@ -467,6 +518,10 @@ func TestTxWatchAndSet(t *testing.T) {
 }
 
 func TestTxPrepareWatchChange(t *testing.T) {
+	if isSkipTestTx() {
+		return
+	}
+
 	c := getTestConn()
 	defer c.Close()
 
@@ -487,13 +542,17 @@ func TestTxPrepareWatchChange(t *testing.T) {
 		}
 	}
 	if _, err := c.Do("prepare"); err != nil {
-		if err.Error() != "Err watch key changed" {
+		if err.Error() != errn.ErrWatchKeyChanged.Error() {
 			t.Fatal(err)
 		}
 	}
 }
 
 func TestTxPrepare3KeyNoChange(t *testing.T) {
+	if isSkipTestTx() {
+		return
+	}
+
 	c := getTestConn()
 	defer c.Close()
 	c2 := getTestConn()
@@ -544,6 +603,10 @@ func TestTxPrepare3KeyNoChange(t *testing.T) {
 }
 
 func TestTxPrepare3KeyOtherChange(t *testing.T) {
+	if isSkipTestTx() {
+		return
+	}
+
 	c := getTestConn()
 	defer c.Close()
 	c2 := getTestConn()
@@ -599,6 +662,10 @@ func TestTxPrepare3KeyOtherChange(t *testing.T) {
 }
 
 func TestTxPrepareDeadlock(t *testing.T) {
+	if isSkipTestTx() {
+		return
+	}
+
 	c1 := getTestConn()
 	defer c1.Close()
 	c2 := getTestConn()
@@ -643,7 +710,7 @@ func TestTxPrepareDeadlock(t *testing.T) {
 		}
 	}
 	if _, err := c2.Do("prepare"); err != nil {
-		if err.Error() != "Err prepare lock fail" {
+		if err.Error() != errn.ErrPrepareLockFail.Error() {
 			t.Fatal(err)
 		}
 	}
@@ -658,6 +725,10 @@ func TestTxPrepareDeadlock(t *testing.T) {
 }
 
 func TestTxReWatchAndChange(t *testing.T) {
+	if isSkipTestTx() {
+		return
+	}
+
 	c := getTestConn()
 	defer c.Close()
 
@@ -681,13 +752,17 @@ func TestTxReWatchAndChange(t *testing.T) {
 		}
 	}
 	if _, err := c.Do("prepare"); err != nil {
-		if err.Error() != "Err watch key changed" {
+		if err.Error() != errn.ErrWatchKeyChanged.Error() {
 			t.Fatal(err)
 		}
 	}
 }
 
 func TestTxDiscard(t *testing.T) {
+	if isSkipTestTx() {
+		return
+	}
+
 	c := getTestConn()
 	defer c.Close()
 
@@ -743,6 +818,10 @@ func TestTxDiscard(t *testing.T) {
 }
 
 func TestTxModifyByOtherClient(t *testing.T) {
+	if isSkipTestTx() {
+		return
+	}
+
 	c1 := getTestConn()
 	defer c1.Close()
 
@@ -778,12 +857,12 @@ func TestTxModifyByOtherClient(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := c1.Do("prepare"); err != nil {
-		if err.Error() != "Err watch key changed" {
+		if err.Error() != errn.ErrWatchKeyChanged.Error() {
 			t.Fatal(err)
 		}
 	}
 	if _, err := c1.Do("discard"); err != nil {
-		if err.Error() != "ERR DISCARD without MULTI" {
+		if err.Error() != errn.ErrDiscardNoMulti.Error() {
 			t.Fatal(err)
 		}
 	}
@@ -798,6 +877,10 @@ func TestTxModifyByOtherClient(t *testing.T) {
 }
 
 func TestTxCloseClient(t *testing.T) {
+	if isSkipTestTx() {
+		return
+	}
+
 	tryNum := 5
 
 	c1 := getTestConn()
@@ -853,6 +936,10 @@ func TestTxCloseClient(t *testing.T) {
 }
 
 func TestTxPrepareNested(t *testing.T) {
+	if isSkipTestTx() {
+		return
+	}
+
 	c := getTestConn()
 	defer c.Close()
 
@@ -867,24 +954,32 @@ func TestTxPrepareNested(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := c.Do("prepare"); err != nil {
-		if err.Error() != "ERR PREPARE calls can not be nested" {
+		if err.Error() != errn.ErrPrepareNested.Error() {
 			t.Fatal(err)
 		}
 	}
 }
 
 func TestTxPrepareWithoutMulti(t *testing.T) {
+	if isSkipTestTx() {
+		return
+	}
+
 	c := getTestConn()
 	defer c.Close()
 
 	if _, err := c.Do("prepare"); err != nil {
-		if err.Error() != "ERR PREPARE without MULTI" {
+		if err.Error() != errn.ErrPrepareNoMulti.Error() {
 			t.Fatal(err)
 		}
 	}
 }
 
 func TestTxMultiNoCommand(t *testing.T) {
+	if isSkipTestTx() {
+		return
+	}
+
 	c := getTestConn()
 	defer c.Close()
 
@@ -904,28 +999,96 @@ func TestTxMultiNoCommand(t *testing.T) {
 		}
 	}
 
-	if res, err := c.Do("exec"); err != nil {
+	if res, err := redis.String(c.Do("exec")); err != nil {
 		t.Fatal(res, err)
 	} else {
-		r := res.(string)
-		if r != "(empty array)" {
+		if res != "(empty array)" {
 			t.Fatal("res expect:empty array", res)
 		}
 	}
 }
 
+func TestTxMultiCommand(t *testing.T) {
+	if isSkipTestTx() {
+		return
+	}
+
+	c := getTestConn()
+	defer c.Close()
+
+	if _, err := c.Do("set", "a", "a"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.Do("set", "b", "b"); err != nil {
+		t.Fatal(err)
+	}
+
+	if res, err := redis.String(c.Do("multi")); err != nil {
+		t.Fatal(err)
+	} else {
+		if res != "OK" {
+			t.Fatal("res is not ok", res)
+		}
+	}
+
+	if res, err := redis.String(c.Do("get", "a")); err != nil {
+		t.Fatal(err)
+	} else {
+		if res != "QUEUED" {
+			t.Fatal(res)
+		}
+	}
+	if res, err := redis.String(c.Do("get", "b")); err != nil {
+		t.Fatal(err)
+	} else {
+		if res != "QUEUED" {
+			t.Fatal(res)
+		}
+	}
+
+	if res, err := redis.String(c.Do("prepare")); err != nil {
+		t.Fatal(err)
+	} else {
+		if res != "OK" {
+			t.Fatal("prepare not ok", res)
+		}
+	}
+
+	if res, err := redis.Strings(c.Do("exec")); err != nil {
+		t.Fatal(res, err)
+	} else {
+		if len(res) != 2 {
+			t.Fatal("len err", len(res))
+		}
+		if res[0] != "a" {
+			t.Fatal(res[0])
+		}
+		if res[1] != "b" {
+			t.Fatal(res[1])
+		}
+	}
+}
+
 func TestTxDiscardOnly(t *testing.T) {
+	if isSkipTestTx() {
+		return
+	}
+
 	c := getTestConn()
 	defer c.Close()
 
 	if _, err := c.Do("discard"); err != nil {
-		if err.Error() != "ERR DISCARD without MULTI" {
+		if err.Error() != errn.ErrDiscardNoMulti.Error() {
 			t.Fatal(err)
 		}
 	}
 }
 
 func TestTxDiscardWatch(t *testing.T) {
+	if isSkipTestTx() {
+		return
+	}
+
 	c := getTestConn()
 	defer c.Close()
 
@@ -938,13 +1101,17 @@ func TestTxDiscardWatch(t *testing.T) {
 		}
 	}
 	if _, err := c.Do("discard"); err != nil {
-		if err.Error() != "ERR DISCARD without MULTI" {
+		if err.Error() != errn.ErrDiscardNoMulti.Error() {
 			t.Fatal(err)
 		}
 	}
 }
 
 func TestTxDiscardMulti(t *testing.T) {
+	if isSkipTestTx() {
+		return
+	}
+
 	c := getTestConn()
 	defer c.Close()
 
@@ -973,6 +1140,10 @@ func TestTxDiscardMulti(t *testing.T) {
 }
 
 func TestTxDiscardPrepare(t *testing.T) {
+	if isSkipTestTx() {
+		return
+	}
+
 	c := getTestConn()
 	defer c.Close()
 
@@ -1011,6 +1182,10 @@ func TestTxDiscardPrepare(t *testing.T) {
 }
 
 func TestTxDiscardPrepareWatchChanged(t *testing.T) {
+	if isSkipTestTx() {
+		return
+	}
+
 	c := getTestConn()
 	defer c.Close()
 
@@ -1041,18 +1216,22 @@ func TestTxDiscardPrepareWatchChanged(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := c.Do("prepare"); err != nil {
-		if err.Error() != "Err watch key changed" {
+		if err.Error() != errn.ErrWatchKeyChanged.Error() {
 			t.Fatal(err)
 		}
 	}
 	if _, err := c.Do("discard"); err != nil {
-		if err.Error() != "ERR DISCARD without MULTI" {
+		if err.Error() != errn.ErrDiscardNoMulti.Error() {
 			t.Fatal(err)
 		}
 	}
 }
 
 func TestTxDiscard3KeyNoChange(t *testing.T) {
+	if isSkipTestTx() {
+		return
+	}
+
 	c := getTestConn()
 	defer c.Close()
 	c2 := getTestConn()
@@ -1112,6 +1291,10 @@ func TestTxDiscard3KeyNoChange(t *testing.T) {
 }
 
 func TestTxDiscard3KeyUnlockTimeout(t *testing.T) {
+	if isSkipTestTx() {
+		return
+	}
+
 	c := getTestConn()
 	defer c.Close()
 	c2 := getTestConn()
@@ -1163,7 +1346,7 @@ func TestTxDiscard3KeyUnlockTimeout(t *testing.T) {
 	}
 	time.Sleep(5 * time.Second)
 	if res, err := c.Do("discard"); err != nil {
-		if err.Error() != "ERR DISCARD without MULTI" {
+		if err.Error() != errn.ErrDiscardNoMulti.Error() {
 			t.Fatal(err)
 		}
 	} else {

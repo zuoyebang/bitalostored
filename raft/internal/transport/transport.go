@@ -46,6 +46,12 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/errors"
+	"github.com/lni/goutils/logutil"
+	"github.com/lni/goutils/netutil"
+	circuit "github.com/lni/goutils/netutil/rubyist/circuitbreaker"
+	"github.com/lni/goutils/syncutil"
+
 	"github.com/zuoyebang/bitalostored/raft/config"
 	"github.com/zuoyebang/bitalostored/raft/internal/invariants"
 	"github.com/zuoyebang/bitalostored/raft/internal/server"
@@ -55,12 +61,6 @@ import (
 	ct "github.com/zuoyebang/bitalostored/raft/plugin/chan"
 	"github.com/zuoyebang/bitalostored/raft/raftio"
 	pb "github.com/zuoyebang/bitalostored/raft/raftpb"
-
-	"github.com/cockroachdb/errors"
-	"github.com/lni/goutils/logutil"
-	"github.com/lni/goutils/netutil"
-	circuit "github.com/lni/goutils/netutil/rubyist/circuitbreaker"
-	"github.com/lni/goutils/syncutil"
 )
 
 const (

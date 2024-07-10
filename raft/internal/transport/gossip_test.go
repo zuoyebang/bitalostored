@@ -18,10 +18,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/zuoyebang/bitalostored/raft/config"
-
 	"github.com/lni/goutils/leaktest"
 
+	"github.com/zuoyebang/bitalostored/raft/config"
 	"github.com/zuoyebang/bitalostored/raft/internal/id"
 )
 

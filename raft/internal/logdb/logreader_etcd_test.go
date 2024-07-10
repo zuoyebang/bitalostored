@@ -19,12 +19,11 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/lni/goutils/leaktest"
 	"github.com/zuoyebang/bitalostored/raft/internal/raft"
 	"github.com/zuoyebang/bitalostored/raft/internal/vfs"
 	"github.com/zuoyebang/bitalostored/raft/raftio"
 	pb "github.com/zuoyebang/bitalostored/raft/raftpb"
-
-	"github.com/lni/goutils/leaktest"
 )
 
 // most tests below are ported from etcd rafts

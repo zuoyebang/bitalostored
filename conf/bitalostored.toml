@@ -1,9 +1,7 @@
 [server]
 product_name = "bitalostored-demo"
 address = ":19091"
-max_client = 15000
-keep_alive = "600s"
-max_procs = 12
+net_event_loop_num = 8
 db_path = "bitalostored-data"
 slow_time = "30ms"
 slow_key_window_time = "2000ms"
@@ -44,7 +42,7 @@ enable_clock_cache = false # default
 cache_size = 0 # default
 
 [raft_queue]
-workers = 60             
+workers = 32
 length = 10000           
 
 [raft_cluster]

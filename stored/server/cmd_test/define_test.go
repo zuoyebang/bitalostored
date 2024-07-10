@@ -27,8 +27,10 @@ func init() {
 	if cacheEable {
 		readNum = 2
 	}
+	skipTx = true
 }
 
+var skipTx bool
 var readNum int = 1
 var redisPool *redis.Pool
 

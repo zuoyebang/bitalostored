@@ -27,16 +27,17 @@ import (
 	"sort"
 	"time"
 
-	"github.com/zuoyebang/bitalostored/raft/config"
-	"github.com/zuoyebang/bitalostored/raft/internal/server"
-	"github.com/zuoyebang/bitalostored/raft/internal/settings"
-	"github.com/zuoyebang/bitalostored/raft/logger"
 	"github.com/zuoyebang/bitalostored/raft/order"
-	pb "github.com/zuoyebang/bitalostored/raft/raftpb"
 
 	"github.com/cockroachdb/errors"
 	"github.com/lni/goutils/logutil"
 	"github.com/lni/goutils/random"
+
+	"github.com/zuoyebang/bitalostored/raft/config"
+	"github.com/zuoyebang/bitalostored/raft/internal/server"
+	"github.com/zuoyebang/bitalostored/raft/internal/settings"
+	"github.com/zuoyebang/bitalostored/raft/logger"
+	pb "github.com/zuoyebang/bitalostored/raft/raftpb"
 )
 
 var (
@@ -267,6 +268,7 @@ func newRaft(c config.Config, logdb ILogDB, initAddress ...PeerAddress) *raft {
 	}
 	plog.Infof("%s raft log rate limit enabled: %t, %d",
 		dn(r.clusterID, r.nodeID), r.rl.Enabled(), c.MaxInMemLogSize)
+	//从snapshot中加载membership为空，默认用初始化的initAddress
 	st, members := logdb.NodeState()
 	plog.Infof("nodestate from snapshot raft state:%v, members:%v", st, members)
 	if len(members.Addresses) <= 0 {

@@ -53,8 +53,8 @@ func newInnerLFUMap(owner *VectorMap, sz uint32) (m *LFUMap) {
 		limit:    groups * maxAvgGroupLoad,
 	}
 	memMax := owner.memCap / Byte(owner.buckets)
-	if memMax > 64*MB || memMax <= 0 {
-		memMax = 64 * MB
+	if memMax > maxShardMemSize || memMax <= 0 {
+		memMax = maxShardMemSize
 	}
 	for i := range m.ctrl {
 		m.ctrl[i] = newEmptyMetadata()
@@ -850,6 +850,8 @@ func (m *LFUMap) Delete(l uint64, key []byte) (ok bool) {
 }
 
 func (m *LFUMap) Clear() {
+	m.putLock.Lock()
+	m.rehashLock.Lock()
 	for i, c := range m.ctrl {
 		for j := range c {
 			m.ctrl[i][j] = empty
@@ -867,8 +869,27 @@ func (m *LFUMap) Clear() {
 	}
 	m.resident, m.dead = 0, 0
 
+	kvholder := newKVHolder(Byte(m.kvHolder.cap))
 	m.kvHolder.cap = 0
-	m.kvHolder.data = nil
+	m.kvHolder.buffer.release()
+	m.kvHolder = kvholder
+	m.rehashLock.Unlock()
+	m.putLock.Unlock()
+}
+
+func (m *LFUMap) Close() {
+	m.putLock.Lock()
+	m.rehashLock.Lock()
+	m.ctrl = nil
+	m.counters = nil
+	m.groups = nil
+	m.resident, m.dead = 0, 0
+	m.kvHolder.cap = 0
+	m.kvHolder.buffer.release()
+	m.kvHolder = nil
+	m.owner = nil
+	m.rehashLock.Unlock()
+	m.putLock.Unlock()
 }
 
 func (m *LFUMap) QueryCount() (count uint64) {
@@ -1000,7 +1021,7 @@ func (m *LFUMap) Eliminate() (delCount int, skipReason int) {
 	return
 }
 
-func (m *LFUMap) GCCopy() (deadCount int, gcMem int, subSince bool, skipReason int) {
+func (m *LFUMap) GCCopy() (deadCount int, gcMem int, skipReason int) {
 	if m.garbageUsage() < garbageRate {
 		skipReason = skipReason1
 		return

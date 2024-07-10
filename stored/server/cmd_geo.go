@@ -22,6 +22,7 @@ import (
 	"strings"
 
 	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/btools"
+	"github.com/zuoyebang/bitalostored/stored/internal/errn"
 	"github.com/zuoyebang/bitalostored/stored/internal/geohash"
 	"github.com/zuoyebang/bitalostored/stored/internal/resp"
 )
@@ -48,7 +49,7 @@ func init() {
 func geoaddCommand(c *Client) error {
 	args := c.Args
 	if len(args) < 3 || len(args[1:])%3 != 0 {
-		return resp.CmdParamsErr(resp.GEOADD)
+		return errn.CmdParamsErr(resp.GEOADD)
 	}
 
 	key, args := args[0], args[1:]
@@ -80,7 +81,7 @@ func geoaddCommand(c *Client) error {
 
 	n, err := c.DB.ZAdd(key, c.KeyHash, params...)
 	if err == nil {
-		c.RespWriter.WriteInteger(n)
+		c.Writer.WriteInteger(n)
 	}
 
 	return err
@@ -89,10 +90,10 @@ func geoaddCommand(c *Client) error {
 func geodistCommand(c *Client) error {
 	args := c.Args
 	if len(args) < 3 {
-		return resp.CmdParamsErr(resp.GEODIST)
+		return errn.CmdParamsErr(resp.GEODIST)
 	}
 	if len(args) > 4 {
-		return resp.ErrSyntax
+		return errn.ErrSyntax
 	}
 	key, from, to, args := args[0], args[1], args[2], args[3:]
 
@@ -108,18 +109,18 @@ func geodistCommand(c *Client) error {
 	fromD, errFrom := c.DB.ZScore(key, c.KeyHash, from)
 	toD, errTo := c.DB.ZScore(key, c.KeyHash, to)
 	if errFrom != nil || errTo != nil {
-		c.RespWriter.WriteBulk(nil)
+		c.Writer.WriteBulk(nil)
 		return nil
 	}
 	dist := geohash.DistBetweenGeoHashWGS84(uint64(fromD), uint64(toD)) / toMeter
-	c.RespWriter.WriteBulk([]byte(fmt.Sprintf("%.4f", dist)))
+	c.Writer.WriteBulk([]byte(fmt.Sprintf("%.4f", dist)))
 	return nil
 }
 
 func geoposCommand(c *Client) error {
 	args := c.Args
 	if len(args) < 1 {
-		return resp.CmdParamsErr(resp.GEOPOS)
+		return errn.CmdParamsErr(resp.GEOPOS)
 	}
 	key, args := args[0], args[1:]
 	arr := []interface{}{}
@@ -131,14 +132,14 @@ func geoposCommand(c *Client) error {
 			arr = append(arr, []interface{}{[]byte(strconv.FormatFloat(long, 'f', 17, 64)), []byte(strconv.FormatFloat(lat, 'f', 17, 64))})
 		}
 	}
-	c.RespWriter.WriteArray(arr)
+	c.Writer.WriteArray(arr)
 	return nil
 }
 
 func geohashCommand(c *Client) error {
 	args := c.Args
 	if len(args) < 1 {
-		return resp.CmdParamsErr(resp.GEOHASH)
+		return errn.CmdParamsErr(resp.GEOHASH)
 	}
 	key, args := args[0], args[1:]
 	arr := []interface{}{}
@@ -156,32 +157,32 @@ func geohashCommand(c *Client) error {
 			arr = append(arr, geohash.EncodeToBase32(code.Bits))
 		}
 	}
-	c.RespWriter.WriteArray(arr)
+	c.Writer.WriteArray(arr)
 	return nil
 }
 
 func georadiusCommand(c *Client) error {
 	args := c.Args
 	if len(args) < 5 {
-		return resp.CmdParamsErr(resp.GEORADIUS)
+		return errn.CmdParamsErr(resp.GEORADIUS)
 	}
 
 	key := args[0]
 	longitude, err := strconv.ParseFloat(string(args[1]), 64)
 	if err != nil {
-		return resp.CmdParamsErr(resp.GEORADIUS)
+		return errn.CmdParamsErr(resp.GEORADIUS)
 	}
 	latitude, err := strconv.ParseFloat(string(args[2]), 64)
 	if err != nil {
-		return resp.CmdParamsErr(resp.GEORADIUS)
+		return errn.CmdParamsErr(resp.GEORADIUS)
 	}
 	radius, err := strconv.ParseFloat(string(args[3]), 64)
 	if err != nil || radius < 0 {
-		return resp.CmdParamsErr(resp.GEORADIUS)
+		return errn.CmdParamsErr(resp.GEORADIUS)
 	}
 	toMeter := parseUnit(string(args[4]))
 	if toMeter == 0 {
-		return resp.CmdParamsErr(resp.GEORADIUS)
+		return errn.CmdParamsErr(resp.GEORADIUS)
 	}
 	args = args[5:]
 
@@ -208,11 +209,11 @@ func georadiusCommand(c *Client) error {
 			direction = desc
 		case "COUNT":
 			if len(args) == 0 {
-				return resp.ErrSyntax
+				return errn.ErrSyntax
 			}
 			n, err := strconv.Atoi(string(args[0]))
 			if err != nil {
-				return resp.ErrValue
+				return errn.ErrValue
 			}
 			if n <= 0 {
 				return errors.New("ERR COUNT must be > 0")
@@ -220,7 +221,7 @@ func georadiusCommand(c *Client) error {
 			args = args[1:]
 			count = n
 		default:
-			return resp.ErrSyntax
+			return errn.ErrSyntax
 		}
 	}
 
@@ -265,26 +266,26 @@ func georadiusCommand(c *Client) error {
 		}
 		arr = append(arr, item)
 	}
-	c.RespWriter.WriteArray(arr)
+	c.Writer.WriteArray(arr)
 	return nil
 }
 
 func georadiusbymemberCommand(c *Client) error {
 	args := c.Args
 	if len(args) < 4 {
-		return resp.CmdParamsErr(resp.GEORADIUSBYMEMBER)
+		return errn.CmdParamsErr(resp.GEORADIUSBYMEMBER)
 	}
 
 	key := args[0]
 	member := args[1]
 	radius, err := strconv.ParseFloat(string(args[2]), 64)
 	if err != nil {
-		return resp.CmdParamsErr(resp.GEORADIUSBYMEMBER)
+		return errn.CmdParamsErr(resp.GEORADIUSBYMEMBER)
 	}
 
 	toMeter := parseUnit(string(args[3]))
 	if toMeter == 0 {
-		return resp.CmdParamsErr(resp.GEORADIUSBYMEMBER)
+		return errn.CmdParamsErr(resp.GEORADIUSBYMEMBER)
 	}
 	args = args[4:]
 
@@ -311,11 +312,11 @@ func georadiusbymemberCommand(c *Client) error {
 			direction = desc
 		case "COUNT":
 			if len(args) == 0 {
-				return resp.ErrSyntax
+				return errn.ErrSyntax
 			}
 			n, err := strconv.Atoi(string(args[0]))
 			if err != nil {
-				return resp.ErrValue
+				return errn.ErrValue
 			}
 			if n <= 0 {
 				return errors.New("ERR COUNT must be > 0")
@@ -323,7 +324,7 @@ func georadiusbymemberCommand(c *Client) error {
 			args = args[1:]
 			count = n
 		default:
-			return resp.ErrSyntax
+			return errn.ErrSyntax
 		}
 	}
 
@@ -374,7 +375,7 @@ func georadiusbymemberCommand(c *Client) error {
 		}
 		arr = append(arr, item)
 	}
-	c.RespWriter.WriteArray(arr)
+	c.Writer.WriteArray(arr)
 	return nil
 }
 

@@ -19,7 +19,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/panjf2000/ants/v2"
 	"github.com/zuoyebang/bitalostored/butils/vectormap"
 	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/bitsdb/locker"
 	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/bitskv"
@@ -31,18 +30,21 @@ import (
 )
 
 const (
-	cacheBucketNum          int = 1024
-	cacheEliminateThreadNum int = 1
-	cacheEliminateDuration  int = 900
+	defaultCacheShardNum           int = 1024
+	defaultCacheEliminateThreadNum int = 1
+	defaultCacheEliminateDuration  int = 1080
+
+	missCacheValue = byte(btools.NoneType)
 )
 
 type BaseDB struct {
-	DB            *bitskv.DB
-	MetaCache     *vectormap.VectorMap
-	DelExpirePool *ants.PoolWithFunc
-	IsKeyScan     atomic.Int32
-	Ready         atomic.Bool
-	KeyLocker     *locker.ScopeLocker
+	DB              *bitskv.DB
+	MetaCache       *vectormap.VectorMap
+	EnableMissCache bool
+	IsKeyScan       atomic.Int32
+	Ready           atomic.Bool
+	KeyLocker       *locker.ScopeLocker
+	BitmapMem       *BitmapMem
 }
 
 func NewBaseDB(cfg *dbconfig.Config) (*BaseDB, error) {
@@ -52,21 +54,27 @@ func NewBaseDB(cfg *dbconfig.Config) (*BaseDB, error) {
 	}
 
 	baseDb := &BaseDB{
-		DB:        db,
-		KeyLocker: locker.NewScopeLocker(btools.KeyLockerPoolCap),
-		MetaCache: nil,
+		DB:              db,
+		KeyLocker:       locker.NewScopeLocker(true),
+		MetaCache:       nil,
+		EnableMissCache: false,
 	}
+	baseDb.BitmapMem = NewBitmapMem(baseDb)
 
 	if cfg.CacheSize > 0 {
 		if cfg.CacheEliminateDuration <= 0 {
-			cfg.CacheEliminateDuration = cacheEliminateDuration
+			cfg.CacheEliminateDuration = defaultCacheEliminateDuration
 		}
-		eliminateDuration := time.Duration(cfg.CacheEliminateDuration) * time.Second
+		if cfg.CacheShardNum < defaultCacheShardNum {
+			cfg.CacheShardNum = defaultCacheShardNum
+		}
+
+		baseDb.EnableMissCache = cfg.EnableMissCache
 		baseDb.MetaCache = vectormap.NewVectorMap(uint32(cfg.CacheHashSize),
 			vectormap.WithType(vectormap.MapTypeLRU),
-			vectormap.WithBuckets(cacheBucketNum),
+			vectormap.WithBuckets(cfg.CacheShardNum),
 			vectormap.WithLogger(log.GetLogger()),
-			vectormap.WithEliminate(vectormap.Byte(cfg.CacheSize), cacheEliminateThreadNum, eliminateDuration))
+			vectormap.WithEliminate(vectormap.Byte(cfg.CacheSize), defaultCacheEliminateThreadNum, time.Duration(cfg.CacheEliminateDuration)*time.Second))
 	}
 
 	return baseDb, nil
@@ -88,8 +96,13 @@ func (b *BaseDB) Close() {
 	b.SetNoReady()
 	b.DB.Close()
 	if b.MetaCache != nil {
-		b.MetaCache = nil
+		b.MetaCache.Close()
+		log.Infof("MetaCache Close finish")
 	}
+}
+
+func (b *BaseDB) FlushBitmap() {
+	b.BitmapMem.Close()
 }
 
 func (b *BaseDB) ClearCache() {
@@ -100,20 +113,28 @@ func (b *BaseDB) ClearCache() {
 
 func (b *BaseDB) GetMeta(key []byte) ([]byte, func(), error) {
 	if b.MetaCache != nil {
-		v, closer, ok := b.MetaCache.Get(key)
-		if ok {
+		v, closer, exist := b.MetaCache.Get(key)
+		if exist {
+			if b.EnableMissCache && v != nil && v[0] == missCacheValue {
+				closer()
+				return nil, nil, nil
+			}
 			return v, closer, nil
 		}
 	}
 
 	val, closer, err := b.DB.GetMeta(key)
 	if b.DB.IsNotFound(err) {
+		if b.EnableMissCache {
+			b.MetaCache.RePut(key, []byte{missCacheValue})
+		}
 		return nil, nil, nil
 	}
 
 	if b.MetaCache != nil && len(val) > 0 {
 		b.MetaCache.RePut(key, val)
 	}
+
 	return val, closer, err
 }
 
@@ -158,7 +179,7 @@ func (b *BaseDB) getMetaWithValue(ek []byte, dt btools.DataType) (mkv *MetaData,
 		return nil, nil, err
 	}
 
-	if dt != btools.NoneType && dt != mkv.dt {
+	if mkv.IsWrongType(dt) {
 		log.Errorf("getMetaWithValue dataType notmatch ek:%s exp:%d act:%d mkv:%v", string(ek), dt, mkv.dt, mkv)
 		PutMkvToPool(mkv)
 		return nil, nil, errn.ErrWrongType
@@ -186,33 +207,6 @@ func (b *BaseDB) getMetaWithoutValue(ek []byte, dt btools.DataType) (*MetaData, 
 	return mkv, nil
 }
 
-func (b *BaseDB) DeleteMetaKeyByExpire(
-	dt btools.DataType, key []byte, khash uint32, keyVersion uint64, expireTime uint64,
-) (bool, error) {
-	var isDel bool
-	mk, mkCloser := EncodeMetaKey(key, khash)
-	defer mkCloser()
-	mkv, err := b.getMetaWithoutValue(mk, dt)
-	if mkv == nil {
-		return isDel, err
-	}
-	defer PutMkvToPool(mkv)
-
-	if dt == btools.STRING {
-		if mkv.timestamp == expireTime {
-			isDel = true
-		}
-	} else if mkv.version <= keyVersion && mkv.timestamp > 0 && mkv.timestamp <= expireTime {
-		isDel = true
-	}
-
-	if isDel {
-		return isDel, b.DeleteMetaKey(mk)
-	}
-
-	return isDel, nil
-}
-
 func (b *BaseDB) DeleteMetaKey(key []byte) error {
 	wb := b.DB.GetMetaWriteBatchFromPool()
 	defer b.DB.PutWriteBatchToPool(wb)
@@ -233,8 +227,20 @@ func (b *BaseDB) DeleteExpireKey(key []byte) error {
 	return wb.Commit()
 }
 
-func (b *BaseDB) SetDelExpireDataPool(pool *ants.PoolWithFunc) {
-	b.DelExpirePool = pool
+func (b *BaseDB) ClearBitmap(key []byte, deleteDB bool) (bool, error) {
+	return b.BitmapMem.Delete(key, deleteDB)
+}
+
+func (b *BaseDB) SetMetaDataByValues(ek []byte, vlen int, value ...[]byte) error {
+	wb := b.DB.GetMetaWriteBatchFromPool()
+	defer b.DB.PutWriteBatchToPool(wb)
+
+	_ = wb.PutMultiValue(ek, value...)
+	err := wb.Commit()
+	if err == nil && b.MetaCache != nil {
+		b.MetaCache.PutMultiValue(ek, vlen, value...)
+	}
+	return err
 }
 
 func (b *BaseDB) GetAllDB() []kv.IKVStore {
@@ -247,6 +253,7 @@ func (b *BaseDB) CacheInfo() string {
 	}
 	memCap := b.MetaCache.MaxMem()
 	usedMem := b.MetaCache.UsedMem()
+	sahrdNum := b.MetaCache.Shards()
 	effectiveMem := b.MetaCache.EffectiveMem()
 	remainItemNum := b.MetaCache.Capacity()
 	itemNum := b.MetaCache.Count()
@@ -258,6 +265,6 @@ func (b *BaseDB) CacheInfo() string {
 		hitRate = float64(queryCount-missCount) / float64(queryCount)
 	}
 
-	return fmt.Sprintf("memCap:%d usedMem:%d effectiveMem:%d remainItem:%d Items:%d reputFailsCount:%d queryCount:%d missCount:%d hitRate:%.6f",
-		memCap, usedMem, effectiveMem, remainItemNum, itemNum, reputFailsCount, queryCount, missCount, hitRate)
+	return fmt.Sprintf("shardNum:%d memCap:%d usedMem:%d effectiveMem:%d remainItem:%d Items:%d reputFailsCount:%d queryCount:%d missCount:%d hitRate:%.6f",
+		sahrdNum, memCap, usedMem, effectiveMem, remainItemNum, itemNum, reputFailsCount, queryCount, missCount, hitRate)
 }

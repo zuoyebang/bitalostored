@@ -19,13 +19,14 @@ import (
 	"io"
 	"strconv"
 
-	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/btools"
-	"github.com/zuoyebang/bitalostored/stored/internal/log"
-
 	"github.com/zuoyebang/bitalostored/butils/deepcopy"
 	"github.com/zuoyebang/bitalostored/butils/extend"
 	"github.com/zuoyebang/bitalostored/butils/unsafe2"
+	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/btools"
+	"github.com/zuoyebang/bitalostored/stored/internal/log"
 )
+
+const writerBufferSize = 8 << 10
 
 var (
 	respArray byte = '*'
@@ -49,10 +50,10 @@ var (
 	ReplyQUEUED = "QUEUED"
 )
 
-type RespWriter struct {
-	BuffNew *bytes.Buffer
-	Cached  bool
-	Resps   []RespOuput
+type Writer struct {
+	Buf    *bytes.Buffer
+	Cached bool
+	Resps  []RespOuput
 }
 
 type RespOuput struct {
@@ -61,25 +62,25 @@ type RespOuput struct {
 	Output     interface{}
 }
 
-func NewRespWriter(size int) *RespWriter {
-	w := &RespWriter{
-		BuffNew: bytes.NewBuffer(make([]byte, 0, size)),
+func NewWriter() *Writer {
+	w := &Writer{
+		Buf: bytes.NewBuffer(make([]byte, 0, writerBufferSize)),
 	}
 	return w
 }
 
-func (w *RespWriter) SetCached() {
+func (w *Writer) SetCached() {
 	w.Cached = true
 }
 
-func (w *RespWriter) UnsetCached() {
+func (w *Writer) UnsetCached() {
 	w.Cached = false
 }
 
-func (w *RespWriter) FlushCached() {
-	w.BuffNew.WriteByte(respArray)
-	w.BuffNew.Write(unsafe2.ByteSlice(strconv.Itoa(len(w.Resps))))
-	w.BuffNew.Write(Delims)
+func (w *Writer) FlushCached() {
+	w.Buf.WriteByte(respArray)
+	w.Buf.Write(unsafe2.ByteSlice(strconv.Itoa(len(w.Resps))))
+	w.Buf.Write(Delims)
 
 	for _, resp := range w.Resps {
 		switch resp.Type {
@@ -139,45 +140,45 @@ func (w *RespWriter) FlushCached() {
 	w.Resps = w.Resps[:0]
 }
 
-func (w *RespWriter) WriteError(err error) {
+func (w *Writer) WriteError(err error) {
 	if w.Cached {
 		w.Resps = append(w.Resps, RespOuput{Type: respErr, Output: err})
 		return
 	}
-	w.BuffNew.WriteByte(respErr)
+	w.Buf.WriteByte(respErr)
 	if err != nil {
-		w.BuffNew.Write(unsafe2.ByteSlice(err.Error()))
+		w.Buf.Write(unsafe2.ByteSlice(err.Error()))
 	}
-	w.BuffNew.Write(Delims)
+	w.Buf.Write(Delims)
 }
 
-func (w *RespWriter) WriteStatus(status string) {
+func (w *Writer) WriteStatus(status string) {
 	if w.Cached {
 		w.Resps = append(w.Resps, RespOuput{Type: respSinge, Output: status})
 		return
 	}
-	w.BuffNew.WriteByte(respSinge)
-	w.BuffNew.Write(unsafe2.ByteSlice(status))
-	w.BuffNew.Write(Delims)
+	w.Buf.WriteByte(respSinge)
+	w.Buf.Write(unsafe2.ByteSlice(status))
+	w.Buf.Write(Delims)
 }
 
-func (w *RespWriter) WriteInteger(n int64) {
+func (w *Writer) WriteInteger(n int64) {
 	if w.Cached {
 		w.Resps = append(w.Resps, RespOuput{Type: respInt, Output: n})
 		return
 	}
-	w.BuffNew.WriteByte(respInt)
-	w.BuffNew.Write(extend.FormatInt64ToSlice(n))
-	w.BuffNew.Write(Delims)
+	w.Buf.WriteByte(respInt)
+	w.Buf.Write(extend.FormatInt64ToSlice(n))
+	w.Buf.Write(Delims)
 }
 
-func (w *RespWriter) WriteLen(n int) {
-	w.BuffNew.WriteByte(respArray)
-	w.BuffNew.Write(unsafe2.ByteSlice(strconv.Itoa(n)))
-	w.BuffNew.Write(Delims)
+func (w *Writer) WriteLen(n int) {
+	w.Buf.WriteByte(respArray)
+	w.Buf.Write(unsafe2.ByteSlice(strconv.Itoa(n)))
+	w.Buf.Write(Delims)
 }
 
-func (w *RespWriter) WriteBulk(b []byte) {
+func (w *Writer) WriteBulk(b []byte) {
 	if w.Cached {
 		if b == nil {
 			w.Resps = append(w.Resps, RespOuput{Type: respMutil, Output: nil})
@@ -188,19 +189,19 @@ func (w *RespWriter) WriteBulk(b []byte) {
 		}
 		return
 	}
-	w.BuffNew.WriteByte(respMutil)
+	w.Buf.WriteByte(respMutil)
 	if b == nil {
-		w.BuffNew.Write(NullBulk)
+		w.Buf.Write(NullBulk)
 	} else {
-		w.BuffNew.Write(unsafe2.ByteSlice(strconv.Itoa(len(b))))
-		w.BuffNew.Write(Delims)
-		w.BuffNew.Write(b)
+		w.Buf.Write(unsafe2.ByteSlice(strconv.Itoa(len(b))))
+		w.Buf.Write(Delims)
+		w.Buf.Write(b)
 	}
-	w.BuffNew.Write(Delims)
+	w.Buf.Write(Delims)
 }
 
-func (w *RespWriter) WriteBulkMulti(bs ...[]byte) {
-	w.BuffNew.WriteByte(respMutil)
+func (w *Writer) WriteBulkMulti(bs ...[]byte) {
+	w.Buf.WriteByte(respMutil)
 
 	blen := 0
 	for i := range bs {
@@ -208,21 +209,21 @@ func (w *RespWriter) WriteBulkMulti(bs ...[]byte) {
 	}
 
 	if blen == 0 {
-		w.BuffNew.Write(NullBulk)
+		w.Buf.Write(NullBulk)
 	} else {
-		w.BuffNew.Write(unsafe2.ByteSlice(strconv.Itoa(blen)))
-		w.BuffNew.Write(Delims)
+		w.Buf.Write(unsafe2.ByteSlice(strconv.Itoa(blen)))
+		w.Buf.Write(Delims)
 		for i := range bs {
 			if len(bs[i]) > 0 {
-				w.BuffNew.Write(bs[i])
+				w.Buf.Write(bs[i])
 			}
 		}
 	}
 
-	w.BuffNew.Write(Delims)
+	w.Buf.Write(Delims)
 }
 
-func (w *RespWriter) WriteArray(lst []interface{}) {
+func (w *Writer) WriteArray(lst []interface{}) {
 	if w.Cached {
 		if lst == nil {
 			w.Resps = append(w.Resps, RespOuput{Type: respInternalArray, Output: nil})
@@ -231,14 +232,14 @@ func (w *RespWriter) WriteArray(lst []interface{}) {
 		}
 		return
 	}
-	w.BuffNew.WriteByte(respArray)
+	w.Buf.WriteByte(respArray)
 
 	if lst == nil {
-		w.BuffNew.Write(NullBulk)
-		w.BuffNew.Write(Delims)
+		w.Buf.Write(NullBulk)
+		w.Buf.Write(Delims)
 	} else {
-		w.BuffNew.Write(unsafe2.ByteSlice(strconv.Itoa(len(lst))))
-		w.BuffNew.Write(Delims)
+		w.Buf.Write(unsafe2.ByteSlice(strconv.Itoa(len(lst))))
+		w.Buf.Write(Delims)
 
 		for i := 0; i < len(lst); i++ {
 			switch v := lst[i].(type) {
@@ -263,7 +264,7 @@ func (w *RespWriter) WriteArray(lst []interface{}) {
 	}
 }
 
-func (w *RespWriter) WriteSliceArray(lst [][]byte) {
+func (w *Writer) WriteSliceArray(lst [][]byte) {
 	if w.Cached {
 		if lst == nil {
 			w.Resps = append(w.Resps, RespOuput{Type: respInternalSliceArray, Output: nil})
@@ -272,14 +273,14 @@ func (w *RespWriter) WriteSliceArray(lst [][]byte) {
 		}
 		return
 	}
-	w.BuffNew.WriteByte(respArray)
+	w.Buf.WriteByte(respArray)
 
 	if lst == nil {
-		w.BuffNew.Write(NullArray)
-		w.BuffNew.Write(Delims)
+		w.Buf.Write(NullArray)
+		w.Buf.Write(Delims)
 	} else {
-		w.BuffNew.Write(unsafe2.ByteSlice(strconv.Itoa(len(lst))))
-		w.BuffNew.Write(Delims)
+		w.Buf.Write(unsafe2.ByteSlice(strconv.Itoa(len(lst))))
+		w.Buf.Write(Delims)
 
 		for i := 0; i < len(lst); i++ {
 			w.WriteBulk(lst[i])
@@ -287,7 +288,7 @@ func (w *RespWriter) WriteSliceArray(lst [][]byte) {
 	}
 }
 
-func (w *RespWriter) WriteFVPairArray(lst []btools.FVPair) {
+func (w *Writer) WriteFVPairArray(lst []btools.FVPair) {
 	if w.Cached {
 		if lst == nil {
 			w.Resps = append(w.Resps, RespOuput{Type: respInternalFVPair, Output: nil})
@@ -296,14 +297,14 @@ func (w *RespWriter) WriteFVPairArray(lst []btools.FVPair) {
 		}
 		return
 	}
-	w.BuffNew.WriteByte(respArray)
+	w.Buf.WriteByte(respArray)
 
 	if lst == nil {
-		w.BuffNew.Write(NullArray)
-		w.BuffNew.Write(Delims)
+		w.Buf.Write(NullArray)
+		w.Buf.Write(Delims)
 	} else {
-		w.BuffNew.Write(unsafe2.ByteSlice(strconv.Itoa(len(lst) * 2)))
-		w.BuffNew.Write(Delims)
+		w.Buf.Write(unsafe2.ByteSlice(strconv.Itoa(len(lst) * 2)))
+		w.Buf.Write(Delims)
 
 		for i := 0; i < len(lst); i++ {
 			w.WriteBulk(lst[i].Field)
@@ -312,7 +313,7 @@ func (w *RespWriter) WriteFVPairArray(lst []btools.FVPair) {
 	}
 }
 
-func (w *RespWriter) WriteFieldPairArray(lst []btools.FieldPair) {
+func (w *Writer) WriteFieldPairArray(lst []btools.FieldPair) {
 	if w.Cached {
 		if lst == nil {
 			w.Resps = append(w.Resps, RespOuput{Type: respInternalFieldPair, Output: nil})
@@ -321,14 +322,14 @@ func (w *RespWriter) WriteFieldPairArray(lst []btools.FieldPair) {
 		}
 		return
 	}
-	w.BuffNew.WriteByte(respArray)
+	w.Buf.WriteByte(respArray)
 
 	if lst == nil {
-		w.BuffNew.Write(NullArray)
-		w.BuffNew.Write(Delims)
+		w.Buf.Write(NullArray)
+		w.Buf.Write(Delims)
 	} else {
-		w.BuffNew.Write(unsafe2.ByteSlice(strconv.Itoa(len(lst) * 2)))
-		w.BuffNew.Write(Delims)
+		w.Buf.Write(unsafe2.ByteSlice(strconv.Itoa(len(lst) * 2)))
+		w.Buf.Write(Delims)
 
 		for i := 0; i < len(lst); i++ {
 			w.WriteBulkMulti(lst[i].Prefix, lst[i].Suffix)
@@ -336,7 +337,7 @@ func (w *RespWriter) WriteFieldPairArray(lst []btools.FieldPair) {
 	}
 }
 
-func (w *RespWriter) WriteScorePairArray(lst []btools.ScorePair, withScores bool) {
+func (w *Writer) WriteScorePairArray(lst []btools.ScorePair, withScores bool) {
 	if w.Cached {
 		if lst == nil {
 			w.Resps = append(w.Resps, RespOuput{Type: respInternalScorePair, WithScores: withScores, Output: nil})
@@ -345,19 +346,19 @@ func (w *RespWriter) WriteScorePairArray(lst []btools.ScorePair, withScores bool
 		}
 		return
 	}
-	w.BuffNew.WriteByte(respArray)
+	w.Buf.WriteByte(respArray)
 
 	if lst == nil {
-		w.BuffNew.Write(NullArray)
-		w.BuffNew.Write(Delims)
+		w.Buf.Write(NullArray)
+		w.Buf.Write(Delims)
 	} else {
 		if withScores {
-			w.BuffNew.Write(unsafe2.ByteSlice(strconv.Itoa(len(lst) * 2)))
-			w.BuffNew.Write(Delims)
+			w.Buf.Write(unsafe2.ByteSlice(strconv.Itoa(len(lst) * 2)))
+			w.Buf.Write(Delims)
 
 		} else {
-			w.BuffNew.Write(unsafe2.ByteSlice(strconv.Itoa(len(lst))))
-			w.BuffNew.Write(Delims)
+			w.Buf.Write(unsafe2.ByteSlice(strconv.Itoa(len(lst))))
+			w.Buf.Write(Delims)
 		}
 
 		for i := 0; i < len(lst); i++ {
@@ -370,25 +371,21 @@ func (w *RespWriter) WriteScorePairArray(lst []btools.ScorePair, withScores bool
 	}
 }
 
-func (w *RespWriter) WriteBytes(args ...[]byte) {
+func (w *Writer) WriteBytes(args ...[]byte) {
 	for _, v := range args {
-		w.BuffNew.Write(v)
+		w.Buf.Write(v)
 	}
 }
 
-func (w *RespWriter) FlushBytesEmpty() {
-	w.BuffNew.Reset()
+func (w *Writer) Bytes() []byte {
+	return w.Buf.Bytes()
 }
 
-func (w *RespWriter) FlushToBytes() []byte {
-	defer w.BuffNew.Reset()
-	respData := w.BuffNew.Bytes()
-	copyResp := make([]byte, len(respData))
-	copy(copyResp, respData)
-	return copyResp
+func (w *Writer) Reset() {
+	w.Buf.Reset()
 }
 
-func (w *RespWriter) FlushToWriterIO(writer io.Writer) (int, error) {
-	defer w.BuffNew.Reset()
-	return writer.Write(w.BuffNew.Bytes())
+func (w *Writer) FlushToWriterIO(writer io.Writer) (int, error) {
+	defer w.Buf.Reset()
+	return writer.Write(w.Buf.Bytes())
 }

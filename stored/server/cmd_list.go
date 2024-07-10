@@ -17,26 +17,26 @@ package server
 import (
 	"bytes"
 
+	"github.com/zuoyebang/bitalostored/stored/internal/errn"
 	"github.com/zuoyebang/bitalostored/stored/internal/resp"
 	"github.com/zuoyebang/bitalostored/stored/internal/utils"
 )
 
 func init() {
 	AddCommand(map[string]*Cmd{
-		resp.LPOP:    {Sync: resp.IsWriteCmd(resp.LPOP), Handler: lpopCommand},
-		resp.LPUSH:   {Sync: resp.IsWriteCmd(resp.LPUSH), Handler: lpushCommand},
-		resp.RPOP:    {Sync: resp.IsWriteCmd(resp.RPOP), Handler: rpopCommand},
-		resp.RPUSH:   {Sync: resp.IsWriteCmd(resp.RPUSH), Handler: rpushCommand},
-		resp.LINDEX:  {Sync: resp.IsWriteCmd(resp.LINDEX), Handler: lindexCommand},
-		resp.LLEN:    {Sync: resp.IsWriteCmd(resp.LLEN), Handler: llenCommand},
-		resp.LRANGE:  {Sync: resp.IsWriteCmd(resp.LRANGE), Handler: lrangeCommand},
-		resp.LTRIM:   {Sync: resp.IsWriteCmd(resp.LTRIM), Handler: lTrimCommand},
-		resp.LREM:    {Sync: resp.IsWriteCmd(resp.LREM), Handler: lremCommand},
-		resp.LINSERT: {Sync: resp.IsWriteCmd(resp.LINSERT), Handler: linsertCommand},
-		resp.LPUSHX:  {Sync: resp.IsWriteCmd(resp.LPUSHX), Handler: lpushxCommand},
-		resp.RPUSHX:  {Sync: resp.IsWriteCmd(resp.RPUSHX), Handler: rpushxCommand},
-		resp.LSET:    {Sync: resp.IsWriteCmd(resp.LSET), Handler: lsetCommand},
-
+		resp.LPOP:       {Sync: resp.IsWriteCmd(resp.LPOP), Handler: lpopCommand},
+		resp.LPUSH:      {Sync: resp.IsWriteCmd(resp.LPUSH), Handler: lpushCommand},
+		resp.RPOP:       {Sync: resp.IsWriteCmd(resp.RPOP), Handler: rpopCommand},
+		resp.RPUSH:      {Sync: resp.IsWriteCmd(resp.RPUSH), Handler: rpushCommand},
+		resp.LINDEX:     {Sync: resp.IsWriteCmd(resp.LINDEX), Handler: lindexCommand},
+		resp.LLEN:       {Sync: resp.IsWriteCmd(resp.LLEN), Handler: llenCommand},
+		resp.LRANGE:     {Sync: resp.IsWriteCmd(resp.LRANGE), Handler: lrangeCommand},
+		resp.LTRIM:      {Sync: resp.IsWriteCmd(resp.LTRIM), Handler: lTrimCommand},
+		resp.LREM:       {Sync: resp.IsWriteCmd(resp.LREM), Handler: lremCommand},
+		resp.LINSERT:    {Sync: resp.IsWriteCmd(resp.LINSERT), Handler: linsertCommand},
+		resp.LPUSHX:     {Sync: resp.IsWriteCmd(resp.LPUSHX), Handler: lpushxCommand},
+		resp.RPUSHX:     {Sync: resp.IsWriteCmd(resp.RPUSHX), Handler: rpushxCommand},
+		resp.LSET:       {Sync: resp.IsWriteCmd(resp.LSET), Handler: lsetCommand},
 		resp.LCLEAR:     {Sync: resp.IsWriteCmd(resp.LCLEAR), Handler: lclearCommand, KeySkip: 1},
 		resp.LPERSIST:   {Sync: resp.IsWriteCmd(resp.LPERSIST), Handler: lpersistCommand},
 		resp.LEXPIRE:    {Sync: resp.IsWriteCmd(resp.LEXPIRE), Handler: lexpireCommand},
@@ -51,18 +51,18 @@ func init() {
 func lremCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 3 {
-		return resp.CmdParamsErr(resp.LREM)
+		return errn.CmdParamsErr(resp.LREM)
 	}
 
 	count, err := utils.ByteToInt64(args[1])
 	if err != nil {
-		return resp.ErrValue
+		return errn.ErrValue
 	}
 
 	if n, err := c.DB.LRem(args[0], c.KeyHash, count, args[2]); err != nil {
 		return err
 	} else {
-		c.RespWriter.WriteInteger(n)
+		c.Writer.WriteInteger(n)
 	}
 
 	return nil
@@ -71,21 +71,21 @@ func lremCommand(c *Client) error {
 func linsertCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 4 {
-		return resp.CmdParamsErr(resp.LINSERT)
+		return errn.CmdParamsErr(resp.LINSERT)
 	}
 	isbefore := false
-	if bytes.Equal(resp.LowerSlice(args[1]), resp.BEFORE) {
+	if bytes.Equal(LowerSlice(args[1]), BEFORE) {
 		isbefore = true
-	} else if bytes.Equal(resp.LowerSlice(args[1]), resp.AFTER) {
+	} else if bytes.Equal(LowerSlice(args[1]), AFTER) {
 		isbefore = false
 	} else {
-		return resp.ErrSyntax
+		return errn.ErrSyntax
 	}
 
 	if n, err := c.DB.LInsert(args[0], c.KeyHash, isbefore, args[2], args[3]); err != nil {
 		return err
 	} else {
-		c.RespWriter.WriteInteger(n)
+		c.Writer.WriteInteger(n)
 	}
 	return nil
 }
@@ -93,13 +93,13 @@ func linsertCommand(c *Client) error {
 func lpushCommand(c *Client) error {
 	args := c.Args
 	if len(args) < 2 {
-		return resp.CmdParamsErr(resp.LPUSH)
+		return errn.CmdParamsErr(resp.LPUSH)
 	}
 
 	if n, err := c.DB.LPush(args[0], c.KeyHash, args[1:]...); err != nil {
 		return err
 	} else {
-		c.RespWriter.WriteInteger(n)
+		c.Writer.WriteInteger(n)
 	}
 	return nil
 }
@@ -107,13 +107,13 @@ func lpushCommand(c *Client) error {
 func lpushxCommand(c *Client) error {
 	args := c.Args
 	if len(args) < 2 {
-		return resp.CmdParamsErr(resp.LPUSHX)
+		return errn.CmdParamsErr(resp.LPUSHX)
 	}
 
 	if n, err := c.DB.LPushX(args[0], c.KeyHash, args[1:]...); err != nil {
 		return err
 	} else {
-		c.RespWriter.WriteInteger(n)
+		c.Writer.WriteInteger(n)
 	}
 
 	return nil
@@ -122,13 +122,13 @@ func lpushxCommand(c *Client) error {
 func rpushCommand(c *Client) error {
 	args := c.Args
 	if len(args) < 2 {
-		return resp.CmdParamsErr(resp.RPUSH)
+		return errn.CmdParamsErr(resp.RPUSH)
 	}
 
 	if n, err := c.DB.RPush(args[0], c.KeyHash, args[1:]...); err != nil {
 		return err
 	} else {
-		c.RespWriter.WriteInteger(n)
+		c.Writer.WriteInteger(n)
 	}
 
 	return nil
@@ -137,13 +137,13 @@ func rpushCommand(c *Client) error {
 func rpushxCommand(c *Client) error {
 	args := c.Args
 	if len(args) < 2 {
-		return resp.CmdParamsErr(resp.RPUSHX)
+		return errn.CmdParamsErr(resp.RPUSHX)
 	}
 
 	if n, err := c.DB.RPushX(args[0], c.KeyHash, args[1:]...); err != nil {
 		return err
 	} else {
-		c.RespWriter.WriteInteger(n)
+		c.Writer.WriteInteger(n)
 	}
 
 	return nil
@@ -152,7 +152,7 @@ func rpushxCommand(c *Client) error {
 func lpopCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 1 {
-		return resp.CmdParamsErr(resp.LPOP)
+		return errn.CmdParamsErr(resp.LPOP)
 	}
 
 	v, vcloser, err := c.DB.LPop(args[0], c.KeyHash)
@@ -165,14 +165,14 @@ func lpopCommand(c *Client) error {
 		return err
 	}
 
-	c.RespWriter.WriteBulk(v)
+	c.Writer.WriteBulk(v)
 	return nil
 }
 
 func rpopCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 1 {
-		return resp.CmdParamsErr(resp.RPOP)
+		return errn.CmdParamsErr(resp.RPOP)
 	}
 
 	v, vcloser, err := c.DB.RPop(args[0], c.KeyHash)
@@ -185,20 +185,20 @@ func rpopCommand(c *Client) error {
 		return err
 	}
 
-	c.RespWriter.WriteBulk(v)
+	c.Writer.WriteBulk(v)
 	return nil
 }
 
 func llenCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 1 {
-		return resp.CmdParamsErr(resp.LLEN)
+		return errn.CmdParamsErr(resp.LLEN)
 	}
 
 	if n, err := c.DB.LLen(args[0], c.KeyHash); err != nil {
 		return err
 	} else {
-		c.RespWriter.WriteInteger(n)
+		c.Writer.WriteInteger(n)
 	}
 
 	return nil
@@ -207,12 +207,12 @@ func llenCommand(c *Client) error {
 func lindexCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 2 {
-		return resp.CmdParamsErr(resp.LINDEX)
+		return errn.CmdParamsErr(resp.LINDEX)
 	}
 
 	index, err := utils.ByteToInt64(args[1])
 	if err != nil {
-		return resp.ErrValue
+		return errn.ErrValue
 	}
 
 	v, closer, err := c.DB.LIndex(args[0], c.KeyHash, index)
@@ -225,25 +225,25 @@ func lindexCommand(c *Client) error {
 		return err
 	}
 
-	c.RespWriter.WriteBulk(v)
+	c.Writer.WriteBulk(v)
 	return nil
 }
 
 func lsetCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 3 {
-		return resp.CmdParamsErr(resp.LSET)
+		return errn.CmdParamsErr(resp.LSET)
 	}
 
 	index, err := utils.ByteToInt64(args[1])
 	if err != nil {
-		return resp.ErrValue
+		return errn.ErrValue
 	}
 
 	if err := c.DB.LSet(args[0], c.KeyHash, index, args[2]); err != nil {
 		return err
 	} else {
-		c.RespWriter.WriteStatus(resp.ReplyOK)
+		c.Writer.WriteStatus(resp.ReplyOK)
 	}
 
 	return nil
@@ -252,7 +252,7 @@ func lsetCommand(c *Client) error {
 func lrangeCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 3 {
-		return resp.CmdParamsErr(resp.LRANGE)
+		return errn.CmdParamsErr(resp.LRANGE)
 	}
 
 	var start int64
@@ -261,18 +261,18 @@ func lrangeCommand(c *Client) error {
 
 	start, err = utils.ByteToInt64(args[1])
 	if err != nil {
-		return resp.ErrValue
+		return errn.ErrValue
 	}
 
 	stop, err = utils.ByteToInt64(args[2])
 	if err != nil {
-		return resp.ErrValue
+		return errn.ErrValue
 	}
 
 	if v, err := c.DB.LRange(args[0], c.KeyHash, start, stop); err != nil {
 		return err
 	} else {
-		c.RespWriter.WriteSliceArray(v)
+		c.Writer.WriteSliceArray(v)
 	}
 
 	return nil
@@ -281,13 +281,13 @@ func lrangeCommand(c *Client) error {
 func lclearCommand(c *Client) error {
 	args := c.Args
 	if len(args) < 1 {
-		return resp.CmdParamsErr(resp.LCLEAR)
+		return errn.CmdParamsErr(resp.LCLEAR)
 	}
 
 	if n, err := c.DB.LClear(c.KeyHash, args...); err != nil {
 		return err
 	} else {
-		c.RespWriter.WriteInteger(n)
+		c.Writer.WriteInteger(n)
 	}
 	return nil
 }
@@ -295,12 +295,12 @@ func lclearCommand(c *Client) error {
 func lexpireCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 2 {
-		return resp.CmdParamsErr(resp.LEXPIRE)
+		return errn.CmdParamsErr(resp.LEXPIRE)
 	}
 
 	duration, err := utils.ByteToInt64(args[1])
 	if err != nil {
-		return resp.ErrValue
+		return errn.ErrValue
 	}
 
 	var n int64
@@ -308,19 +308,19 @@ func lexpireCommand(c *Client) error {
 	if err != nil {
 		return err
 	}
-	c.RespWriter.WriteInteger(n)
+	c.Writer.WriteInteger(n)
 	return nil
 }
 
 func lexpireAtCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 2 {
-		return resp.CmdParamsErr(resp.LEXPIREAT)
+		return errn.CmdParamsErr(resp.LEXPIREAT)
 	}
 
 	when, err := utils.ByteToInt64(args[1])
 	if err != nil {
-		return resp.ErrValue
+		return errn.ErrValue
 	}
 
 	var n int64
@@ -328,20 +328,20 @@ func lexpireAtCommand(c *Client) error {
 	if err != nil {
 		return err
 	}
-	c.RespWriter.WriteInteger(n)
+	c.Writer.WriteInteger(n)
 	return nil
 }
 
 func lttlCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 1 {
-		return resp.CmdParamsErr(resp.LTTL)
+		return errn.CmdParamsErr(resp.LTTL)
 	}
 
 	if v, err := c.DB.TTl(args[0], c.KeyHash); err != nil {
 		return err
 	} else {
-		c.RespWriter.WriteInteger(v)
+		c.Writer.WriteInteger(v)
 	}
 
 	return nil
@@ -350,13 +350,13 @@ func lttlCommand(c *Client) error {
 func lpersistCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 1 {
-		return resp.CmdParamsErr(resp.LPERSIST)
+		return errn.CmdParamsErr(resp.LPERSIST)
 	}
 
 	if n, err := c.DB.Persist(args[0], c.KeyHash); err != nil {
 		return err
 	} else {
-		c.RespWriter.WriteInteger(n)
+		c.Writer.WriteInteger(n)
 	}
 
 	return nil
@@ -365,13 +365,13 @@ func lpersistCommand(c *Client) error {
 func lkeyexistsCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 1 {
-		return resp.CmdParamsErr(resp.LKEYEXISTS)
+		return errn.CmdParamsErr(resp.LKEYEXISTS)
 	}
 
 	if n, err := c.DB.Exists(args[0], c.KeyHash); err != nil {
 		return err
 	} else {
-		c.RespWriter.WriteInteger(n)
+		c.Writer.WriteInteger(n)
 	}
 	return nil
 }
@@ -379,7 +379,7 @@ func lkeyexistsCommand(c *Client) error {
 func lTrimCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 3 {
-		return resp.CmdParamsErr(resp.LTRIM)
+		return errn.CmdParamsErr(resp.LTRIM)
 	}
 
 	var start int64
@@ -388,17 +388,17 @@ func lTrimCommand(c *Client) error {
 
 	start, err = utils.ByteToInt64(args[1])
 	if err != nil {
-		return resp.ErrValue
+		return errn.ErrValue
 	}
 	stop, err = utils.ByteToInt64(args[2])
 	if err != nil {
-		return resp.ErrValue
+		return errn.ErrValue
 	}
 
 	if err := c.DB.LTrim(args[0], c.KeyHash, start, stop); err != nil {
 		return err
 	} else {
-		c.RespWriter.WriteStatus(resp.ReplyOK)
+		c.Writer.WriteStatus(resp.ReplyOK)
 	}
 
 	return nil
@@ -407,18 +407,18 @@ func lTrimCommand(c *Client) error {
 func lTrimFrontCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 2 {
-		return resp.CmdParamsErr(resp.LTRIMFRONT)
+		return errn.CmdParamsErr(resp.LTRIMFRONT)
 	}
 
 	trimSize, err := utils.ByteToInt64(args[1])
 	if err != nil || trimSize < 0 {
-		return resp.ErrValue
+		return errn.ErrValue
 	}
 
 	if n, err := c.DB.LTrimFront(args[0], c.KeyHash, trimSize); err != nil {
 		return err
 	} else {
-		c.RespWriter.WriteInteger(n)
+		c.Writer.WriteInteger(n)
 	}
 
 	return nil
@@ -427,18 +427,18 @@ func lTrimFrontCommand(c *Client) error {
 func lTrimBackCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 2 {
-		return resp.CmdParamsErr(resp.LTRIMBACK)
+		return errn.CmdParamsErr(resp.LTRIMBACK)
 	}
 
 	trimSize, err := utils.ByteToInt64(args[1])
 	if err != nil || trimSize < 0 {
-		return resp.ErrValue
+		return errn.ErrValue
 	}
 
 	if n, err := c.DB.LTrimBack(args[0], c.KeyHash, trimSize); err != nil {
 		return err
 	} else {
-		c.RespWriter.WriteInteger(int64(n))
+		c.Writer.WriteInteger(int64(n))
 	}
 
 	return nil

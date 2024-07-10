@@ -7,7 +7,6 @@ require (
 	github.com/RoaringBitmap/roaring v1.9.0
 	github.com/VictoriaMetrics/metrics v1.6.2
 	github.com/cockroachdb/errors v1.11.1
-	github.com/cockroachdb/pebble v0.0.0-20210406181039-e3809b89b488
 	github.com/docopt/docopt-go v0.0.0-20180111231733-ee0de3bc6815
 	github.com/emirpasic/gods v1.12.0
 	github.com/go-martini/martini v0.0.0-20170121215854-22fa46961aab
@@ -25,18 +24,19 @@ require (
 	github.com/martini-contrib/gzip v0.0.0-20151124214156-6c035326b43f
 	github.com/martini-contrib/render v0.0.0-20150707142108-ec18f8345a11
 	github.com/martini-contrib/sessions v0.0.0-20140630231722-fa13114fbcf0
-	github.com/panjf2000/ants/v2 v2.9.0
+	github.com/panjf2000/ants/v2 v2.10.0
+	github.com/panjf2000/gnet/v2 v2.5.7
 	github.com/shopspring/decimal v1.3.1
 	github.com/sony/gobreaker v0.5.0
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.9.0
 	github.com/yuin/gopher-lua v1.1.1
-	github.com/zuoyebang/bitalosdb v1.1.4
-	github.com/zuoyebang/bitalostable v1.0.0
+	github.com/zuoyebang/bitalosdb v1.2.0
+	github.com/zuoyebang/bitalostable v1.0.1
 	go.uber.org/atomic v1.7.0
-	go.uber.org/zap v1.26.0
+	go.uber.org/zap v1.27.0
 	golang.org/x/net v0.20.0
-	golang.org/x/sys v0.18.0
+	golang.org/x/sys v0.22.0
 	google.golang.org/protobuf v1.33.0
 	gorm.io/driver/mysql v1.5.2
 	gorm.io/driver/sqlite v1.5.4
@@ -83,12 +83,14 @@ require (
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/rogpeppe/go-internal v1.12.0 // indirect
 	github.com/sean-/seed v0.0.0-20170313163322-e2103e2c3529 // indirect
+	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/fastrand v1.0.0 // indirect
 	github.com/valyala/histogram v1.0.1 // indirect
-	go.uber.org/multierr v1.10.0 // indirect
+	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/crypto v0.18.0 // indirect
 	golang.org/x/exp v0.0.0-20240222234643-814bf88cf225 // indirect
-	golang.org/x/sync v0.3.0 // indirect
+	golang.org/x/sync v0.7.0 // indirect
 	golang.org/x/text v0.14.0 // indirect
+	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

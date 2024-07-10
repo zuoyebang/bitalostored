@@ -16,46 +16,69 @@ package locker
 
 import (
 	"sync"
+
+	"github.com/zuoyebang/bitalostored/stored/internal/resp"
+)
+
+const (
+	lockerPoolSizeNormal uint32 = 4 << 10
+	lockerPoolSizeLarge  uint32 = 16 << 10
 )
 
 type locker struct {
 	sync.RWMutex
 }
 
-func (c *locker) getWLock() func() {
-	c.Lock()
+func (l *locker) getWLock() func() {
+	l.Lock()
 	return func() {
-		c.Unlock()
+		l.Unlock()
 	}
 }
 
-func (c *locker) getRLock() func() {
-	c.RLock()
+func (l *locker) getRLock() func() {
+	l.RLock()
 	return func() {
-		c.RUnlock()
+		l.RUnlock()
+	}
+}
+
+func (l *locker) lockKey(cmd string) func() {
+	if resp.IsWriteCmd(cmd) {
+		return l.getWLock()
+	} else {
+		return l.getRLock()
 	}
 }
 
 type ScopeLocker struct {
-	cap     uint32
+	size    uint32
 	lockers []*locker
 }
 
-func NewScopeLocker(num uint32) *ScopeLocker {
-	lockers := make([]*locker, 0, num)
-	for i := 0; i < int(num); i++ {
+func NewScopeLocker(large bool) *ScopeLocker {
+	size := lockerPoolSizeNormal
+	if large {
+		size = lockerPoolSizeLarge
+	}
+	lockers := make([]*locker, 0, size)
+	for i := uint32(0); i < size; i++ {
 		lockers = append(lockers, &locker{})
 	}
 	return &ScopeLocker{
-		cap:     num,
+		size:    size - 1,
 		lockers: lockers,
 	}
 }
 
 func (sl *ScopeLocker) LockWriteKey(khash uint32) func() {
-	return sl.lockers[khash%sl.cap].getWLock()
+	return sl.lockers[khash&sl.size].getWLock()
 }
 
 func (sl *ScopeLocker) LockReadKey(khash uint32) func() {
-	return sl.lockers[khash%sl.cap].getRLock()
+	return sl.lockers[khash&sl.size].getRLock()
+}
+
+func (sl *ScopeLocker) LockKey(khash uint32, cmd string) func() {
+	return sl.lockers[khash&sl.size].lockKey(cmd)
 }

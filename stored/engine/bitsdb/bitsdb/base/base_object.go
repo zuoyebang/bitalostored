@@ -70,7 +70,7 @@ func (bo *BaseObject) Close() {
 func (bo *BaseObject) CheckMetaData(mkv *MetaData) (isAlive bool, err error) {
 	if mkv.IsAlive() {
 		isAlive = true
-		if mkv.dt != bo.DataType {
+		if mkv.IsWrongType(bo.DataType) {
 			err = errn.ErrWrongType
 		}
 	} else {
@@ -150,7 +150,7 @@ func (bo *BaseObject) SetMetaDataSize(ek []byte, khash uint32, delta int64) erro
 	}
 
 	switch mkv.dt {
-	case btools.ZSET, btools.SET, btools.HASH:
+	case btools.ZSET, btools.ZSETOLD, btools.SET, btools.HASH:
 		var meta [MetaMixValueLen]byte
 		EncodeMetaDbValueForMix(meta[:], mkv)
 		return bo.SetMetaDataByValue(ek, meta[:])

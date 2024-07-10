@@ -19,7 +19,8 @@ const DefaultConfig = `
 address = ":10091"      
 max_client = 5000      
 keep_alive = "3600s"   
-max_procs = 8         
+max_procs = 4
+net_event_loop_num = 8      
 db_path = "bitalosdb" 
 slow_time = "40ms"   
 slow_key_window_time = "2000ms" 
@@ -42,7 +43,7 @@ is_debug = true
 rotation_time = "Daily"
 
 [bitalos]
-write_buffer_size = "256mb"
+write_buffer_size = "1gb"
 
 [worker_queue]
 enable = true       
@@ -54,7 +55,7 @@ set_worker = 30
 zset_worker = 30
 
 [raft_queue]
-workers = 20            
+workers = 32      
 length = 1000000       
 
 [raft_cluster]

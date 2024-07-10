@@ -18,6 +18,7 @@ import (
 	"strconv"
 
 	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/btools"
+	"github.com/zuoyebang/bitalostored/stored/internal/errn"
 	"github.com/zuoyebang/bitalostored/stored/internal/resp"
 	"github.com/zuoyebang/bitalostored/stored/internal/utils"
 )
@@ -58,7 +59,7 @@ func init() {
 func getCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 1 {
-		return resp.CmdParamsErr(resp.GET)
+		return errn.CmdParamsErr(resp.GET)
 	}
 
 	v, closer, err := c.DB.Get(args[0], c.KeyHash)
@@ -71,7 +72,7 @@ func getCommand(c *Client) error {
 		return err
 	}
 
-	c.RespWriter.WriteBulk(v)
+	c.Writer.WriteBulk(v)
 	return nil
 }
 
@@ -79,58 +80,58 @@ func setCommand(c *Client) error {
 	args := c.Args
 
 	if len(c.Args) < 2 {
-		return resp.CmdParamsErr(resp.SET)
+		return errn.CmdParamsErr(resp.SET)
 	}
 
-	exType, sec, setCondition, err := resp.ParseSetArgs(args[2:])
+	exType, sec, setCondition, err := ParseSetArgs(args[2:])
 
 	if err != nil {
 		return err
 	}
 
-	if exType == resp.NO_TYPE && setCondition == resp.NO_CONDITION {
+	if exType == NO_TYPE && setCondition == NO_CONDITION {
 		if err := c.DB.Set(args[0], c.KeyHash, args[1]); err != nil {
 			return err
 		}
-		c.RespWriter.WriteStatus(resp.ReplyOK)
-	} else if exType == resp.NO_TYPE && setCondition == resp.NX {
+		c.Writer.WriteStatus(resp.ReplyOK)
+	} else if exType == NO_TYPE && setCondition == NX {
 		if n, err := c.DB.SetNX(args[0], c.KeyHash, args[1]); err != nil {
 			return err
 		} else if n == 1 {
-			c.RespWriter.WriteStatus(resp.ReplyOK)
+			c.Writer.WriteStatus(resp.ReplyOK)
 		} else {
-			c.RespWriter.WriteBulk(nil)
+			c.Writer.WriteBulk(nil)
 		}
-	} else if exType == resp.EX && setCondition == resp.NO_CONDITION {
+	} else if exType == EX && setCondition == NO_CONDITION {
 		if err := c.DB.SetEX(args[0], c.KeyHash, sec, args[1]); err != nil {
 			return err
 		} else {
-			c.RespWriter.WriteStatus(resp.ReplyOK)
+			c.Writer.WriteStatus(resp.ReplyOK)
 		}
-	} else if exType == resp.EX && setCondition == resp.NX {
+	} else if exType == EX && setCondition == NX {
 		if n, err := c.DB.SetNXEX(args[0], c.KeyHash, sec, args[1]); err != nil {
 			return err
 		} else if n == 1 {
-			c.RespWriter.WriteStatus(resp.ReplyOK)
+			c.Writer.WriteStatus(resp.ReplyOK)
 		} else {
-			c.RespWriter.WriteBulk(nil)
+			c.Writer.WriteBulk(nil)
 		}
-	} else if exType == resp.PX && setCondition == resp.NO_CONDITION {
+	} else if exType == PX && setCondition == NO_CONDITION {
 		if err := c.DB.PSetEX(args[0], c.KeyHash, sec, args[1]); err != nil {
 			return err
 		} else {
-			c.RespWriter.WriteStatus(resp.ReplyOK)
+			c.Writer.WriteStatus(resp.ReplyOK)
 		}
-	} else if exType == resp.PX && setCondition == resp.NX {
+	} else if exType == PX && setCondition == NX {
 		if n, err := c.DB.PSetNXEX(args[0], c.KeyHash, sec, args[1]); err != nil {
 			return err
 		} else if n == 1 {
-			c.RespWriter.WriteStatus(resp.ReplyOK)
+			c.Writer.WriteStatus(resp.ReplyOK)
 		} else {
-			c.RespWriter.WriteBulk(nil)
+			c.Writer.WriteBulk(nil)
 		}
 	} else {
-		return resp.ErrNotImplement
+		return errn.ErrNotImplement
 	}
 
 	return nil
@@ -139,7 +140,7 @@ func setCommand(c *Client) error {
 func getsetCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 2 {
-		return resp.CmdParamsErr(resp.GETSET)
+		return errn.CmdParamsErr(resp.GETSET)
 	}
 
 	v, closer, err := c.DB.GetSet(args[0], c.KeyHash, args[1])
@@ -152,20 +153,20 @@ func getsetCommand(c *Client) error {
 		return err
 	}
 
-	c.RespWriter.WriteBulk(v)
+	c.Writer.WriteBulk(v)
 	return nil
 }
 
 func setnxCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 2 {
-		return resp.CmdParamsErr(resp.SETNX)
+		return errn.CmdParamsErr(resp.SETNX)
 	}
 
 	if n, err := c.DB.SetNX(args[0], c.KeyHash, args[1]); err != nil {
 		return err
 	} else {
-		c.RespWriter.WriteInteger(n)
+		c.Writer.WriteInteger(n)
 	}
 	return nil
 }
@@ -173,18 +174,18 @@ func setnxCommand(c *Client) error {
 func setexCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 3 {
-		return resp.CmdParamsErr(resp.SETEX)
+		return errn.CmdParamsErr(resp.SETEX)
 	}
 
 	sec, err := utils.ByteToInt64(args[1])
 	if err != nil {
-		return resp.ErrValue
+		return errn.ErrValue
 	}
 
 	if err := c.DB.SetEX(args[0], c.KeyHash, sec, args[2]); err != nil {
 		return err
 	} else {
-		c.RespWriter.WriteStatus(resp.ReplyOK)
+		c.Writer.WriteStatus(resp.ReplyOK)
 	}
 
 	return nil
@@ -193,18 +194,18 @@ func setexCommand(c *Client) error {
 func psetexCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 3 {
-		return resp.CmdParamsErr(resp.SETEX)
+		return errn.CmdParamsErr(resp.SETEX)
 	}
 
 	mills, err := utils.ByteToInt64(args[1])
 	if err != nil {
-		return resp.ErrValue
+		return errn.ErrValue
 	}
 
 	if err := c.DB.PSetEX(args[0], c.KeyHash, mills, args[2]); err != nil {
 		return err
 	} else {
-		c.RespWriter.WriteStatus(resp.ReplyOK)
+		c.Writer.WriteStatus(resp.ReplyOK)
 	}
 
 	return nil
@@ -213,13 +214,13 @@ func psetexCommand(c *Client) error {
 func kexistsCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 1 {
-		return resp.CmdParamsErr(resp.EXISTS)
+		return errn.CmdParamsErr(resp.EXISTS)
 	}
 
 	if n, err := c.DB.Exists(args[0], c.KeyHash); err != nil {
 		return err
 	} else {
-		c.RespWriter.WriteInteger(n)
+		c.Writer.WriteInteger(n)
 	}
 
 	return nil
@@ -228,13 +229,13 @@ func kexistsCommand(c *Client) error {
 func incrCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 1 {
-		return resp.CmdParamsErr(resp.INCR)
+		return errn.CmdParamsErr(resp.INCR)
 	}
 
 	if n, err := c.DB.Incr(c.Args[0], c.KeyHash); err != nil {
 		return err
 	} else {
-		c.RespWriter.WriteInteger(n)
+		c.Writer.WriteInteger(n)
 	}
 
 	return nil
@@ -243,13 +244,13 @@ func incrCommand(c *Client) error {
 func decrCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 1 {
-		return resp.CmdParamsErr(resp.DECR)
+		return errn.CmdParamsErr(resp.DECR)
 	}
 
 	if n, err := c.DB.Decr(c.Args[0], c.KeyHash); err != nil {
 		return err
 	} else {
-		c.RespWriter.WriteInteger(n)
+		c.Writer.WriteInteger(n)
 	}
 
 	return nil
@@ -258,18 +259,18 @@ func decrCommand(c *Client) error {
 func incrbyCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 2 {
-		return resp.CmdParamsErr(resp.INCRBY)
+		return errn.CmdParamsErr(resp.INCRBY)
 	}
 
 	delta, err := utils.ByteToInt64(args[1])
 	if err != nil {
-		return resp.ErrValue
+		return errn.ErrValue
 	}
 
 	if n, err := c.DB.IncrBy(c.Args[0], c.KeyHash, delta); err != nil {
 		return err
 	} else {
-		c.RespWriter.WriteInteger(n)
+		c.Writer.WriteInteger(n)
 	}
 
 	return nil
@@ -278,17 +279,17 @@ func incrbyCommand(c *Client) error {
 func incrbyfloatCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 2 {
-		return resp.CmdParamsErr(resp.INCRBYFLOAT)
+		return errn.CmdParamsErr(resp.INCRBYFLOAT)
 	}
 	delta, err := utils.ByteToFloat64(args[1])
 	if err != nil {
-		return resp.ErrValue
+		return errn.ErrValue
 	}
 
 	if n, err := c.DB.IncrByFloat(c.Args[0], c.KeyHash, delta); err != nil {
 		return err
 	} else {
-		c.RespWriter.WriteBulk([]byte(strconv.FormatFloat(n, 'f', -1, 64)))
+		c.Writer.WriteBulk([]byte(strconv.FormatFloat(n, 'f', -1, 64)))
 	}
 
 	return nil
@@ -297,18 +298,18 @@ func incrbyfloatCommand(c *Client) error {
 func decrbyCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 2 {
-		return resp.CmdParamsErr(resp.DECRBY)
+		return errn.CmdParamsErr(resp.DECRBY)
 	}
 
 	delta, err := utils.ByteToInt64(args[1])
 	if err != nil {
-		return resp.ErrValue
+		return errn.ErrValue
 	}
 
 	if n, err := c.DB.DecrBy(c.Args[0], c.KeyHash, delta); err != nil {
 		return err
 	} else {
-		c.RespWriter.WriteInteger(n)
+		c.Writer.WriteInteger(n)
 	}
 
 	return nil
@@ -317,13 +318,13 @@ func decrbyCommand(c *Client) error {
 func kdelCommand(c *Client) error {
 	args := c.Args
 	if len(args) == 0 {
-		return resp.CmdParamsErr(resp.KDEL)
+		return errn.CmdParamsErr(resp.KDEL)
 	}
 
 	if n, err := c.DB.Del(c.KeyHash, args...); err != nil {
 		return err
 	} else {
-		c.RespWriter.WriteInteger(n)
+		c.Writer.WriteInteger(n)
 	}
 
 	return nil
@@ -332,7 +333,7 @@ func kdelCommand(c *Client) error {
 func msetCommand(c *Client) error {
 	args := c.Args
 	if len(args) == 0 || len(args)%2 != 0 {
-		return resp.CmdParamsErr(resp.MSET)
+		return errn.CmdParamsErr(resp.MSET)
 	}
 
 	kvs := make([]btools.KVPair, len(args)/2)
@@ -344,7 +345,7 @@ func msetCommand(c *Client) error {
 	if err := c.DB.MSet(c.KeyHash, kvs...); err != nil {
 		return err
 	} else {
-		c.RespWriter.WriteStatus(resp.ReplyOK)
+		c.Writer.WriteStatus(resp.ReplyOK)
 	}
 
 	return nil
@@ -353,7 +354,7 @@ func msetCommand(c *Client) error {
 func mgetCommand(c *Client) error {
 	args := c.Args
 	if len(args) == 0 {
-		return resp.CmdParamsErr(resp.MGET)
+		return errn.CmdParamsErr(resp.MGET)
 	}
 
 	v, closers, err := c.DB.MGet(c.KeyHash, args...)
@@ -368,19 +369,19 @@ func mgetCommand(c *Client) error {
 		return err
 	}
 
-	c.RespWriter.WriteSliceArray(v)
+	c.Writer.WriteSliceArray(v)
 	return nil
 }
 
 func kexpireCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 2 {
-		return resp.CmdParamsErr(resp.KEXPIRE)
+		return errn.CmdParamsErr(resp.KEXPIRE)
 	}
 
 	duration, err := utils.ByteToInt64(args[1])
 	if err != nil {
-		return resp.ErrValue
+		return errn.ErrValue
 	}
 
 	var n int64
@@ -388,19 +389,19 @@ func kexpireCommand(c *Client) error {
 	if err != nil {
 		return err
 	}
-	c.RespWriter.WriteInteger(n)
+	c.Writer.WriteInteger(n)
 	return nil
 }
 
 func kexpireAtCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 2 {
-		return resp.CmdParamsErr(resp.KEXPIREAT)
+		return errn.CmdParamsErr(resp.KEXPIREAT)
 	}
 
 	when, err := utils.ByteToInt64(args[1])
 	if err != nil {
-		return resp.ErrValue
+		return errn.ErrValue
 	}
 
 	var n int64
@@ -408,20 +409,20 @@ func kexpireAtCommand(c *Client) error {
 	if err != nil {
 		return err
 	}
-	c.RespWriter.WriteInteger(n)
+	c.Writer.WriteInteger(n)
 	return nil
 }
 
 func kttlCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 1 {
-		return resp.CmdParamsErr(resp.KTTL)
+		return errn.CmdParamsErr(resp.KTTL)
 	}
 
 	if v, err := c.DB.TTl(args[0], c.KeyHash); err != nil {
 		return err
 	} else {
-		c.RespWriter.WriteInteger(v)
+		c.Writer.WriteInteger(v)
 	}
 
 	return nil
@@ -430,13 +431,13 @@ func kttlCommand(c *Client) error {
 func kpersistCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 1 {
-		return resp.CmdParamsErr(resp.PERSIST)
+		return errn.CmdParamsErr(resp.PERSIST)
 	}
 
 	if n, err := c.DB.Persist(args[0], c.KeyHash); err != nil {
 		return err
 	} else {
-		c.RespWriter.WriteInteger(n)
+		c.Writer.WriteInteger(n)
 	}
 
 	return nil
@@ -445,13 +446,13 @@ func kpersistCommand(c *Client) error {
 func appendCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 2 {
-		return resp.CmdParamsErr(resp.APPEND)
+		return errn.CmdParamsErr(resp.APPEND)
 	}
 
 	if n, err := c.DB.Append(args[0], c.KeyHash, args[1]); err != nil {
 		return err
 	} else {
-		c.RespWriter.WriteInteger(n)
+		c.Writer.WriteInteger(n)
 	}
 	return nil
 }
@@ -459,7 +460,7 @@ func appendCommand(c *Client) error {
 func getrangeCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 3 {
-		return resp.CmdParamsErr(resp.GETRANGE)
+		return errn.CmdParamsErr(resp.GETRANGE)
 	}
 
 	key := args[0]
@@ -482,7 +483,7 @@ func getrangeCommand(c *Client) error {
 	if err != nil {
 		return err
 	} else {
-		c.RespWriter.WriteBulk(v)
+		c.Writer.WriteBulk(v)
 	}
 
 	return nil
@@ -492,7 +493,7 @@ func getrangeCommand(c *Client) error {
 func setrangeCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 3 {
-		return resp.CmdParamsErr(resp.SETRANGE)
+		return errn.CmdParamsErr(resp.SETRANGE)
 	}
 
 	key := args[0]
@@ -501,7 +502,7 @@ func setrangeCommand(c *Client) error {
 		return err
 	}
 	if offset < 0 {
-		return resp.ErrRangeOffset
+		return errn.ErrRangeOffset
 	}
 
 	value := args[2]
@@ -509,20 +510,20 @@ func setrangeCommand(c *Client) error {
 	if n, err := c.DB.SetRange(key, c.KeyHash, offset, value); err != nil {
 		return err
 	} else {
-		c.RespWriter.WriteInteger(n)
+		c.Writer.WriteInteger(n)
 	}
 	return nil
 }
 
 func strlenCommand(c *Client) error {
 	if len(c.Args) != 1 {
-		return resp.CmdParamsErr(resp.STRLEN)
+		return errn.CmdParamsErr(resp.STRLEN)
 	}
 
 	if n, err := c.DB.StrLen(c.Args[0], c.KeyHash); err != nil {
 		return err
 	} else {
-		c.RespWriter.WriteInteger(n)
+		c.Writer.WriteInteger(n)
 	}
 	return nil
 }
@@ -548,7 +549,7 @@ func bitcountCommand(c *Client) error {
 	args := c.Args
 
 	if len(args) != 1 && len(args) != 3 {
-		return resp.CmdParamsErr(resp.BITCOUNT)
+		return errn.CmdParamsErr(resp.BITCOUNT)
 	}
 
 	key := args[0]
@@ -557,14 +558,14 @@ func bitcountCommand(c *Client) error {
 		return err
 	}
 	if start > end && len(args[1:]) != 0 {
-		c.RespWriter.WriteInteger(0)
+		c.Writer.WriteInteger(0)
 		return nil
 	}
 
 	if n, err := c.DB.BitCount(key, c.KeyHash, start, end); err != nil {
 		return err
 	} else {
-		c.RespWriter.WriteInteger(n)
+		c.Writer.WriteInteger(n)
 	}
 	return nil
 }
@@ -572,7 +573,7 @@ func bitcountCommand(c *Client) error {
 func bitposCommand(c *Client) error {
 	args := c.Args
 	if len(args) < 2 {
-		return resp.CmdParamsErr(resp.BITPOS)
+		return errn.CmdParamsErr(resp.BITPOS)
 	}
 
 	key := args[0]
@@ -588,7 +589,7 @@ func bitposCommand(c *Client) error {
 	if n, err := c.DB.BitPos(key, c.KeyHash, bit, start, end); err != nil {
 		return err
 	} else {
-		c.RespWriter.WriteInteger(n)
+		c.Writer.WriteInteger(n)
 	}
 	return nil
 }
@@ -596,7 +597,7 @@ func bitposCommand(c *Client) error {
 func getbitCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 2 {
-		return resp.CmdParamsErr(resp.GETBIT)
+		return errn.CmdParamsErr(resp.GETBIT)
 	}
 
 	key := args[0]
@@ -605,13 +606,13 @@ func getbitCommand(c *Client) error {
 		return err
 	}
 	if offset < 0 {
-		return resp.ErrBitOffset
+		return errn.ErrBitOffset
 	}
 
 	if n, err := c.DB.GetBit(key, c.KeyHash, offset); err != nil {
 		return err
 	} else {
-		c.RespWriter.WriteInteger(n)
+		c.Writer.WriteInteger(n)
 	}
 	return nil
 }
@@ -619,7 +620,7 @@ func getbitCommand(c *Client) error {
 func setbitCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 3 {
-		return resp.CmdParamsErr(resp.SETBIT)
+		return errn.CmdParamsErr(resp.SETBIT)
 	}
 
 	key := args[0]
@@ -628,7 +629,7 @@ func setbitCommand(c *Client) error {
 		return err
 	}
 	if offset < 0 {
-		return resp.ErrBitOffset
+		return errn.ErrBitOffset
 	}
 
 	value, err := strconv.Atoi(string(args[2]))
@@ -639,7 +640,7 @@ func setbitCommand(c *Client) error {
 	if n, err := c.DB.SetBit(key, c.KeyHash, offset, value); err != nil {
 		return err
 	} else {
-		c.RespWriter.WriteInteger(n)
+		c.Writer.WriteInteger(n)
 	}
 	return nil
 }

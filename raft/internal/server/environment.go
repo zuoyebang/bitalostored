@@ -20,19 +20,18 @@ import (
 	"os"
 	"strings"
 
-	"github.com/zuoyebang/bitalostored/raft/config"
-	"github.com/zuoyebang/bitalostored/raft/logger"
-	"github.com/zuoyebang/bitalostored/raft/raftio"
-	"github.com/zuoyebang/bitalostored/raft/raftpb"
-
 	"github.com/cockroachdb/errors"
 	"github.com/lni/goutils/random"
 
+	"github.com/zuoyebang/bitalostored/raft/config"
 	"github.com/zuoyebang/bitalostored/raft/internal/fileutil"
 	"github.com/zuoyebang/bitalostored/raft/internal/id"
 	"github.com/zuoyebang/bitalostored/raft/internal/settings"
 	"github.com/zuoyebang/bitalostored/raft/internal/utils"
 	"github.com/zuoyebang/bitalostored/raft/internal/vfs"
+	"github.com/zuoyebang/bitalostored/raft/logger"
+	"github.com/zuoyebang/bitalostored/raft/raftio"
+	"github.com/zuoyebang/bitalostored/raft/raftpb"
 )
 
 var (
@@ -349,7 +348,11 @@ func compatibleLogDBType(saved string, name string) bool {
 	if saved == name {
 		return true
 	}
-	return (saved == "rocksdb" && name == "pebble") ||
+	return (saved == "rocksdb" && name == "bitable") ||
+		(saved == "bitable" && name == "rocksdb") ||
+		(saved == "sharded-bitable" && name == "sharded-rocksdb") ||
+		(saved == "sharded-rocksdb" && name == "sharded-bitable") ||
+		(saved == "rocksdb" && name == "pebble") ||
 		(saved == "pebble" && name == "rocksdb") ||
 		(saved == "sharded-pebble" && name == "sharded-rocksdb") ||
 		(saved == "sharded-rocksdb" && name == "sharded-pebble")

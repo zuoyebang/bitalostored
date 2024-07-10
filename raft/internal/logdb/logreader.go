@@ -37,11 +37,11 @@ import (
 	"sync"
 	"unsafe"
 
+	"github.com/lni/goutils/logutil"
+
 	"github.com/zuoyebang/bitalostored/raft/internal/raft"
 	"github.com/zuoyebang/bitalostored/raft/raftio"
 	pb "github.com/zuoyebang/bitalostored/raft/raftpb"
-
-	"github.com/lni/goutils/logutil"
 )
 
 const (

@@ -25,8 +25,8 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/lni/goutils/leaktest"
 	"github.com/stretchr/testify/require"
-	"github.com/zuoyebang/bitalostored/raft/config"
 
+	"github.com/zuoyebang/bitalostored/raft/config"
 	"github.com/zuoyebang/bitalostored/raft/internal/fileutil"
 	"github.com/zuoyebang/bitalostored/raft/internal/vfs"
 	"github.com/zuoyebang/bitalostored/raft/raftio"

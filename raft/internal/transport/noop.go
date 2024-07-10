@@ -20,12 +20,12 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/errors"
+	"github.com/lni/goutils/stringutil"
+
 	"github.com/zuoyebang/bitalostored/raft/config"
 	"github.com/zuoyebang/bitalostored/raft/raftio"
 	"github.com/zuoyebang/bitalostored/raft/raftpb"
-
-	"github.com/cockroachdb/errors"
-	"github.com/lni/goutils/stringutil"
 )
 
 var (

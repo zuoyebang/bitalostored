@@ -18,36 +18,45 @@ import (
 	"sync/atomic"
 )
 
+const (
+	DefaultWriteBufferSize   = 256 << 20
+	DefaultMaxWriteBufferNum = 8
+)
+
 type Config struct {
-	DBPath                     string
-	DelExpireDataPoolNum       int
-	GetNextKeyId               func() uint64
-	GetCurrentKeyId            func() uint64
-	WriteBufferSize            int
-	MaxWriteBufferNum          int
-	DisableWAL                 bool
-	CacheSize                  int
-	CacheHashSize              int
-	CacheEliminateDuration     int
-	CompactStartTime           int
-	CompactEndTime             int
-	BithashGcThreshold         float64
-	CompactInterval            int
-	BithashCompressionType     int
-	EnablePageBlockCompression bool
-	PageBlockCacheSize         int
-	EnableRaftlogRestore       bool
-	KvCheckExpireFunc          func(int, []byte, []byte) bool
-	KvTimestampFunc            func([]byte, uint8) (bool, uint64)
-	FlushReporterFunc          func(int)
-	IOWriteLoadThresholdFunc   func() bool
+	DBPath                         string
+	DelExpireDataPoolNum           int
+	GetNextKeyId                   func() uint64
+	GetCurrentKeyId                func() uint64
+	WriteBufferSize                int
+	MaxWriteBufferNum              int
+	DisableWAL                     bool
+	CacheSize                      int
+	CacheHashSize                  int
+	CacheShardNum                  int
+	CacheEliminateDuration         int
+	EnableMissCache                bool
+	CompactStartTime               int
+	CompactEndTime                 int
+	BithashGcThreshold             float64
+	CompactInterval                int
+	BithashCompressionType         int
+	EnablePageBlockCompression     bool
+	PageBlockCacheSize             int
+	EnableRaftlogRestore           bool
+	KvCheckExpireFunc              func(int, []byte, []byte) bool
+	KvTimestampFunc                func([]byte, uint8) (bool, uint64)
+	FlushReporterFunc              func(int)
+	IOWriteLoadThresholdFunc       func() bool
+	FlushPrefixDeleteKeyMultiplier int
+	FlushFileLifetime              int
 }
 
 func NewConfigDefault() *Config {
 	cfg := &Config{}
 	cfg.DelExpireDataPoolNum = 8
-	cfg.WriteBufferSize = getDefault(256<<20, cfg.WriteBufferSize)
-	cfg.MaxWriteBufferNum = getDefault(8, cfg.MaxWriteBufferNum)
+	cfg.WriteBufferSize = getDefault(DefaultWriteBufferSize, cfg.WriteBufferSize)
+	cfg.MaxWriteBufferNum = getDefault(DefaultMaxWriteBufferNum, cfg.MaxWriteBufferNum)
 	cfg.CacheSize = getDefault(0, cfg.CacheSize)
 	if cfg.GetNextKeyId == nil {
 		cfg.GetNextKeyId = DefaultGetNextKeyId

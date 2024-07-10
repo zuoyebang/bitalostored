@@ -16,18 +16,14 @@ package main
 
 import (
 	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
-	"runtime"
 	"syscall"
 
 	"github.com/zuoyebang/bitalostored/stored/internal/config"
+	"github.com/zuoyebang/bitalostored/stored/internal/raft"
 	"github.com/zuoyebang/bitalostored/stored/internal/tclock"
-	"github.com/zuoyebang/bitalostored/stored/plugin/anticc"
-	"github.com/zuoyebang/bitalostored/stored/plugin/catch_panic"
-	"github.com/zuoyebang/bitalostored/stored/plugin/info"
-	"github.com/zuoyebang/bitalostored/stored/plugin/pprof"
-	"github.com/zuoyebang/bitalostored/stored/plugin/raft"
 	"github.com/zuoyebang/bitalostored/stored/server"
 
 	"github.com/zuoyebang/bitalostored/stored/internal/log"
@@ -46,8 +42,6 @@ func main() {
 		panic(fmt.Sprintf("load global config failed err:%s", err.Error()))
 	}
 
-	runtime.GOMAXPROCS(config.GlobalConfig.Server.Maxprocs)
-
 	log.NewLogger(&log.Options{
 		IsDebug:      config.GlobalConfig.Log.IsDebug,
 		RotationTime: config.GlobalConfig.Log.RotationTime,
@@ -58,6 +52,8 @@ func main() {
 
 	log.Infof("create server with config\n%s", config.GlobalConfig)
 
+	startPprof()
+
 	s, err := server.NewServer()
 	if err != nil {
 		log.Errorf("new server fail err:%s", err.Error())
@@ -67,11 +63,9 @@ func main() {
 	log.Info("server is working ...")
 
 	server.InitLuaPool(s)
-	info.Init()
-	catch_panic.Init()
-	pprof.Init()
-	raft.Init()
-	anticc.Init()
+	raft.RaftInit(s)
+	server.RunInfoCollection(s)
+	raft.RaftStart(s)
 
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc,
@@ -82,7 +76,7 @@ func main() {
 		syscall.SIGTERM,
 		syscall.SIGQUIT)
 
-	go s.Run()
+	go s.ListenAndServe()
 
 	<-sc
 
@@ -91,4 +85,17 @@ func main() {
 	log.Info("server is closing ...")
 	s.Close()
 	log.Info("server is closed ...")
+}
+
+func startPprof() {
+	if !config.GlobalConfig.Plugin.OpenPprof {
+		return
+	}
+
+	go func() {
+		pprofAddr := config.GlobalConfig.Plugin.PprofAddr
+		if err := http.ListenAndServe(pprofAddr, nil); err != nil {
+			log.Fatal(err)
+		}
+	}()
 }

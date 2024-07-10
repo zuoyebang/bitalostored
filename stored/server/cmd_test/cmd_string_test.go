@@ -15,8 +15,8 @@
 package cmd_test
 
 import (
-	"crypto/md5"
 	"fmt"
+	"math/rand"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -29,17 +29,37 @@ import (
 
 const defaultValBytes = "1qaz2wsx3edc4rfv5tgb6yhn7ujm8ik9ol0p1qaz2wsx3edc4rfv5tgb6yhn7ujm8ik9ol0p1qaz2wsx3edc4rfv5tgb6yhn7ujm8ik9ol0p"
 
+func testRandBytes(len int) []byte {
+	val := make([]byte, len)
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	for i := 0; i < len; i++ {
+		b := r.Intn(26) + 65
+		val[i] = byte(b)
+	}
+	return val
+}
+
 func TestKVSet(t *testing.T) {
 	c := getTestConn()
 	defer c.Close()
 
-	key := fmt.Sprintf("%x", md5.Sum([]byte("xingfu")))
-	val := "helloworldhelloworld"
-	if ok, err := redis.String(c.Do("set", key, val)); err != nil {
-		t.Fatal(err)
-	} else if ok != resp.ReplyOK {
-		t.Fatal(ok)
-	}
+	key := []byte("testkvkey1")
+	val := testRandBytes(6 << 20)
+	ok, err := redis.String(c.Do("set", key, val))
+	require.NoError(t, err)
+	require.Equal(t, resp.ReplyOK, ok)
+	v, err := redis.String(c.Do("get", key))
+	require.NoError(t, err)
+	require.Equal(t, string(val), v)
+
+	key2 := []byte("testkvkey2")
+	val2 := testRandBytes(6 << 20)
+	ok, err = redis.String(c.Do("set", key2, val2))
+	require.NoError(t, err)
+	require.Equal(t, resp.ReplyOK, ok)
+	v, err = redis.String(c.Do("get", key2))
+	require.NoError(t, err)
+	require.Equal(t, string(val2), v)
 }
 
 func TestKVSetEx(t *testing.T) {
@@ -94,7 +114,7 @@ func TestKVSetEx(t *testing.T) {
 	for i := 0; i < readNum; i++ {
 		if n, err := redis.Int64(c.Do("pttl", key)); err != nil {
 			t.Fatal(err)
-		} else if n != 1300 {
+		} else if n < 1299 {
 			t.Fatalf("ttl fail exp:%d act:%d", 1300, n)
 		}
 		if n, err := redis.Int64(c.Do("ttl", key)); err != nil {

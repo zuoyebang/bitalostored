@@ -24,7 +24,6 @@ import (
 const (
 	DefaultScanCount   int    = 10
 	LuaScriptSlot      uint16 = 2048
-	KeyLockerPoolCap   uint32 = 16 << 10
 	ConfigMaxFieldSize int    = 60 << 10
 )
 

@@ -303,7 +303,7 @@ func TestKeys_Expire_Persist_TTL_Type(t *testing.T) {
 
 		key = []byte("zset_persist_test")
 		khash = hash.Fnv32(key)
-		if n, err := bdb.ZsetObj.ZAdd(key, khash, btools.ScorePair{1, []byte("a")}); err != nil {
+		if n, err := bdb.ZsetObj.ZAdd(key, khash, false, spair(1, []byte("a"))); err != nil {
 			t.Fatal(err)
 		} else if n != 1 {
 			t.Fatal(n)
@@ -319,8 +319,7 @@ func TestKeys_Expire_Persist_TTL_Type(t *testing.T) {
 
 func TestKeys_Expire_Dels(t *testing.T) {
 	for _, isFlush := range []bool{false, true} {
-		func() {
-			fmt.Println("run isFlush=", isFlush)
+		t.Run(fmt.Sprintf("isFlush=%v", isFlush), func(t *testing.T) {
 			cores := testTwoBitsCores()
 			defer closeCores(cores)
 
@@ -388,7 +387,7 @@ func TestKeys_Expire_Dels(t *testing.T) {
 					} else if n != 1 {
 						t.Fatal(n)
 					}
-					if n, err := bdb.ZsetObj.ZAdd(zkey, zkhash, btools.ScorePair{1, zfield}); err != nil {
+					if n, err := bdb.ZsetObj.ZAdd(zkey, zkhash, false, spair(1, zfield)); err != nil {
 						t.Fatal(err)
 					} else if n != 1 {
 						t.Fatal(n)
@@ -487,10 +486,9 @@ func TestKeys_Expire_Dels(t *testing.T) {
 					} else {
 						if !bytes.Equal(v, []byte(fmt.Sprintf("string_del_value_%d", i))) {
 							t.Fatal("string val get fail", v)
-							// } else if vcloser == nil {
-							// 	t.Fatal("vcloser return is nil")
 						}
 					}
+
 					if vcloser != nil {
 						vcloser()
 					}
@@ -555,7 +553,7 @@ func TestKeys_Expire_Dels(t *testing.T) {
 					}
 				}
 			}
-		}()
+		})
 	}
 }
 
@@ -595,7 +593,7 @@ func TestKeys_FlushCheckExpire(t *testing.T) {
 		zkey := []byte("TestKeys_CheckExpire_zset_key")
 		zkhash := hash.Fnv32(zkey)
 		zfield := []byte("TestKeys_CheckExpire_zset_field")
-		if n, err := bdb.ZsetObj.ZAdd(zkey, zkhash, btools.ScorePair{Score: 1, Member: zfield}); err != nil {
+		if n, err := bdb.ZsetObj.ZAdd(zkey, zkhash, false, spair(1, zfield)); err != nil {
 			t.Fatal(err)
 		} else if n != 1 {
 			t.Fatal(n)
@@ -743,8 +741,8 @@ func TestKeys_WrongType(t *testing.T) {
 				}
 			}
 			if dt != btools.ZSET {
-				args := btools.ScorePair{Score: 1, Member: zfield}
-				if _, err := bdb.ZsetObj.ZAdd(key, khash, args); err != errn.ErrWrongType {
+				args := spair(1, zfield)
+				if _, err := bdb.ZsetObj.ZAdd(key, khash, false, args); err != errn.ErrWrongType {
 					t.Fatal("ZAdd ErrWrongType check fail", err)
 				}
 			}
@@ -820,7 +818,7 @@ func TestKeys_WrongType(t *testing.T) {
 		}
 		time.Sleep(time.Second)
 
-		if n, err := bdb.ZsetObj.ZAdd(key, khash, btools.ScorePair{Score: 1, Member: zfield}); err != nil {
+		if n, err := bdb.ZsetObj.ZAdd(key, khash, false, spair(1, zfield)); err != nil {
 			t.Fatal("Zadd err", err)
 		} else if n != 1 {
 			t.Fatal("Zadd return n err", n)
@@ -859,8 +857,8 @@ func TestKeys_ScanBySlotId(t *testing.T) {
 
 	for _, cr := range cores {
 		bdb := cr.db
-
 		var keys []string
+		var isZetOld bool
 		slotId := uint32(1)
 		count := 10000
 		sfield := []byte("TestKeys_set_field")
@@ -901,7 +899,12 @@ func TestKeys_ScanBySlotId(t *testing.T) {
 					t.Fatal("SAdd return n err", n)
 				}
 			case 2:
-				if n, err := bdb.ZsetObj.ZAdd(key, khash, btools.ScorePair{1, zfield}); err != nil {
+				if i%2 == 0 {
+					isZetOld = true
+				} else {
+					isZetOld = false
+				}
+				if n, err := bdb.ZsetObj.ZAdd(key, khash, isZetOld, spair(1, zfield)); err != nil {
 					t.Fatal("Zadd err", err)
 				} else if n != 1 {
 					t.Fatal("Zadd return n err", n)
@@ -943,7 +946,11 @@ func TestKeys_ScanBySlotId(t *testing.T) {
 				case 1:
 					expDt = btools.SET
 				case 2:
-					expDt = btools.ZSET
+					if i%2 == 0 {
+						expDt = btools.ZSETOLD
+					} else {
+						expDt = btools.ZSET
+					}
 				case 3:
 					expDt = btools.HASH
 				case 4:

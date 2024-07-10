@@ -21,7 +21,6 @@ import (
 	sm "github.com/zuoyebang/bitalostored/raft/statemachine"
 	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/dbmeta"
 	"github.com/zuoyebang/bitalostored/stored/internal/config"
-	"github.com/zuoyebang/bitalostored/stored/internal/errn"
 	"github.com/zuoyebang/bitalostored/stored/internal/log"
 	"github.com/zuoyebang/bitalostored/stored/internal/marshal/update"
 	"github.com/zuoyebang/bitalostored/stored/server"
@@ -61,10 +60,6 @@ func (pD *DiskKV) Open(stopc <-chan struct{}) (uint64, uint64, error) {
 }
 
 func (pD *DiskKV) Update(es []sm.Entry) ([]sm.Entry, error) {
-	if pD.s.GetIsClosed() {
-		return nil, errn.ErrServerClosed
-	}
-
 	var originUpdateIndex uint64
 	var originFlushIndex uint64
 	var res []sm.Entry

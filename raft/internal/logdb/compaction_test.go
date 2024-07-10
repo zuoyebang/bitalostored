@@ -18,9 +18,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/zuoyebang/bitalostored/raft/raftio"
-
 	"github.com/lni/goutils/leaktest"
+	"github.com/zuoyebang/bitalostored/raft/raftio"
 )
 
 func TestCompactionTaskCanBeCreated(t *testing.T) {

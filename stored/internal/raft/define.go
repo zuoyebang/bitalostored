@@ -15,9 +15,8 @@
 package raft
 
 import (
-	braft "github.com/zuoyebang/bitalostored/raft"
-
 	jsoniter "github.com/json-iterator/go"
+	braft "github.com/zuoyebang/bitalostored/raft"
 )
 
 type RetType int

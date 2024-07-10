@@ -25,15 +25,15 @@ import (
 	"sync"
 	"time"
 
-	"github.com/zuoyebang/bitalostored/raft/config"
-	"github.com/zuoyebang/bitalostored/raft/internal/settings"
-	"github.com/zuoyebang/bitalostored/raft/raftio"
-	pb "github.com/zuoyebang/bitalostored/raft/raftpb"
-
 	"github.com/cockroachdb/errors"
 	"github.com/juju/ratelimit"
 	"github.com/lni/goutils/netutil"
 	"github.com/lni/goutils/syncutil"
+
+	"github.com/zuoyebang/bitalostored/raft/config"
+	"github.com/zuoyebang/bitalostored/raft/internal/settings"
+	"github.com/zuoyebang/bitalostored/raft/raftio"
+	pb "github.com/zuoyebang/bitalostored/raft/raftpb"
 )
 
 var (

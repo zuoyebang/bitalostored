@@ -151,7 +151,7 @@ func (task *FlushTask) SyncFlush(data flushData) {
 	task.flushEnd(data.index)
 }
 
-func (task *FlushTask) AyncFlush(data flushData) (<-chan struct{}, error) {
+func (task *FlushTask) AsyncFlush(data flushData) (<-chan struct{}, error) {
 	if task.isClosed() {
 		return nil, errors.New("task closed")
 	}

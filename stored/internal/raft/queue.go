@@ -22,7 +22,6 @@ import (
 
 	"github.com/zuoyebang/bitalostored/butils/unsafe2"
 	"github.com/zuoyebang/bitalostored/stored/internal/log"
-	"github.com/zuoyebang/bitalostored/stored/internal/resp"
 	"github.com/zuoyebang/bitalostored/stored/server"
 )
 
@@ -32,7 +31,7 @@ const (
 )
 
 type Queue struct {
-	worknum uint32
+	workNum uint32
 	length  uint32
 	pD      *DiskKV
 	qchans  []chan *QData
@@ -45,27 +44,27 @@ type QData struct {
 	keyHash   uint32
 }
 
-func NewQueue(worknum, length int, pD *DiskKV) *Queue {
-	if worknum < DefaultWorkNum {
-		worknum = DefaultWorkNum
+func NewQueue(workNum, length int, pD *DiskKV) *Queue {
+	if workNum < DefaultWorkNum {
+		workNum = DefaultWorkNum
 	}
 	if length < DefaultQueueLength {
 		length = DefaultQueueLength
 	}
 
 	queue := &Queue{
-		worknum: uint32(worknum),
+		workNum: uint32(workNum),
 		length:  uint32(length),
-		qchans:  make([]chan *QData, worknum),
+		qchans:  make([]chan *QData, workNum),
 		pD:      pD,
 	}
 
-	for i := 0; i < worknum; i++ {
+	for i := 0; i < workNum; i++ {
 		queue.qchans[i] = make(chan *QData, length)
 		queue.consume(queue.qchans[i])
 	}
 
-	log.Infof("raft consume queue start worknum:%d length:%d", worknum, length)
+	log.Infof("raft consume queue start workNum:%d length:%d", workNum, length)
 	return queue
 }
 
@@ -93,7 +92,7 @@ func (q *Queue) push(data [][]byte, isMigrate bool, keyHash uint32) error {
 		return errors.New("raft consume queue push data err")
 	}
 
-	index := (keyHash + uint32(data[1][len(data[1])/2])) % q.worknum
+	index := (keyHash + uint32(data[1][len(data[1])/2])) % q.workNum
 	q.qchans[index] <- &QData{
 		data:      data,
 		isMigrate: isMigrate,
@@ -131,7 +130,7 @@ func (q *Queue) consume(qchan chan *QData) {
 					server.PutRaftClientToPool(c)
 					continue
 				}
-				c.Cmd = c.Cmd + unsafe2.String(resp.LowerSlice(c.Args[0]))
+				c.Cmd = c.Cmd + unsafe2.String(server.LowerSlice(c.Args[0]))
 			}
 			if err := c.ApplyDB(0); err != nil {
 				log.Errorf("qchans consume applydb fail command:%s err:%v", c.Cmd, err)

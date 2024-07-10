@@ -13,7 +13,6 @@
 // limitations under the License.
 
 //go:build !dragonboat_monkeytest
-// +build !dragonboat_monkeytest
 
 package invariants
 

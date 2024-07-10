@@ -22,14 +22,14 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/zuoyebang/bitalostored/butils/vectormap/simd"
-
 	"github.com/zuoyebang/bitalostored/butils/md5hash"
+	"github.com/zuoyebang/bitalostored/butils/vectormap/simd"
 )
 
 var UnitTime = 30 * time.Second
 
 const LRUSubDuration = 24 * time.Hour
+const LRUMaxDuration = 20 * 24 * time.Hour
 
 type LRUMap struct {
 	owner      *VectorMap
@@ -64,8 +64,8 @@ func newInnerLRUMap(owner *VectorMap, sz uint32) (m *LRUMap) {
 		limit:       groups * maxAvgGroupLoad,
 	}
 	memMax := owner.memCap / Byte(owner.buckets)
-	if memMax > 64*MB || memMax <= 0 {
-		memMax = 64 * MB
+	if !owner.skipCheck && (memMax > maxShardMemSize || memMax <= 0) {
+		memMax = maxShardMemSize
 	}
 	for i := range m.ctrl {
 		m.ctrl[i] = newEmptyMetadata()
@@ -878,6 +878,8 @@ func (m *LRUMap) Delete(l uint64, key []byte) (ok bool) {
 }
 
 func (m *LRUMap) Clear() {
+	m.putLock.Lock()
+	m.rehashLock.Lock()
 	for i, c := range m.ctrl {
 		for j := range c {
 			m.ctrl[i][j] = empty
@@ -895,8 +897,27 @@ func (m *LRUMap) Clear() {
 	}
 	m.resident, m.dead = 0, 0
 
+	kvholder := newKVHolder(Byte(m.kvHolder.cap))
 	m.kvHolder.cap = 0
-	m.kvHolder.data = nil
+	m.kvHolder.buffer.release()
+	m.kvHolder = kvholder
+	m.rehashLock.Unlock()
+	m.putLock.Unlock()
+}
+
+func (m *LRUMap) Close() {
+	m.putLock.Lock()
+	m.rehashLock.Lock()
+	m.ctrl = nil
+	m.sinces = nil
+	m.groups = nil
+	m.resident, m.dead = 0, 0
+	m.kvHolder.cap = 0
+	m.kvHolder.buffer.release()
+	m.kvHolder = nil
+	m.owner = nil
+	m.rehashLock.Unlock()
+	m.putLock.Unlock()
 }
 
 func (m *LRUMap) QueryCount() (count uint64) {
@@ -972,6 +993,9 @@ func (m *LRUMap) rehash() {
 	m.limit = n * maxAvgGroupLoad
 	m.resident, m.dead = resident, 0
 	m.rehashLock.Unlock()
+	if m.owner.logger != nil {
+		m.owner.logger.Infof("rehash done, new size: %d", n)
+	}
 }
 
 func (m *LRUMap) loadFactor() float32 {
@@ -1021,7 +1045,27 @@ func (m *LRUMap) Eliminate() (delCount int, skipReason int) {
 	return
 }
 
-func (m *LRUMap) GCCopy() (deadCount int, gcMem int, subSince bool, skipReason int) {
+func (m *LRUMap) AdaptStartTime() (subSince bool) {
+	if time.Since(m.lastSubTime) > LRUSubDuration {
+		if time.Since(m.startTime.Add(time.Duration(m.minTopSince)*UnitTime)) > LRUMaxDuration {
+			m.minTopSince = uint16(LRUSubDuration / UnitTime)
+		}
+		m.lastSubTime = time.Now()
+		var level [16]uint16
+		for i := 0; i < 16; i++ {
+			level[i] = m.minTopSince
+		}
+		ctrLen := len(m.ctrl)
+		for i := 0; i < ctrLen; i++ {
+			simd.MSubs256epu16(unsafe.Pointer(&(m.sinces[i])), unsafe.Pointer(&level), unsafe.Pointer(&(m.sinces[i])))
+		}
+		m.startTime = m.startTime.Add(time.Duration(m.minTopSince) * UnitTime)
+		subSince = true
+	}
+	return
+}
+
+func (m *LRUMap) GCCopy() (deadCount int, gcMem int, skipReason int) {
 	if m.garbageUsage() < garbageRate {
 		skipReason = skipReason1
 		return
@@ -1072,20 +1116,6 @@ func (m *LRUMap) GCCopy() (deadCount int, gcMem int, subSince bool, skipReason i
 				}
 			}
 		}
-	}
-
-	if time.Since(m.lastSubTime) > LRUSubDuration && m.minTopSince > 0 {
-		m.lastSubTime = time.Now()
-		var level [16]uint16
-		for i := 0; i < 16; i++ {
-			level[i] = m.minTopSince
-		}
-		ctrLen := len(m.ctrl)
-		for i := 0; i < ctrLen; i++ {
-			simd.MSubs256epu16(unsafe.Pointer(&(sinces[i])), unsafe.Pointer(&level), unsafe.Pointer(&(sinces[i])))
-		}
-		m.startTime = m.startTime.Add(time.Duration(m.minTopSince) * UnitTime)
-		subSince = true
 	}
 
 	m.rehashLock.Lock()

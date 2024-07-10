@@ -20,6 +20,9 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/cockroachdb/errors"
+	"github.com/lni/goutils/logutil"
+
 	"github.com/zuoyebang/bitalostored/raft/internal/fileutil"
 	"github.com/zuoyebang/bitalostored/raft/internal/rsm"
 	"github.com/zuoyebang/bitalostored/raft/internal/server"
@@ -28,9 +31,6 @@ import (
 	"github.com/zuoyebang/bitalostored/raft/internal/vfs"
 	"github.com/zuoyebang/bitalostored/raft/raftio"
 	pb "github.com/zuoyebang/bitalostored/raft/raftpb"
-
-	"github.com/cockroachdb/errors"
-	"github.com/lni/goutils/logutil"
 )
 
 var (
