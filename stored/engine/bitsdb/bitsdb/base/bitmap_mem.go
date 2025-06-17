@@ -14,8 +14,10 @@ import (
 	"github.com/zuoyebang/bitalostored/stored/internal/utils"
 )
 
-const bitmapItemMax = 2048
-const bitmapFlushSecond = 2700
+const (
+	bitmapItemCountDefault = 4096
+	bitmapFlushCycle       = 3600
+)
 
 type BitmapItem struct {
 	key   []byte
@@ -37,17 +39,17 @@ type BitmapMem struct {
 		count int
 	}
 
-	migrating   atomic.Bool
-	migrateSlot atomic.Uint32
-
-	baseDB      *BaseDB
-	flushing    atomic.Bool
-	fasting     bool
-	flushLock   sync.Mutex
-	flushSecond int64
-	scanItems   []*BitmapItem
-	closeCh     chan struct{}
-	wg          sync.WaitGroup
+	migrating    atomic.Bool
+	migrateSlot  atomic.Uint32
+	maxItemCount int
+	baseDB       *BaseDB
+	flushing     atomic.Bool
+	fasting      bool
+	flushLock    sync.Mutex
+	flushCycle   int64
+	scanItems    []*BitmapItem
+	closeCh      chan struct{}
+	wg           sync.WaitGroup
 }
 
 func NewBitmapItem(key []byte, khash uint32, rb *roaring64.Bitmap, timestamp uint64) *BitmapItem {
@@ -104,18 +106,24 @@ func (bi *BitmapItem) SetExpire(expire uint64) {
 	bi.modify.Store(tclock.GetTimestampSecond())
 }
 
-func NewBitmapMem(db *BaseDB) *BitmapMem {
+func NewBitmapMem(db *BaseDB, maxItemCount int) *BitmapMem {
+	if maxItemCount <= 0 {
+		maxItemCount = bitmapItemCountDefault
+	}
+
 	bm := &BitmapMem{
-		baseDB:      db,
-		flushSecond: bitmapFlushSecond,
-		scanItems:   make([]*BitmapItem, 0, bitmapItemMax),
-		closeCh:     make(chan struct{}),
-		flushLock:   sync.Mutex{},
+		baseDB:       db,
+		flushCycle:   bitmapFlushCycle,
+		scanItems:    make([]*BitmapItem, 0, maxItemCount),
+		closeCh:      make(chan struct{}),
+		flushLock:    sync.Mutex{},
+		maxItemCount: maxItemCount,
 	}
 
 	bm.mu.items = make(map[string]*BitmapItem, 10)
 	bm.wg.Add(1)
 	go bm.RunFlushWorker()
+	log.Infof("new bitmap mem success maxItemCount:%d", bm.maxItemCount)
 	return bm
 }
 
@@ -144,26 +152,30 @@ func (bm *BitmapMem) Get(key []byte) (*BitmapItem, bool) {
 	}
 }
 
-func (bm *BitmapMem) AddItem(key []byte, khash uint32, newBi func(k []byte) *BitmapItem) bool {
+func (bm *BitmapMem) AddItem(key []byte, khash uint32, newBi func(k []byte) *BitmapItem) (bool, func()) {
 	if bm.flushing.Load() {
-		return false
+		return false, nil
 	}
 
 	if bm.migrating.Load() && khash%utils.TotalSlot == bm.migrateSlot.Load() {
-		return false
+		return false, nil
 	}
 
 	bm.mu.Lock()
 	defer bm.mu.Unlock()
 
 	if bm.IsFull() {
-		return false
+		return false, nil
 	}
 
 	keyStr := string(key)
-	bm.mu.items[keyStr] = newBi(unsafe2.ByteSlice(keyStr))
+	bmItem := newBi(unsafe2.ByteSlice(keyStr))
+	bm.mu.items[keyStr] = bmItem
 	bm.mu.count++
-	return true
+	bmItem.mu.Lock()
+	return true, func() {
+		bmItem.mu.Unlock()
+	}
 }
 
 func (bm *BitmapMem) Delete(key []byte, deleteDB bool) (bool, error) {
@@ -225,7 +237,7 @@ func (bm *BitmapMem) RunFlushWorker() {
 			}
 		}()
 
-		tick := time.NewTicker(time.Duration(bm.flushSecond) * time.Second)
+		tick := time.NewTicker(time.Duration(bm.flushCycle) * time.Second)
 		defer tick.Stop()
 		for {
 			select {
@@ -289,7 +301,7 @@ func (bm *BitmapMem) Flush(fast bool) {
 			continue
 		}
 
-		if now-it.modify.Load() >= 2*bm.flushSecond {
+		if now-it.modify.Load() >= 2*bm.flushCycle {
 			bm.deleteItem(it, false)
 			continue
 		}
@@ -328,7 +340,7 @@ func (bm *BitmapMem) Flush(fast bool) {
 }
 
 func (bm *BitmapMem) IsFull() bool {
-	return bm.mu.count >= bitmapItemMax
+	return bm.mu.count >= bm.maxItemCount
 }
 
 func (bm *BitmapMem) doDeleteKey(key []byte, deleteDB bool) (bool, error) {
@@ -396,7 +408,7 @@ func (bm *BitmapMem) Evict(modifyTime int64) {
 		}
 	})
 
-	evictMax := bitmapItemMax * 3 / 10
+	evictMax := bm.maxItemCount * 3 / 10
 	evictCount := 0
 	for _, it := range bm.scanItems {
 		if it.modify.Load() >= modifyTime {

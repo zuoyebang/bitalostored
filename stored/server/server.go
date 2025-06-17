@@ -18,11 +18,13 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"runtime"
 	"sync"
 	"sync/atomic"
 
 	"github.com/cockroachdb/errors"
 	"github.com/panjf2000/gnet/v2"
+	"github.com/zuoyebang/bitalostored/butils/unsafe2"
 	"github.com/zuoyebang/bitalostored/stored/engine"
 	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/bitsdb"
 	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/btools"
@@ -31,7 +33,6 @@ import (
 	"github.com/zuoyebang/bitalostored/stored/internal/log"
 	"github.com/zuoyebang/bitalostored/stored/internal/resp"
 	"github.com/zuoyebang/bitalostored/stored/internal/slowshield"
-	"github.com/zuoyebang/bitalostored/stored/internal/trycatch"
 	"github.com/zuoyebang/bitalostored/stored/internal/utils"
 )
 
@@ -57,6 +58,7 @@ type Server struct {
 	syncDataDoing     atomic.Int32
 	dbSyncing         atomic.Int32
 	luaMu             []*sync.Mutex
+	luaScripts        *CompiledLuaScripts
 	expireClosedCh    chan struct{}
 	expireWg          sync.WaitGroup
 	openDistributedTx bool
@@ -114,6 +116,8 @@ func NewServer() (*Server, error) {
 		luaMux[i] = &sync.Mutex{}
 	}
 	s.luaMu = luaMux
+	s.luaScripts = NewCompiledLuaScripts()
+	InitLuaPool(s)
 
 	if err := os.MkdirAll(config.GetBitalosSnapshotPath(), 0755); err != nil {
 		return nil, errors.Wrap(err, "mkdir snapshot err")
@@ -181,7 +185,7 @@ func (s *Server) ListenAndServe() {
 		Multicore:       true,
 		ReusePort:       true,
 		ReuseAddr:       true,
-		EdgeTriggeredIO: config.GlobalConfig.Server.DisableEdgeTriggered,
+		EdgeTriggeredIO: !config.GlobalConfig.Server.DisableEdgeTriggered,
 	}
 
 	if config.GlobalConfig.Server.NetEventLoopNum > 0 {
@@ -225,7 +229,12 @@ func (s *Server) OnClose(conn gnet.Conn, err error) (action gnet.Action) {
 
 func (s *Server) OnTraffic(conn gnet.Conn) (action gnet.Action) {
 	defer func() {
-		trycatch.Panic("conn OnTraffic", recover())
+		if r := recover(); r != nil {
+			buf := make([]byte, 2048)
+			n := runtime.Stack(buf, false)
+			log.Errorf("conn OnTraffic panic err:%v stack:%s", r, unsafe2.String(buf[0:n]))
+			action = gnet.Close
+		}
 	}()
 
 	client, ok := conn.Context().(*Client)

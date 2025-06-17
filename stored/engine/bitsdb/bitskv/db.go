@@ -233,6 +233,28 @@ func (db *DB) CompactDB() {
 	}
 }
 
+func (db *DB) CompactBitree() {
+	if db.metaDb != nil {
+		db.metaDb.Flush()
+		db.metaDb.CompactBitree()
+	}
+	if db.dataDb != nil {
+		db.dataDb.Flush()
+		db.dataDb.CompactBitree()
+	}
+	if db.indexDb != nil {
+		db.indexDb.Flush()
+		db.indexDb.CompactBitree()
+	}
+}
+
+func (db *DB) CompactExpire(start, end []byte) error {
+	if db.expireDb == nil {
+		return nil
+	}
+	return db.expireDb.CompactRange(start, end)
+}
+
 func (db *DB) GetMetaDbDebugInfo() {
 	db.DebugInfo.PBDbInfo = db.metaDb.DebugInfo()
 }

@@ -269,107 +269,99 @@ func TestDBSet(t *testing.T) {
 		member1 := testRandBytes(base.KeyFieldCompressSize)
 		member2 := testRandBytes(base.KeyFieldCompressSize * 10)
 
-		defer bdb.SetObj.Del(khash, key, key1, key2)
+		n, err := bdb.StringObj.Exists(key, khash)
+		require.NoError(t, err)
+		require.Equal(t, int64(0), n)
 
-		if n, err := bdb.StringObj.Exists(key, khash); err != nil {
-			t.Fatal(err.Error())
-		} else if n != 0 {
-			t.Fatal("invalid value ", n)
-		}
-
-		if n, err := bdb.SetObj.SAdd(key, khash, member); err != nil {
-			t.Fatal(err)
-		} else if n != 1 {
-			t.Fatal(n)
-		}
+		n, err = bdb.SetObj.SAdd(key, khash, member)
+		require.NoError(t, err)
+		require.Equal(t, int64(1), n)
 
 		mk, mkCloser := base.EncodeMetaKey(key, khash)
 		mkv, err := bdb.SetObj.GetMetaData(mk)
 		mkCloser()
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		require.Equal(t, base.KeyKindFieldCompress, mkv.Kind())
 
-		if n, err := bdb.StringObj.Exists(key, khash); err != nil {
-			t.Fatal(err.Error())
-		} else if n != 1 {
-			t.Fatal("invalid value ", n)
-		}
+		n, err = bdb.StringObj.Exists(key, khash)
+		require.NoError(t, err)
+		require.Equal(t, int64(1), n)
 
-		if cnt, err := bdb.SetObj.SCard(key, khash); err != nil {
-			t.Fatal(err)
-		} else if cnt != 1 {
-			t.Fatal(cnt)
-		}
+		n, err = bdb.SetObj.SCard(key, khash)
+		require.NoError(t, err)
+		require.Equal(t, int64(1), n)
 
-		if n, err := bdb.SetObj.SIsMember(key, khash, member); err != nil {
-			t.Fatal(err)
-		} else if n != 1 {
-			t.Fatal(n)
-		}
+		n, err = bdb.SetObj.SIsMember(key, khash, member)
+		require.NoError(t, err)
+		require.Equal(t, int64(1), n)
 
 		v, err := bdb.SetObj.SMembers(key, khash)
-		if err != nil {
-			t.Fatal(err)
-		} else if !bytes.Equal(v[0], member) {
-			t.Fatal("member err")
-		}
+		require.NoError(t, err)
+		require.Equal(t, member, v[0])
 
-		if n, err := bdb.SetObj.SRem(key, khash, member); err != nil {
-			t.Fatal(err)
-		} else if n != 1 {
-			t.Fatal(n)
-		}
+		n, err = bdb.SetObj.SRem(key, khash, member)
+		require.NoError(t, err)
+		require.Equal(t, int64(1), n)
 
-		bdb.SetObj.SAdd(key1, k1hash, member1, member2)
+		n, err = bdb.SetObj.SAdd(key1, k1hash, member1, member2)
+		require.NoError(t, err)
+		require.Equal(t, int64(2), n)
 
-		if n, err := bdb.SetObj.Del(k1hash, key1); err != nil {
-			t.Fatal(err)
-		} else if n != 1 {
-			t.Fatal(n)
-		}
+		n, err = bdb.SetObj.SRem(key1, k1hash, member2)
+		require.NoError(t, err)
+		require.Equal(t, int64(1), n)
+		n, err = bdb.SetObj.SIsMember(key1, k1hash, member1)
+		require.NoError(t, err)
+		require.Equal(t, int64(1), n)
+		n, err = bdb.SetObj.SIsMember(key1, k1hash, member2)
+		require.NoError(t, err)
+		require.Equal(t, int64(0), n)
 
-		bdb.SetObj.SAdd(key1, k1hash, member1, member2)
-		bdb.SetObj.SAdd(key2, k2hash, member1, member2, []byte("xxx"))
+		n, err = bdb.SetObj.SAdd(key1, k1hash, member1, member2)
+		require.NoError(t, err)
+		require.Equal(t, int64(1), n)
 
-		if n, _ := bdb.SetObj.SCard(key1, k1hash); n != 2 {
-			t.Fatal(n)
-		}
+		n, err = bdb.SetObj.SAdd(key2, k2hash, member1, member2, []byte("xxx"))
+		require.NoError(t, err)
+		require.Equal(t, int64(3), n)
 
-		if n, _ := bdb.SetObj.SCard(key2, k2hash); n != 3 {
-			t.Fatal(n)
-		}
-		if n, err := bdb.SetObj.Del(k1hash, key1, key2); err != nil {
-			t.Fatal(err)
-		} else if n != 2 {
-			t.Fatal(n)
-		}
+		n, err = bdb.SetObj.SCard(key1, k1hash)
+		require.NoError(t, err)
+		require.Equal(t, int64(2), n)
 
-		bdb.SetObj.SAdd(key2, k2hash, member1, member2)
-		if n, err := bdb.StringObj.Expire(key2, k2hash, 3600); err != nil {
-			t.Fatal(err)
-		} else if n != 1 {
-			t.Fatal(n)
-		}
+		n, err = bdb.SetObj.SCard(key2, k2hash)
+		require.NoError(t, err)
+		require.Equal(t, int64(3), n)
 
-		if n, err := bdb.StringObj.ExpireAt(key2, k2hash, time.Now().Unix()+3600); err != nil {
-			t.Fatal(err)
-		} else if n != 1 {
-			t.Fatal(n)
-		}
+		n, err = bdb.SetObj.Del(k1hash, key1, key2)
+		require.NoError(t, err)
+		require.Equal(t, int64(2), n)
 
-		if n, err := bdb.StringObj.TTL(key2, k2hash); err != nil {
+		n, err = bdb.SetObj.SAdd(key2, k2hash, member1, member2)
+		require.NoError(t, err)
+		require.Equal(t, int64(2), n)
+
+		n, err = bdb.StringObj.Expire(key2, k2hash, 3600)
+		require.NoError(t, err)
+		require.Equal(t, int64(1), n)
+
+		n, err = bdb.StringObj.ExpireAt(key2, k2hash, time.Now().Unix()+3600)
+		require.NoError(t, err)
+		require.Equal(t, int64(1), n)
+
+		if n, err = bdb.StringObj.TTL(key2, k2hash); err != nil {
 			t.Fatal(err)
 		} else if n < 0 {
 			t.Fatal(n)
 		}
 
-		if n, err := bdb.StringObj.BasePersist(key2, k2hash); err != nil {
-			t.Fatal(err)
-		} else if n != 1 {
-			t.Fatal(n)
-		}
+		n, err = bdb.StringObj.BasePersist(key2, k2hash)
+		require.NoError(t, err)
+		require.Equal(t, int64(1), n)
+
+		n, err = bdb.SetObj.Del(khash, key, key1, key2)
+		require.NoError(t, err)
+		require.Equal(t, int64(1), n)
 	}
 }
 

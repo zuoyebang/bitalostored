@@ -21,7 +21,7 @@ import (
 	"strings"
 
 	lua "github.com/yuin/gopher-lua"
-	"github.com/yuin/gopher-lua/parse"
+	"github.com/zuoyebang/bitalostored/butils/extend"
 	"github.com/zuoyebang/bitalostored/stored/internal/errn"
 	"github.com/zuoyebang/bitalostored/stored/internal/log"
 	"github.com/zuoyebang/bitalostored/stored/internal/resp"
@@ -86,30 +86,41 @@ func evalCommand(c *Client) error {
 	}
 
 	script, args := args[0], args[1:]
-	err := runLuaScript(c, script, args)
+	keys, args, err := checkArgs(args)
+	if err != nil {
+		return err
+	}
+	sha1 := utils.Sha1Hex(script)
+	proto, err := LoadOrCompileLua(c.server, sha1, script)
+	if err != nil {
+		return err
+	}
+	err = runLuaScript(c, proto, keys, args)
 	if err == nil {
-		_, _ = saveLuaScript(c, script)
+		_, _ = saveLuaScript(c, script, sha1)
 	}
 	return err
 }
 
-func runLuaScript(c *Client, script string, args []string) error {
+func checkArgs(args []string) ([]string, []string, error) {
 	keysS, args := args[0], args[1:]
 	keysLen, err := strconv.Atoi(keysS)
 
 	if err != nil {
-		return errors.New(MsgInvalidInt)
+		return nil, nil, errors.New(MsgInvalidInt)
 	}
 
 	if keysLen < 0 {
-		return errors.New(MsgNegativeKeysNumber)
+		return nil, nil, errors.New(MsgNegativeKeysNumber)
 	}
 	if keysLen > len(args) {
-		return errors.New(MsgInvalidKeysNumber)
+		return nil, nil, errors.New(MsgInvalidKeysNumber)
 	}
-
 	keys, args := args[:keysLen], args[keysLen:]
+	return keys, args, nil
+}
 
+func runLuaScript(c *Client, proto *lua.FunctionProto, keys, args []string) error {
 	if len(keys) > 0 {
 		shard := c.KeyHash % LuaShardCount
 		c.server.luaMu[shard].Lock()
@@ -137,11 +148,11 @@ func runLuaScript(c *Client, script string, args []string) error {
 		luaClient.Remove(1)
 		luaClient.Remove(lua.GlobalsIndex)
 	}()
-	if err := luaClient.DoString(script); err != nil {
-		log.Errorf("ERR Error compiling script (new function): %s", err.Error())
+	err := DoCompiledScript(luaClient, proto)
+	if err != nil {
+		log.Errorf("ERR Error running script: %s", err.Error())
 		return errors.New(ErrLuaParseError(err))
 	}
-
 	LuaToRedis(luaClient, c, luaClient.Get(1))
 	return nil
 }
@@ -153,20 +164,33 @@ func evalShaCommand(c *Client) error {
 	}
 
 	sha1, args := args[0], args[1:]
+	keys, args, err := checkArgs(args)
+	if err != nil {
+		c.Writer.WriteError(err)
+		return nil
+	}
 
-	script, closer := c.DB.GetLuaScript([]byte(sha1))
-	defer func() {
-		if closer != nil {
-			closer()
+	proto := TryGetLuaProto(c.server, sha1)
+	if proto == nil {
+		script, closer := c.DB.GetLuaScript([]byte(sha1))
+		defer func() {
+			if closer != nil {
+				closer()
+			}
+		}()
+		if script == nil {
+			c.Writer.WriteError(errors.New(MsgNoScriptFound))
+			return nil
 		}
-	}()
-
-	if script == nil {
-		c.Writer.WriteError(errors.New(MsgNoScriptFound))
-	} else {
-		if err := runLuaScript(c, string(script), args); err != nil {
+		proto, err = CompileLua(string(script))
+		if err != nil {
 			c.Writer.WriteError(err)
+			return nil
 		}
+		LoadLuaProto(c.server, sha1, proto)
+	}
+	if err := runLuaScript(c, proto, keys, args); err != nil {
+		c.Writer.WriteError(err)
 	}
 
 	return nil
@@ -179,19 +203,19 @@ func scriptLoadCmd(c *Client) error {
 	}
 	script := args[1]
 	var err error
-	sha1 := ""
-	if sha1, err = saveLuaScript(c, script); err != nil {
+	sha1 := utils.Sha1Hex(script)
+	_, err = LoadOrCompileLua(c.server, sha1, script)
+	if err != nil {
+		return err
+	}
+	if sha1, err = saveLuaScript(c, script, sha1); err != nil {
 		return err
 	}
 	c.Writer.WriteBulk([]byte(sha1))
 	return nil
 }
 
-func saveLuaScript(c *Client, script string) (string, error) {
-	if _, err := parse.Parse(strings.NewReader(script), "user_script"); err != nil {
-		return "", errors.New(ErrLuaParseError(err))
-	}
-	sha1 := utils.Sha1Hex(script)
+func saveLuaScript(c *Client, script, sha1 string) (string, error) {
 	if n, _ := c.DB.ExistsLuaScript([]byte(sha1)); n >= 1 {
 		return sha1, nil
 	}
@@ -229,6 +253,7 @@ func scriptFlushCmd(c *Client) error {
 	if err := c.DB.FlushLuaScript(); err != nil {
 		return err
 	} else {
+		ClearCompiledLuaScripts(c.server)
 		c.Writer.WriteStatus("OK")
 	}
 	return nil
@@ -236,6 +261,16 @@ func scriptFlushCmd(c *Client) error {
 
 func scriptLenCmd(c *Client) error {
 	n := c.DB.LuaScriptLen()
-	c.Writer.WriteInteger(n)
+	c.server.luaScripts.Lock.RLock()
+	m := c.server.luaScripts.Count
+	l := len(c.server.luaScripts.Scripts)
+	c.server.luaScripts.Lock.RUnlock()
+	ay := []interface{}{
+		extend.FormatInt64ToSlice(n),
+		extend.FormatInt16ToSlice(m),
+		extend.FormatIntToSlice(l),
+	}
+
+	c.Writer.WriteArray(ay)
 	return nil
 }

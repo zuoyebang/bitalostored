@@ -241,6 +241,13 @@ func (r *KV) AsyncFlush() (<-chan struct{}, error) {
 func (r *KV) Compact(_ int) {
 }
 
+func (r *KV) CompactRange(start, end []byte) error {
+	return r.db.Compact(start, end, false)
+}
+
+func (r *KV) CompactBitree() {
+}
+
 func (r *KV) GetWriteBatch() kv.IWriteBatch {
 	return &bitableWriteBatch{
 		wb: r.db.NewBatch(),

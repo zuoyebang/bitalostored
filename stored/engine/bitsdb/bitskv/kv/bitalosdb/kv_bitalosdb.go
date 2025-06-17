@@ -109,12 +109,14 @@ func openBitalosDB(dirname string, cfg *dbconfig.Config, dataType btools.DataTyp
 		BlockCacheSize:                 int64(cfg.PageBlockCacheSize),
 		IOWriteLoadThresholdFunc:       cfg.IOWriteLoadThresholdFunc,
 		BytesPerSync:                   1 << 20,
-		DeleteFileInternal:             8,
+		DeleteFileInternal:             1,
 		KvCheckExpireFunc:              nil,
 		KvTimestampFunc:                nil,
 		KeyPrefixDeleteFunc:            nil,
 		FlushPrefixDeleteKeyMultiplier: cfg.FlushPrefixDeleteKeyMultiplier,
 		FlushFileLifetime:              cfg.FlushFileLifetime,
+		BitpageFlushSize:               uint64(cfg.BitpageFlushSize),
+		BitpageSplitSize:               uint64(cfg.BitpageSplitSize),
 	}
 
 	opts.LogTag = fmt.Sprintf("[bitalosdb/%s%s]", opts.DataType, kv.GetDbTypeDir(dbType))
@@ -263,6 +265,14 @@ func (r *KV) AsyncFlush() (<-chan struct{}, error) {
 
 func (r *KV) Compact(jobId int) {
 	r.db.CompactBitree(jobId)
+}
+
+func (r *KV) CompactRange(start, end []byte) error {
+	return nil
+}
+
+func (r *KV) CompactBitree() {
+	r.db.ManualFlushBitpage()
 }
 
 func (r *KV) GetWriteBatch() kv.IWriteBatch {

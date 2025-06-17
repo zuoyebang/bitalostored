@@ -238,6 +238,44 @@ func scanCommand(c *Client) error {
 	return nil
 }
 
+func scanSlotIdCommand(c *Client) error {
+	slotId, err := strconv.ParseUint(string(c.Args[0]), 10, 32)
+	if err != nil {
+		return errn.CmdParamsErr(resp.SCANSLOTID)
+	}
+
+	args := c.Args[1:]
+	if len(args) < 1 {
+		return errn.CmdParamsErr(resp.SCANSLOTID)
+	}
+
+	cursor, match, count, _, err := parseGScanArgs(args)
+	if err != nil {
+		return err
+	}
+
+	if count < 0 {
+		return errn.ErrSyntax
+	} else if count > 5000 {
+		return errors.New("ERR count more than 5000")
+	}
+
+	var cur []byte
+	var ks [][]byte
+
+	cur, ks, err = c.DB.ScanSlotId(uint32(slotId), cursor, count, match)
+	if err != nil {
+		return err
+	}
+
+	if cur == nil {
+		cur = []byte("0")
+	}
+	c.Writer.WriteArray([]interface{}{cur, ks})
+
+	return nil
+}
+
 func parseGScanArgs(args [][]byte) (cursor []byte, match string, count int, tp string, err error) {
 	cursor = args[0]
 	args = args[1:]

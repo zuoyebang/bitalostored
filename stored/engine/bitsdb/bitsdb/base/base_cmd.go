@@ -311,18 +311,28 @@ func (bo *BaseObject) BaseDeleteDataValue(key []byte, khash uint32, args ...[]by
 	}
 
 	var (
-		delCnt int64
-		exist  bool
+		delCnt    int64
+		exist     bool
+		ekf       []byte
+		ekfCloser func()
 	)
 
 	wb := bo.GetDataWriteBatchFromPool()
 	defer bo.PutWriteBatchToPool(wb)
+
 	keyVersion := mkv.Version()
+	dataType := mkv.GetDataType()
+	keyKind := mkv.Kind()
 	for i := 0; i < len(args); i++ {
 		if err = btools.CheckFieldSize(args[i]); err != nil {
 			continue
 		}
-		ekf, ekfCloser := EncodeDataKey(keyVersion, khash, args[i])
+
+		if dataType == btools.SET {
+			ekf, ekfCloser, _ = EncodeSetDataKey(keyVersion, keyKind, khash, args[i])
+		} else {
+			ekf, ekfCloser = EncodeDataKey(keyVersion, khash, args[i])
+		}
 		exist, _ = bo.IsExistData(ekf)
 		if exist {
 			delCnt++

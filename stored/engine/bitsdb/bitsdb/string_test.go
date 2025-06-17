@@ -660,6 +660,7 @@ func TestKVBitCount(t *testing.T) {
 			{129, 140, 0},
 			{119, -2, 2},
 			{-1, -10, 0},
+			{1724947200, 1725292800, 0},
 		}
 
 		t.Run("test bitcount", func(t *testing.T) {

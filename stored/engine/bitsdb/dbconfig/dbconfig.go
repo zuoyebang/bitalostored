@@ -50,6 +50,9 @@ type Config struct {
 	IOWriteLoadThresholdFunc       func() bool
 	FlushPrefixDeleteKeyMultiplier int
 	FlushFileLifetime              int
+	BitmapCacheItemCount           int
+	BitpageFlushSize               int
+	BitpageSplitSize               int
 }
 
 func NewConfigDefault() *Config {

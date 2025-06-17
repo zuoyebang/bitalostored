@@ -159,6 +159,66 @@ func (m *Migrate) migrateString(key []byte, conn redis.Conn) error {
 	return nil
 }
 
+func (m *Migrate) migrateStringRetry(key []byte, conn redis.Conn) error {
+	if m.slotId == uint32(btools.LuaScriptSlot) {
+		val, closer := m.db.StringObj.GetLuaScript(key)
+		defer func() {
+			if closer != nil {
+				closer()
+			}
+		}()
+		if val == nil {
+			return nil
+		}
+		if _, err := conn.Do(resp.SCRIPTLOAD, "load", val); err != nil {
+			log.Errorf("migrateretry string lua script key:%s err:%s", string(key), err)
+			return err
+		}
+		return nil
+	}
+
+	khash, isHashTag := m.getKeyHash(key)
+	val, valCloser, ttl, err := m.db.StringObj.GetWithTTL(key, khash)
+	defer func() {
+		if valCloser != nil {
+			valCloser()
+		}
+	}()
+	if err != nil {
+		log.Errorf("migrateretry string get key:%s err:%s", string(key), err)
+		return err
+	} else if val == nil {
+		return nil
+	}
+
+	var n int
+	if isHashTag {
+		if _, err = conn.Do(resp.EVAL, MigrateLuaScript, 3, resp.SET, key, val); err != nil {
+			log.Errorf("migrateretry string send key:%s err:%s", string(key), err)
+			return err
+		}
+	} else if n, err = redis.Int(conn.Do(resp.SETNX, key, val)); err != nil {
+		log.Errorf("migrateretry string send key:%s err:%s", string(key), err)
+		return err
+	}
+
+	if n == 1 {
+		if err := m.migrateDirectTTL(key, ttl, conn, isHashTag); err != nil {
+			return err
+		}
+	}
+
+	if err := m.migrateDelToSlave(khash, [][]byte{[]byte(resp.KDEL), key}); err != nil {
+		log.Errorf("migrateretry string sync slaves key:%s err:%s", string(key), err)
+		return err
+	}
+	if _, err := m.db.StringObj.Del(khash, key); err != nil {
+		log.Warnf("migrateretry string del key:%s err:%s", string(key), err)
+	}
+
+	return nil
+}
+
 func (m *Migrate) migrateHash(key []byte, conn redis.Conn) error {
 	khash, isHashTag := m.getKeyHash(key)
 	list, closers, err := m.db.HashObj.HGetAll(key, khash)
@@ -211,6 +271,67 @@ func (m *Migrate) migrateHash(key []byte, conn redis.Conn) error {
 	}
 	if _, err := m.db.HashObj.Del(khash, key); err != nil {
 		log.Warnf("migrate hash del key:%s err:%s", string(key), err)
+	}
+	return nil
+}
+
+func (m *Migrate) migrateHashRetry(key []byte, conn redis.Conn) error {
+	khash, isHashTag := m.getKeyHash(key)
+	list, closers, err := m.db.HashObj.HGetAll(key, khash)
+	defer func() {
+		if len(closers) > 0 {
+			for _, closer := range closers {
+				closer()
+			}
+		}
+	}()
+	if err != nil {
+		log.Errorf("migrateretry hash hgetall key:%s err:%s", string(key), err)
+		return err
+	} else if len(list) == 0 {
+		return nil
+	}
+
+	if isHashTag {
+		args := []interface{}{key}
+		for i := 0; i < len(list); i++ {
+			args = append(args, list[i].Field, list[i].Value)
+			if i < len(list)-1 && i%10 != 0 {
+				continue
+			}
+
+			hashArgs := make([]interface{}, 0, 3+len(args))
+			hashArgs = append(hashArgs, MigrateLuaScript, len(args)+1, resp.HMSET)
+			for l := 0; l < len(args); l++ {
+				hashArgs = append(hashArgs, args[l])
+			}
+			if _, err = conn.Do(resp.EVAL, hashArgs...); err != nil {
+				log.Errorf("migrateretry hash send key:%s err:%s", string(key), err)
+				return err
+			}
+			args = []interface{}{key}
+		}
+	} else {
+		for i := 0; i < len(list); i++ {
+			res, e := conn.Do(resp.HGET, key, list[i].Field)
+			if e == nil && res == nil {
+				if _, err = conn.Do(resp.HSET, key, list[i].Field, list[i].Value); err != nil {
+					log.Errorf("migrateretry hash send key:%s field:%s err:%s", key, list[i].Field, err)
+					return err
+				}
+			}
+		}
+	}
+
+	if err := m.migrateTTL(key, khash, conn, isHashTag); err != nil {
+		return err
+	}
+	if err := m.migrateDelToSlave(khash, [][]byte{[]byte(resp.HCLEAR), key}); err != nil {
+		log.Errorf("migrateretry hash sync slaves key:%s err:%s", string(key), err)
+		return err
+	}
+	if _, err := m.db.HashObj.Del(khash, key); err != nil {
+		log.Warnf("migrateretry hash del key:%s err:%s", string(key), err)
 	}
 	return nil
 }
@@ -459,6 +580,80 @@ func (m *Migrate) migrateRunTask(isMaster func() bool) (err error) {
 	return nil
 }
 
+func (m *Migrate) migrateRetryRunTask(isMaster func() bool) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Errorf("migrateTaskRun panic recover err:%v stack:%s", r, string(debug.Stack()))
+			err = fmt.Errorf("%v", r)
+		}
+	}()
+
+	var goros = 10
+	var limit = goros * 1000
+	var list []btools.ScanPair
+	var wg sync.WaitGroup
+
+	for {
+		_, list, err = m.db.ScanBySlotId(m.slotId, nil, limit, "*")
+		if err != nil {
+			log.Warnf("migrateretry scan slotId:%d err:%s", m.slotId, err.Error())
+			return err
+		}
+		log.Infof("migrateretry slotId:%d scanKeyNum:%d", m.slotId, len(list))
+		for i := 0; i < goros && len(list) > i*1000; i++ {
+			wg.Add(1)
+			var j = i * 1000
+			go func() {
+				defer wg.Done()
+				if isMaster == nil || !isMaster() {
+					err = errors.New("migrateretry error: server is not master")
+					return
+				}
+				conn := m.Conn.Get()
+				defer conn.Close()
+				for right := j + 1000; j < len(list) && j < right; j++ {
+					key := list[j].Key
+					dataType := list[j].Dt
+					khash, _ := m.getKeyHash(key)
+
+					func() {
+						defer m.keyLocker.LockKey(khash, resp.SET)()
+
+						var e error
+						atomic.AddInt64(&m.total, 1)
+						switch dataType {
+						case btools.STRING:
+							e = m.migrateStringRetry(key, conn)
+						case btools.HASH:
+							e = m.migrateHashRetry(key, conn)
+						case btools.SET:
+							e = m.migrateSet(key, conn)
+						case btools.LIST:
+							e = m.migrateList(key, conn)
+						case btools.ZSET, btools.ZSETOLD:
+							e = m.migrateZSet(key, conn)
+						}
+						if e != nil {
+							atomic.AddInt64(&m.fails, 1)
+							log.Infof("migrateretry slotId:%d key:%s dataType:%s fail err:%s", m.slotId, string(key), dataType, e)
+						} else {
+							log.Infof("migrateretry slotId:%d key:%s dataType:%s success", m.slotId, string(key), dataType)
+						}
+					}()
+				}
+			}()
+		}
+		wg.Wait()
+		if err != nil {
+			return err
+		}
+		if len(list) == 0 {
+			break
+		}
+	}
+	return nil
+}
+
 func (m *Migrate) Info() string {
 	buf := bytes.NewBuffer(make([]byte, 0, 1024))
 	fmt.Fprintf(buf, `{`)
@@ -484,7 +679,7 @@ func (b *Bitalos) CheckRedirectAndLockFunc(cmd string, key []byte, khash uint32)
 	}
 
 	switch cmd {
-	case resp.MGET, resp.MSET, resp.INFO, "migrateslots", "migratestatus", "migrateend":
+	case resp.MGET, resp.MSET, resp.INFO, "migrateslots", "migratestatus", "migrateend", "migrateslotsretry", "migrateretryend":
 		return false, nil
 	}
 
@@ -602,6 +797,60 @@ func (b *Bitalos) MigrateStart(
 	return b.Migrate, nil
 }
 
+func (b *Bitalos) MigrateStartRetry(
+	from string, host string, slot uint32, isMaster func() bool, migrateDelToSlave func(uint32, [][]byte) error,
+) (*Migrate, error) {
+	if b.Migrate == nil {
+		if b.Meta.GetMigrateStatus() != MigrateStatusPrepare {
+			if b.Meta.GetMigrateSlotid() != uint64(slot) {
+				return nil, errn.ErrMigrateRunning
+			}
+		}
+	} else {
+		if slot != b.Migrate.slotId {
+			if b.Migrate.status == MigrateStatusProcess {
+				return nil, errn.ErrMigrateRunning
+			}
+		}
+		if b.Migrate.status == MigrateStatusProcess {
+			return b.Migrate, nil
+		}
+	}
+
+	mg := b.NewMigrate(slot, host, from)
+	mg.migrateDelToSlave = migrateDelToSlave
+	mg.db = b.bitsdb
+	b.Migrate = mg
+	b.Migrate.IsMigrate.Store(1)
+
+	isSlotMaster := isMaster != nil && isMaster()
+
+	log.Infof("migrateretry start toHost:%s slotId:%d isMasterSlot:%v", host, slot, isSlotMaster)
+	if isSlotMaster {
+		mg.status = MigrateStatusProcess
+
+		task.Run(slot, func(task *task.Task) error {
+			defer func() {
+				mg.endTime = time.Now()
+				b.Migrate.IsMigrate.Store(0)
+			}()
+
+			if e := mg.migrateRetryRunTask(isMaster); e != nil {
+				log.Errorf("migrateretry Run err:%s", e.Error())
+				mg.status = MigrateStatusError
+				return e
+			}
+			mg.status = MigrateStatusFinish
+			return nil
+		})
+	}
+	b.bitsdb.StringObj.BaseDb.BitmapMem.StartMigrate(slot)
+	b.Meta.SetMigrateStatus(MigrateStatusProcess)
+	b.Meta.SetMigrateSlotid(uint64(slot))
+	log.Infof("migrateretry end toHost:%s slotId:%d", host, slot)
+	return b.Migrate, nil
+}
+
 func (b *Bitalos) MigrateOver(slotId uint64) error {
 	if b.Migrate != nil && uint64(b.Migrate.slotId) != slotId {
 		return errn.ErrSlotIdNotMatch
@@ -613,5 +862,20 @@ func (b *Bitalos) MigrateOver(slotId uint64) error {
 	}
 	b.bitsdb.StringObj.BaseDb.BitmapMem.ClearMigrate()
 	b.Meta.SetMigrateStatus(MigrateStatusPrepare)
+	return nil
+}
+
+func (b *Bitalos) MigrateRetryOver(slotId uint64) error {
+	if b.Migrate != nil && uint64(b.Migrate.slotId) != slotId {
+		return errn.ErrSlotIdNotMatch
+	}
+	if b.Migrate != nil {
+		log.Infof("migrateretryend over toHost:%s slotId:%d", b.Migrate.toHost, slotId)
+	} else {
+		log.Infof("migrateretryend over slotId:%d", slotId)
+	}
+	b.bitsdb.StringObj.BaseDb.BitmapMem.ClearMigrate()
+	b.Meta.SetMigrateStatus(MigrateStatusPrepare)
+	b.Migrate = nil
 	return nil
 }

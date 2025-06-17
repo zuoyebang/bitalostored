@@ -59,7 +59,7 @@ func NewBaseDB(cfg *dbconfig.Config) (*BaseDB, error) {
 		MetaCache:       nil,
 		EnableMissCache: false,
 	}
-	baseDb.BitmapMem = NewBitmapMem(baseDb)
+	baseDb.BitmapMem = NewBitmapMem(baseDb, cfg.BitmapCacheItemCount)
 
 	if cfg.CacheSize > 0 {
 		if cfg.CacheEliminateDuration <= 0 {
@@ -109,6 +109,10 @@ func (b *BaseDB) ClearCache() {
 	if b.MetaCache != nil {
 		b.MetaCache.Clear()
 	}
+}
+
+func (b *BaseDB) CompactExpire(start, end []byte) error {
+	return b.DB.CompactExpire(start, end)
 }
 
 func (b *BaseDB) GetMeta(key []byte) ([]byte, func(), error) {

@@ -84,10 +84,16 @@ func (b *Bitalos) dumpDbConfig(cfg *dbconfig.Config) string {
 	fmt.Fprintf(&buf, "PageBlockCacheSize:%v ", cfg.PageBlockCacheSize)
 	fmt.Fprintf(&buf, "ExpiredDeletionQpsThreshold:%d ", config.GlobalConfig.Bitalos.ExpiredDeletionQpsThreshold)
 	fmt.Fprintf(&buf, "EnableClockCache:%v ", config.GlobalConfig.Bitalos.EnableClockCache)
+	fmt.Fprintf(&buf, "FlushPrefixDeleteKeyMultiplier:%d ", config.GlobalConfig.Bitalos.FlushPrefixDeleteKeyMultiplier)
+	fmt.Fprintf(&buf, "FlushFileLifetime:%d ", config.GlobalConfig.Bitalos.FlushFileLifetime)
+	fmt.Fprintf(&buf, "BitpageFlushSize:%d ", config.GlobalConfig.Bitalos.BitpageFlushSize)
+	fmt.Fprintf(&buf, "BitpageSplitSize:%d ", config.GlobalConfig.Bitalos.BitpageSplitSize)
 
 	fmt.Fprintf(&buf, "CacheSize:%d ", cfg.CacheSize)
 	fmt.Fprintf(&buf, "CacheInitCap:%d ", cfg.CacheHashSize)
+	fmt.Fprintf(&buf, "CacheShardNum:%d ", cfg.CacheShardNum)
 	fmt.Fprintf(&buf, "CacheEliminateDuration:%d ", cfg.CacheEliminateDuration)
+	fmt.Fprintf(&buf, "EnableMissCache:%v ", cfg.EnableMissCache)
 
 	fmt.Fprintf(&buf, "MetaUpdateIndex:%d ", b.Meta.GetUpdateIndex())
 	fmt.Fprintf(&buf, "MetaFlushIndex:%d ", b.Meta.GetFlushIndex())
@@ -102,6 +108,9 @@ func newDbConfig(path string) *dbconfig.Config {
 	cfg.WriteBufferSize = config.GlobalConfig.Bitalos.WriteBufferSize.AsInt()
 	cfg.CacheSize = config.GlobalConfig.Bitalos.CacheSize.AsInt()
 	cfg.CacheHashSize = config.GlobalConfig.Bitalos.CacheHashSize
+	cfg.CacheShardNum = config.GlobalConfig.Bitalos.CacheShardNum
+	cfg.CacheEliminateDuration = config.GlobalConfig.Bitalos.CacheEliminateDuration
+	cfg.EnableMissCache = config.GlobalConfig.Bitalos.EnableMissCache
 	cfg.CompactStartTime = config.GlobalConfig.Bitalos.CompactStartTime
 	cfg.CompactEndTime = config.GlobalConfig.Bitalos.CompactEndTime
 	cfg.BithashGcThreshold = config.GlobalConfig.Bitalos.BithashGcThreshold
@@ -109,6 +118,11 @@ func newDbConfig(path string) *dbconfig.Config {
 	cfg.BithashCompressionType = config.GlobalConfig.Bitalos.BithashCompressionType
 	cfg.EnablePageBlockCompression = config.GlobalConfig.Bitalos.EnablePageBlockCompression
 	cfg.PageBlockCacheSize = config.GlobalConfig.Bitalos.PageBlockCacheSize.AsInt()
+	cfg.FlushPrefixDeleteKeyMultiplier = config.GlobalConfig.Bitalos.FlushPrefixDeleteKeyMultiplier
+	cfg.FlushFileLifetime = config.GlobalConfig.Bitalos.FlushFileLifetime
+	cfg.BitmapCacheItemCount = config.GlobalConfig.Bitalos.BitmapCacheItemCount
+	cfg.BitpageFlushSize = config.GlobalConfig.Bitalos.BitpageFlushSize
+	cfg.BitpageSplitSize = config.GlobalConfig.Bitalos.BitpageSplitSize
 	if config.GlobalConfig.Bitalos.EnableWAL {
 		cfg.DisableWAL = false
 		cfg.EnableRaftlogRestore = false
@@ -149,6 +163,9 @@ func (b *Bitalos) Close() {
 }
 
 func (b *Bitalos) Flush(reason btools.FlushType, compactIndex uint64) {
+	if reason == btools.FlushTypeCheckpoint {
+		b.bitsdb.StringObj.BaseDb.BitmapMem.Flush(true)
+	}
 	b.bitsdb.Flush(reason, compactIndex)
 }
 
@@ -209,6 +226,26 @@ func (b *Bitalos) Compact() {
 	go func() {
 		b.bitsdb.Compact()
 	}()
+}
+
+func (b *Bitalos) CompactExpire(start, end []byte) error {
+	if b.bitsdb == nil {
+		return nil
+	}
+	go func() {
+		b.bitsdb.CompactExpire(start, end)
+	}()
+	return nil
+}
+
+func (b *Bitalos) CompactBitree() error {
+	if b.bitsdb == nil {
+		return nil
+	}
+	go func() {
+		b.bitsdb.CompactBitree()
+	}()
+	return nil
 }
 
 func (b *Bitalos) DebugInfo() []byte {

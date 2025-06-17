@@ -38,6 +38,11 @@ import (
 	"github.com/zuoyebang/bitalostored/stored/internal/tclock"
 )
 
+const (
+	delExpireTimeoutSecond = 2
+	delExpireKeepTimeout   = 5
+)
+
 type BitsDB struct {
 	HashObj   *hash.HashObject
 	StringObj *rstring.StringObject
@@ -45,15 +50,16 @@ type BitsDB struct {
 	SetObj    *set.SetObject
 	ZsetObj   *zset.ZSetObject
 
-	baseDb            *base.BaseDB
-	isDelExpireRun    atomic.Int32
-	isCheckpoint      atomic.Bool
-	ckpExpLock        sync.Mutex
-	flushTask         *FlushTask
-	isRaftRestore     bool
-	statQPS           atomic.Uint64
-	delExpireKeys     atomic.Uint64
-	delExpireZsetKeys atomic.Uint64
+	baseDb                *base.BaseDB
+	isDelExpireRun        atomic.Int32
+	isCheckpoint          atomic.Bool
+	ckpExpLock            sync.Mutex
+	flushTask             *FlushTask
+	isRaftRestore         bool
+	statQPS               atomic.Uint64
+	delExpireKeys         atomic.Uint64
+	delExpireZsetKeys     atomic.Uint64
+	delExpireTimeoutCount uint8
 }
 
 func NewBitsDB(cfg *dbconfig.Config, meta *dbmeta.Meta) (*BitsDB, error) {
@@ -171,6 +177,18 @@ func (bdb *BitsDB) Compact() {
 	bdb.ListObj.DataDb.CompactDB()
 	bdb.SetObj.DataDb.CompactDB()
 	bdb.ZsetObj.DataDb.CompactDB()
+}
+
+func (bdb *BitsDB) CompactBitree() {
+	bdb.baseDb.DB.CompactBitree()
+	bdb.HashObj.DataDb.CompactBitree()
+	bdb.ListObj.DataDb.CompactBitree()
+	bdb.SetObj.DataDb.CompactBitree()
+	bdb.ZsetObj.DataDb.CompactBitree()
+}
+
+func (bdb *BitsDB) CompactExpire(start, end []byte) error {
+	return bdb.baseDb.CompactExpire(start, end)
 }
 
 func (bdb *BitsDB) DebugInfo() []byte {

@@ -103,7 +103,7 @@ func LowerSlice(buf []byte) []byte {
 func StringSlice(b [][]byte) []string {
 	res := make([]string, 0, len(b))
 	for _, value := range b {
-		res = append(res, unsafe2.String(value))
+		res = append(res, string(value))
 	}
 	return res
 }

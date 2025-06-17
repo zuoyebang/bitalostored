@@ -34,6 +34,7 @@ const (
 	PEXPIRE     string = "pexpire"
 	PEXPIREAT   string = "pexpireat"
 	SCAN        string = "scan"
+	SCANSLOTID  string = "scanslotid"
 	SET         string = "set"
 	SETEX       string = "setex"
 	PSETEX      string = "psetex"
@@ -183,13 +184,14 @@ var commandToWrite = map[string]bool{
 	ECHO: false,
 	TYPE: false,
 
-	SCAN:   false,
-	HSCAN:  false,
-	XHSCAN: false,
-	XSSCAN: false,
-	SSCAN:  false,
-	XZSCAN: false,
-	ZSCAN:  false,
+	SCAN:       false,
+	SCANSLOTID: false,
+	HSCAN:      false,
+	XHSCAN:     false,
+	XSSCAN:     false,
+	SSCAN:      false,
+	XZSCAN:     false,
+	ZSCAN:      false,
 
 	DEL:       true,
 	PERSIST:   true,

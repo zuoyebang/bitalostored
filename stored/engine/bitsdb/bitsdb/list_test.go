@@ -386,9 +386,6 @@ func TestRpushFull(t *testing.T) {
 		if n, err := bdb.ListObj.RPush(key, khash, []byte("abc")); err == nil {
 			t.Fatal("list is full, rpush not return error")
 		} else {
-			if err != list.ErrWriteNoSpace {
-				t.Fatal(err)
-			}
 			require.Equal(t, err, list.ErrWriteNoSpace)
 			require.Equal(t, int64(0), n)
 		}
@@ -397,9 +394,6 @@ func TestRpushFull(t *testing.T) {
 		if n, err := bdb.ListObj.RPush(key, khash, []byte("abc")); err == nil {
 			t.Fatal("list is full, rpush not return error")
 		} else {
-			if err != list.ErrWriteNoSpace {
-				t.Fatal(err)
-			}
 			require.Equal(t, err, list.ErrWriteNoSpace)
 			require.Equal(t, int64(0), n)
 		}

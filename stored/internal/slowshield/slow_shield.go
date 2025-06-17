@@ -21,15 +21,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/zuoyebang/bitalostored/stored/internal/resp"
-
-	"github.com/zuoyebang/bitalostored/stored/internal/config"
-
-	"github.com/zuoyebang/bitalostored/stored/internal/log"
-
 	"github.com/zuoyebang/bitalostored/butils/timesize"
-
 	"github.com/zuoyebang/bitalostored/butils/unsafe2"
+	"github.com/zuoyebang/bitalostored/stored/internal/config"
+	"github.com/zuoyebang/bitalostored/stored/internal/log"
+	"github.com/zuoyebang/bitalostored/stored/internal/resp"
 )
 
 type SlowShield struct {
