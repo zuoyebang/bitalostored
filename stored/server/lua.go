@@ -23,15 +23,43 @@ import (
 	"sync"
 
 	lua "github.com/yuin/gopher-lua"
+	"github.com/yuin/gopher-lua/parse"
+	"github.com/zuoyebang/bitalostored/stored/internal/log"
 	"github.com/zuoyebang/bitalostored/stored/internal/luajson"
 	"github.com/zuoyebang/bitalostored/stored/internal/utils"
 )
 
 var luaClientPool sync.Pool
+var LuaCompileCacheCount int16 = 2000
+var ProtectGlobalsLua = "protectGlobals"
 
 type LuaClient struct {
 	LState *lua.LState
 	Count  int16
+}
+
+type CompiledLuaScripts struct {
+	Scripts map[string]*lua.FunctionProto
+	Count   int16
+	Lock    sync.RWMutex
+}
+
+func NewCompiledLuaScripts() *CompiledLuaScripts {
+	cs := &CompiledLuaScripts{
+		Scripts: make(map[string]*lua.FunctionProto, LuaCompileCacheCount),
+	}
+	proto, _ := CompileLua(protectGlobals)
+	cs.Scripts[ProtectGlobalsLua] = proto
+	return cs
+}
+
+func ClearCompiledLuaScripts(s *Server) {
+	s.luaScripts.Lock.Lock()
+	s.luaScripts.Scripts = make(map[string]*lua.FunctionProto, LuaCompileCacheCount)
+	proto, _ := CompileLua(protectGlobals)
+	s.luaScripts.Scripts[ProtectGlobalsLua] = proto
+	s.luaScripts.Count = 0
+	s.luaScripts.Lock.Unlock()
 }
 
 func InitLuaPool(s *Server) {
@@ -62,7 +90,8 @@ func InitLuaPool(s *Server) {
 			requireGlobal(l, "cjson", "json")
 			l.PreloadModule("redis", redisLoader(s))
 			requireGlobal(l, "redis", "redis")
-			_ = l.DoString(protectGlobals)
+			proto, _ := LoadOrCompileLua(s, ProtectGlobalsLua, protectGlobals)
+			_ = DoCompiledScript(l, proto)
 			return &LuaClient{l, 0}
 		},
 	}
@@ -83,6 +112,70 @@ func PutLuaClientToPool(l *LuaClient) {
 		l = luaClientPool.New().(*LuaClient)
 	}
 	luaClientPool.Put(l)
+}
+
+func TryGetLuaProto(s *Server, sha1 string) *lua.FunctionProto {
+	s.luaScripts.Lock.RLock()
+	if proto, exists := s.luaScripts.Scripts[sha1]; exists {
+		s.luaScripts.Lock.RUnlock()
+		return proto
+	}
+	s.luaScripts.Lock.RUnlock()
+	return nil
+}
+
+func LoadLuaProto(s *Server, sha1 string, proto *lua.FunctionProto) {
+	s.luaScripts.Lock.Lock()
+	defer s.luaScripts.Lock.Unlock()
+	if _, exists := s.luaScripts.Scripts[sha1]; exists {
+		return
+	}
+	if s.luaScripts.Count >= LuaCompileCacheCount {
+		for k, _ := range s.luaScripts.Scripts {
+			if k == ProtectGlobalsLua {
+				continue
+			}
+			delete(s.luaScripts.Scripts, k)
+			s.luaScripts.Count--
+			log.Infof("lua compile cache count reached %d  delete one %s", LuaCompileCacheCount, k)
+			break
+		}
+	}
+	s.luaScripts.Scripts[sha1] = proto
+	s.luaScripts.Count++
+}
+
+func LoadOrCompileLua(s *Server, sha1 string, script string) (*lua.FunctionProto, error) {
+	proto := TryGetLuaProto(s, sha1)
+	if proto != nil {
+		return proto, nil
+	}
+	proto, err := CompileLua(script)
+	if err != nil {
+		log.Errorf("ERR Error compiling script (new function): %s", err.Error())
+		return nil, errors.New(ErrLuaParseError(err))
+	}
+	LoadLuaProto(s, sha1, proto)
+	return proto, nil
+}
+
+func CompileLua(script string) (*lua.FunctionProto, error) {
+	reader := strings.NewReader(script)
+	chunk, err := parse.Parse(reader, "<script>")
+	if err != nil {
+		return nil, err
+	}
+	proto, err := lua.Compile(chunk, "<script>")
+	if err != nil {
+		return nil, err
+	}
+	return proto, nil
+}
+
+func DoCompiledScript(L *lua.LState, proto *lua.FunctionProto) error {
+	lfunc := L.NewFunctionFromProto(proto)
+	L.Push(lfunc)
+	return L.PCall(0, lua.MultRet, nil)
 }
 
 func MkLuaFuncs(srv *Server) map[string]lua.LGFunction {

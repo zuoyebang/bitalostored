@@ -175,6 +175,9 @@ type BitalosConfig struct {
 	EnableClockCache                bool           `toml:"enable_clock_cache" mapstructure:"enable_clock_cache"`
 	FlushPrefixDeleteKeyMultiplier  int            `toml:"flush_prefix_delete_key_multiplier" mapstructure:"flush_prefixdeletekey_multiplier"`
 	FlushFileLifetime               int            `toml:"flush_file_lifetime" mapstructure:"flush_file_lifetime"`
+	BitmapCacheItemCount            int            `toml:"bitmap_cache_item_count" mapstructure:"bitmap_cache_item_count"`
+	BitpageFlushSize                int            `toml:"bitpage_flush_size" mapstructure:"bitpage_flush_size"`
+	BitpageSplitSize                int            `toml:"bitpage_split_size" mapstructure:"bitpage_split_size"`
 }
 
 type RaftQueueConfig struct {

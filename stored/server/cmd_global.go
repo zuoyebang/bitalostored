@@ -15,22 +15,26 @@
 package server
 
 import (
+	"encoding/binary"
 	"runtime/debug"
 
 	"github.com/zuoyebang/bitalostored/stored/internal/errn"
 	"github.com/zuoyebang/bitalostored/stored/internal/resp"
+	"github.com/zuoyebang/bitalostored/stored/internal/tclock"
 	"github.com/zuoyebang/bitalostored/stored/internal/utils"
 )
 
 func init() {
 	AddCommand(map[string]*Cmd{
-		"compact":    {Sync: false, Handler: compactCommand, NoKey: true},
-		"delexpire":  {Sync: false, Handler: delExpireCommand, NoKey: true},
-		"keyslot":    {Sync: false, Handler: keyslotCommand, NoKey: true},
-		"keyuniqid":  {Sync: false, Handler: keyUniqIdCommand, NoKey: true},
-		"debuginfo":  {Sync: false, Handler: debugInfoCommand, NoKey: true},
-		"cacheinfo":  {Sync: false, Handler: cacheInfoCommand, NoKey: true},
-		"freememory": {Sync: false, Handler: freeOsMemoryCommand, NoKey: true},
+		"compact":       {Sync: false, Handler: compactCommand, NoKey: true},
+		"compactexpire": {Sync: false, Handler: compactExpireCommand, NoKey: true},
+		"compactbitree": {Sync: false, Handler: compactBitreeCommand, NoKey: true},
+		"delexpire":     {Sync: false, Handler: delExpireCommand, NoKey: true},
+		"keyslot":       {Sync: false, Handler: keyslotCommand, NoKey: true},
+		"keyuniqid":     {Sync: false, Handler: keyUniqIdCommand, NoKey: true},
+		"debuginfo":     {Sync: false, Handler: debugInfoCommand, NoKey: true},
+		"cacheinfo":     {Sync: false, Handler: cacheInfoCommand, NoKey: true},
+		"freememory":    {Sync: false, Handler: freeOsMemoryCommand, NoKey: true},
 	})
 }
 
@@ -58,6 +62,21 @@ func keyUniqIdCommand(c *Client) error {
 
 func compactCommand(c *Client) error {
 	c.DB.Compact()
+	c.Writer.WriteStatus("OK")
+	return nil
+}
+
+func compactExpireCommand(c *Client) error {
+	start := []byte{0}
+	end := make([]byte, 8)
+	binary.BigEndian.PutUint64(end, uint64(uint64(tclock.GetTimestampMilli())))
+	c.DB.CompactExpire(start, end)
+	c.Writer.WriteStatus("OK")
+	return nil
+}
+
+func compactBitreeCommand(c *Client) error {
+	c.DB.CompactBitree()
 	c.Writer.WriteStatus("OK")
 	return nil
 }

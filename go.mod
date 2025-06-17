@@ -31,8 +31,8 @@ require (
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.9.0
 	github.com/yuin/gopher-lua v1.1.1
-	github.com/zuoyebang/bitalosdb v1.2.0
-	github.com/zuoyebang/bitalostable v1.0.1
+	github.com/zuoyebang/bitalosdb v1.3.1
+	github.com/zuoyebang/bitalostable v1.0.2
 	go.uber.org/atomic v1.7.0
 	go.uber.org/zap v1.27.0
 	golang.org/x/net v0.20.0

@@ -84,9 +84,14 @@ func (so *StringObject) SetBit(key []byte, khash uint32, offset int, on int) (in
 		return 0, err
 	}
 
-	so.BaseDb.BitmapMem.AddItem(key, khash, func(k []byte) *base.BitmapItem {
+	_, addCloser := so.BaseDb.BitmapMem.AddItem(key, khash, func(k []byte) *base.BitmapItem {
 		return base.NewBitmapItem(k, khash, rb, timestamp)
 	})
+	defer func() {
+		if addCloser != nil {
+			addCloser()
+		}
+	}()
 
 	ret, changed := existFunc(rb)
 	if changed {

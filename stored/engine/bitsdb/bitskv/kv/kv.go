@@ -60,6 +60,8 @@ type IKVStore interface {
 	NewIter(opts *IteratorOptions) IIterator
 	GetWriteBatch() IWriteBatch
 	Compact(jobId int)
+	CompactRange(start, end []byte) error
+	CompactBitree()
 	DebugInfo() string
 	CacheInfo() string
 	MetricsInfo() MetricsInfo

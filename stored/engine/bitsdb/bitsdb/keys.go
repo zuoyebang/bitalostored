@@ -24,6 +24,7 @@ import (
 	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/bitskv"
 	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/btools"
 	"github.com/zuoyebang/bitalostored/stored/internal/glob"
+	"github.com/zuoyebang/bitalostored/stored/internal/log"
 )
 
 func (bdb *BitsDB) Scan(
@@ -74,7 +75,8 @@ func (bdb *BitsDB) Scan(
 	for i := 0; it.Valid() && i < getCount; it.Next() {
 		key, err := base.DecodeMetaKey(it.Key())
 		if err != nil {
-			return nil, nil, err
+			log.Errorf("scan decode key:%s err:%s", key, err)
+			continue
 		}
 
 		if len(match) > 0 && !r.Match(unsafe2.String(key)) {
@@ -82,7 +84,8 @@ func (bdb *BitsDB) Scan(
 		}
 
 		if err := base.DecodeMetaValue(mkv, it.RawValue()); err != nil {
-			return nil, nil, err
+			log.Errorf("scan decode value key:%s err:%s", key, err)
+			continue
 		}
 
 		if mkv.IsWrongType(dt) {
@@ -124,7 +127,6 @@ func (bdb *BitsDB) ScanBySlotId(
 		defer mkCloser()
 	}
 
-	//Take one more and use it as the cursor location for the next time
 	count = btools.CheckScanCount(count)
 	getCount := count + 1
 	v := make([]btools.ScanPair, 0, getCount)
@@ -171,4 +173,51 @@ func (bdb *BitsDB) ScanBySlotId(
 	}
 
 	return cursor, v, nil
+}
+
+func (bdb *BitsDB) ScanSlotId(
+	slotId uint32, cursor []byte, count int, match string,
+) ([]byte, [][]byte, error) {
+	var slotIdPrefix [2]byte
+	binary.LittleEndian.PutUint16(slotIdPrefix[:], uint16(slotId))
+	count = btools.CheckScanCount(count)
+	getCount := count + 1
+	v := make([][]byte, 0, getCount*2)
+
+	mkv := base.GetMkvFromPool()
+	defer base.PutMkvToPool(mkv)
+
+	iterOpts := &bitskv.IterOptions{
+		SlotId: slotId,
+	}
+	it := bdb.StringObj.BaseDb.DB.NewIteratorMeta(iterOpts)
+	defer it.Close()
+	i := 0
+	for it.Seek(slotIdPrefix[:]); it.Valid() && it.ValidForPrefix(slotIdPrefix[:]); it.Next() {
+		key, err := base.DecodeMetaKey(it.Key())
+		if err != nil {
+			log.Errorf("ScanSlotId DecodeMetaKey fail key:%v err:%s", it.Key(), err)
+			continue
+		}
+
+		mkv.Reset(0)
+		if err = base.DecodeMetaValue(mkv, it.RawValue()); err != nil {
+			log.Errorf("ScanSlotId DecodeMetaValue fail key:%v err:%s", it.Key(), err)
+			continue
+		}
+
+		if mkv.IsAlive() {
+			v = append(v, key, []byte(mkv.GetDataType().String()))
+			i++
+			if i >= getCount {
+				break
+			}
+		}
+	}
+
+	if len(v)/2 == getCount {
+		v = v[:count*2]
+	}
+
+	return nil, v, nil
 }

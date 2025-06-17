@@ -130,9 +130,27 @@ func (bdb *BitsDB) ScanDeleteExpireDb(jobId uint64) {
 		delKeyNum++
 	}
 
-	log.Infof("[DELEXPIRE %d] scan delete end delKeys:%d expireKeys:%d zsetKeys:%d cost:%.3fs",
+	delSecond := time.Now().Sub(start).Seconds()
+	log.Infof("[DELEXPIRE %d] scan delete end delKeys:%d expireKeys:%d zsetKeys:%d cost:%.3fs timeoutCount:%d",
 		jobId, delKeyNum,
 		bdb.delExpireKeys.Load(),
 		bdb.delExpireZsetKeys.Load(),
-		time.Now().Sub(start).Seconds())
+		delSecond,
+		bdb.delExpireTimeoutCount)
+	if delSecond >= delExpireTimeoutSecond {
+		bdb.delExpireTimeoutCount++
+		if bdb.delExpireTimeoutCount >= delExpireKeepTimeout {
+			start := []byte{0}
+			var end [8]byte
+			binary.BigEndian.PutUint64(end[:], uint64(tclock.GetTimestampMilli()))
+			if err := bdb.CompactExpire(start, end[:]); err != nil {
+				log.Errorf("compact expireDB. err:%s", err)
+			}
+			bdb.delExpireTimeoutCount = 0
+		}
+	} else {
+		if bdb.delExpireTimeoutCount != 0 {
+			bdb.delExpireTimeoutCount = 0
+		}
+	}
 }

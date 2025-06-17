@@ -335,10 +335,10 @@ github.com/yuin/goldmark v1.1.27/go.mod h1:3hX8gzYuyVAZsxl0MRgGTJEmQBFcNTphYh9de
 github.com/yuin/goldmark v1.2.1/go.mod h1:3hX8gzYuyVAZsxl0MRgGTJEmQBFcNTphYh9decYSb74=
 github.com/yuin/gopher-lua v1.1.1 h1:kYKnWBjvbNP4XLT3+bPEwAXJx262OhaHDWDVOPjL46M=
 github.com/yuin/gopher-lua v1.1.1/go.mod h1:GBR0iDaNXjAgGg9zfCvksxSRnQx76gclCIb7kdAd1Pw=
-github.com/zuoyebang/bitalosdb v1.2.0 h1:6AfFLNWCCLDAGfEj4XNF16cYt/8LyEIcnZQIqHr9emY=
-github.com/zuoyebang/bitalosdb v1.2.0/go.mod h1:r4yTXkL40dNH7WENggsxWSSH8mJsDkTLAx/4q8BSVro=
-github.com/zuoyebang/bitalostable v1.0.1 h1:8OpcswyL9AN6e7VoxovV8Ut6VS6WZJh8URf/MTR1CH4=
-github.com/zuoyebang/bitalostable v1.0.1/go.mod h1:ftM42fXkDkyucCFTiysCHd6g2wforH15S5RIATuSBfs=
+github.com/zuoyebang/bitalosdb v1.3.1 h1:jWM64bAWSJuQv+NbORv4g4VVlzn7XVILeyJfJUHWXtA=
+github.com/zuoyebang/bitalosdb v1.3.1/go.mod h1:vp5hpsHSXTwZIiKF9dtaXK3n4NIj+uZkCLgtplLaJ0E=
+github.com/zuoyebang/bitalostable v1.0.2 h1:gzO6YcjzNIWU6mwWma6ij6kyfQv9y7EDre2iczKUiFE=
+github.com/zuoyebang/bitalostable v1.0.2/go.mod h1:ftM42fXkDkyucCFTiysCHd6g2wforH15S5RIATuSBfs=
 go.uber.org/atomic v1.7.0 h1:ADUqmZGgLDDfbSL9ZmPxKTybcoEYHgpYfELNoN+7hsw=
 go.uber.org/atomic v1.7.0/go.mod h1:fEN4uk6kAWBTFdckzkM89CLk9XfWZrxpCo0nPH17wJc=
 go.uber.org/goleak v1.3.0 h1:2K3zAYmnTNqV73imy9J1T3WC+gmCePx2hEGkimedGto=

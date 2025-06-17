@@ -20,6 +20,10 @@ func (b *Bitalos) Scan(cursor []byte, count int, match string, dt btools.DataTyp
 	return b.bitsdb.Scan(cursor, count, match, dt)
 }
 
+func (b *Bitalos) ScanSlotId(slotId uint32, cursor []byte, count int, match string) ([]byte, [][]byte, error) {
+	return b.bitsdb.ScanSlotId(slotId, cursor, count, match)
+}
+
 func (b *Bitalos) HScan(key []byte, khash uint32, cursor []byte, count int, match string) ([]byte, []btools.FVPair, error) {
 	return b.bitsdb.HashObj.HScan(key, khash, cursor, count, match)
 }

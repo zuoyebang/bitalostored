@@ -74,12 +74,14 @@ func (pD *DiskKV) Update(es []sm.Entry) ([]sm.Entry, error) {
 		if meta != nil && v.Index > originUpdateIndex {
 			meta.SetUpdateIndex(v.Index)
 		}
-		slice := &update.ByteSlice{}
+
 		if len(v.Cmd) == 0 {
 			v.Result.Data = UpdateSelfNodeDoing
 			res = append(res, v)
 			continue
 		}
+
+		slice := &update.ByteSlice{}
 		if err := proto.Unmarshal(v.Cmd, slice); err != nil {
 			v.Result.Data = []byte(err.Error())
 			res = append(res, v)
