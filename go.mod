@@ -26,7 +26,7 @@ require (
 	github.com/stretchr/testify v1.10.0
 	github.com/yuin/gopher-lua v1.1.1
 	github.com/zuoyebang/bitalosdb/v2 v2.0.0
-	github.com/zuoyebang/bitalosraft v0.0.0-20260310120543-1c12263c393e
+	github.com/zuoyebang/bitalosraft v1.0.0
 	go.uber.org/atomic v1.7.0
 	go.uber.org/zap v1.27.0
 	golang.org/x/net v0.38.0
@@ -82,7 +82,7 @@ require (
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/fastrand v1.0.0 // indirect
 	github.com/valyala/histogram v1.0.1 // indirect
-	github.com/zuoyebang/bitaloslog v0.0.0-20260310084818-9f07b5ebb93d // indirect
+	github.com/zuoyebang/bitaloslog v1.0.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/sync v0.12.0 // indirect
 	golang.org/x/text v0.23.0 // indirect

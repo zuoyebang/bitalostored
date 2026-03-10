@@ -370,10 +370,10 @@ github.com/yuin/gopher-lua v1.1.1 h1:kYKnWBjvbNP4XLT3+bPEwAXJx262OhaHDWDVOPjL46M
 github.com/yuin/gopher-lua v1.1.1/go.mod h1:GBR0iDaNXjAgGg9zfCvksxSRnQx76gclCIb7kdAd1Pw=
 github.com/zuoyebang/bitalosdb/v2 v2.0.0 h1:0cQXWrAQe4XudyEG/JdjeN+aOKSuzgBadJ+CHXSlKvo=
 github.com/zuoyebang/bitalosdb/v2 v2.0.0/go.mod h1:XLz42hn5h07giSCbNSWBbG8m/+lTE8gbvHGAfnp5oCw=
-github.com/zuoyebang/bitaloslog v0.0.0-20260310084818-9f07b5ebb93d h1:acLdlkWypOQLlZDE79nnYxGxpjnTWEy244Wo3pNFp6o=
-github.com/zuoyebang/bitaloslog v0.0.0-20260310084818-9f07b5ebb93d/go.mod h1:IVxT1Z4eUqMjStLPY5wdiRMoFgS8xB9/wl3ekdLm/RQ=
-github.com/zuoyebang/bitalosraft v0.0.0-20260310120543-1c12263c393e h1:MS0C6ACwb7PRs3NNnB23uUJPkuMcsrUsLY22HoLf+CA=
-github.com/zuoyebang/bitalosraft v0.0.0-20260310120543-1c12263c393e/go.mod h1:IZC3vEwCHAuUBFXDvnmYQHfGEd0hgRMyAhYqzbCGm4o=
+github.com/zuoyebang/bitaloslog v1.0.0 h1:qPLU3oDEi8rpoCHk2ySLM5p4yqIFLkwvWl6PjRQ0Dco=
+github.com/zuoyebang/bitaloslog v1.0.0/go.mod h1:IVxT1Z4eUqMjStLPY5wdiRMoFgS8xB9/wl3ekdLm/RQ=
+github.com/zuoyebang/bitalosraft v1.0.0 h1:vFADpMKUbSyhtJyzVeCkyuc3ASMYDA1B6yIMd/0GFFQ=
+github.com/zuoyebang/bitalosraft v1.0.0/go.mod h1:30LXCszQRmmyob3n5POH/JGrOmjjm3N/tCMSFaf2m04=
 go.uber.org/atomic v1.7.0 h1:ADUqmZGgLDDfbSL9ZmPxKTybcoEYHgpYfELNoN+7hsw=
 go.uber.org/atomic v1.7.0/go.mod h1:fEN4uk6kAWBTFdckzkM89CLk9XfWZrxpCo0nPH17wJc=
 go.uber.org/goleak v1.3.0 h1:2K3zAYmnTNqV73imy9J1T3WC+gmCePx2hEGkimedGto=
