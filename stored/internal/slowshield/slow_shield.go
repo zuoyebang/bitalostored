@@ -16,16 +16,17 @@ package slowshield
 
 import (
 	"container/heap"
-	"runtime/debug"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	"github.com/zuoyebang/bitalostored/butils/timesize"
-	"github.com/zuoyebang/bitalostored/butils/unsafe2"
 	"github.com/zuoyebang/bitalostored/stored/internal/config"
 	"github.com/zuoyebang/bitalostored/stored/internal/log"
 	"github.com/zuoyebang/bitalostored/stored/internal/resp"
+	"github.com/zuoyebang/bitalostored/stored/internal/trycatch"
+
+	"github.com/zuoyebang/bitalostored/butils/timesize"
+	"github.com/zuoyebang/bitalostored/butils/unsafe2"
 )
 
 type SlowShield struct {
@@ -121,8 +122,7 @@ func (sc *SlowShield) doStats() {
 	go func() {
 		dostat := func() {
 			defer func() {
-				if r := recover(); r != nil {
-					log.Errorf("slow shield dostats panic err:%v stack:%s", r, string(debug.Stack()))
+				if trycatch.Panic("slow shield dostats", recover()) {
 					time.Sleep(200 * time.Millisecond)
 				}
 			}()

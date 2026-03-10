@@ -24,7 +24,6 @@ import (
 	"time"
 
 	"github.com/zuoyebang/bitalostored/butils"
-
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -114,6 +113,9 @@ func (l *Logger) outputf(level string, ft string, arg ...interface{}) {
 
 	output := l.getWriteLogger(level)
 	if output != nil {
+		if level == TypeFatal {
+			ft = "[panic] " + ft
+		}
 		output.Info(fmt.Sprint(l.formatHeader(level), fmt.Sprintf(ft, arg...)))
 	}
 }

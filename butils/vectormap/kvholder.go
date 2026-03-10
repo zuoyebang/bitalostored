@@ -69,14 +69,15 @@ func newKVHolder(size Byte) (hdr *kvHolder) {
 	return
 }
 
-func (hdr *kvHolder) getValue(vOffset, vSize uint32) (v []byte, close func()) {
+func (hdr *kvHolder) getValue(vOffset, vSize uint32) (v []byte, close func(), ts uint64) {
 	hdr.buffer.acquire()
-	return hdr.data[vOffset : vOffset+vSize], hdr.buffer.release
+	ts = binary.LittleEndian.Uint64(hdr.data[vOffset:])
+	return hdr.data[vOffset+8 : vOffset+vSize], hdr.buffer.release, ts
 }
 
-func (hdr *kvHolder) getKVUnlock(ki kIdx) (k, v []byte) {
+func (hdr *kvHolder) getKVUnlock(ki kIdx) (k, v []byte, ts uint64) {
 	if ki == 0 {
-		return nil, nil
+		return
 	}
 	kOffset := ki.offset() * 4
 	kEnd := kOffset + 16
@@ -87,7 +88,8 @@ func (hdr *kvHolder) getKVUnlock(ki kIdx) (k, v []byte) {
 	if vType == 0 {
 		vOffset := (vHeader & IdxOffsetMask) * 4
 		vSize := (vHeader & IdxSmallSizeMask) >> 24
-		v = hdr.data[vOffset : vOffset+vSize]
+		ts = binary.LittleEndian.Uint64(hdr.data[vOffset:])
+		v = hdr.data[vOffset+8 : vOffset+vSize]
 		return
 	} else {
 		vOffset := (vHeader & IdxOffsetMask) * 4
@@ -97,7 +99,8 @@ func (hdr *kvHolder) getKVUnlock(ki kIdx) (k, v []byte) {
 			vSize = binary.BigEndian.Uint32(hdr.data[vOffset:])
 			vOffset += 4
 		}
-		v = hdr.data[vOffset : vOffset+vSize]
+		ts = binary.LittleEndian.Uint64(hdr.data[vOffset:])
+		v = hdr.data[vOffset+8 : vOffset+vSize]
 		return
 	}
 }
@@ -111,8 +114,8 @@ func (hdr *kvHolder) getKey(ki kIdx) (k []byte) {
 	return
 }
 
-func (hdr *kvHolder) gcSet(k, v []byte) (ki kIdx, fail bool) {
-	lv := uint32(len(v))
+func (hdr *kvHolder) gcSet(k, v []byte, ts uint64) (ki kIdx, fail bool) {
+	lv := uint32(len(v)) + 8
 	if lv >= overLongSize {
 		vCap := Cap4Size(lv) + 4
 		ntail := hdr.tail + 20 + vCap
@@ -126,7 +129,8 @@ func (hdr *kvHolder) gcSet(k, v []byte) (ki kIdx, fail bool) {
 		vHeader := vOffset/4 + overLongStoreHeaderL
 		StoreUint32(hdr.data[kEnd:], vHeader)
 		StoreUint32(hdr.data[vOffset:], lv)
-		copy(hdr.data[vOffset+4:], v)
+		binary.LittleEndian.PutUint64(hdr.data[vOffset+4:], ts)
+		copy(hdr.data[vOffset+12:], v)
 		hdr.items++
 		hdr.valUsed += vCap
 		hdr.tail = ntail
@@ -145,7 +149,8 @@ func (hdr *kvHolder) gcSet(k, v []byte) (ki kIdx, fail bool) {
 		vOffset := kEnd + 4
 		vHeader := vOffset/4 + (vSmall << 24)
 		StoreUint32(hdr.data[kEnd:], vHeader)
-		copy(hdr.data[vOffset:], v)
+		binary.LittleEndian.PutUint64(hdr.data[vOffset:], ts)
+		copy(hdr.data[vOffset+8:], v)
 		hdr.items++
 		hdr.valUsed += vCap
 		hdr.tail = ntail
@@ -163,7 +168,8 @@ func (hdr *kvHolder) gcSet(k, v []byte) (ki kIdx, fail bool) {
 		vOffset := kEnd + 4
 		vHeader := vOffset/4 + (vSmall << 24)
 		StoreUint32(hdr.data[kEnd:], vHeader)
-		copy(hdr.data[vOffset:], v)
+		binary.LittleEndian.PutUint64(hdr.data[vOffset:], ts)
+		copy(hdr.data[vOffset+8:], v)
 		hdr.items++
 		hdr.valUsed += vCap
 		hdr.tail = ntail
@@ -175,7 +181,7 @@ func (hdr *kvHolder) del(ki kIdx) {
 	if ki == 0 {
 		return
 	}
-	kEnd := ki.offset()*4 + 16
+	kEnd := ki.offset()<<2 + 16
 	vType := ki.valType()
 	vHeader := LoadUint32(hdr.data[kEnd:])
 	if vType == 0 {

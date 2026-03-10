@@ -16,12 +16,13 @@ package raft
 
 import (
 	"errors"
-	"runtime"
 	"sync"
 	"time"
 
 	"github.com/zuoyebang/bitalostored/butils/unsafe2"
 	"github.com/zuoyebang/bitalostored/stored/internal/log"
+	"github.com/zuoyebang/bitalostored/stored/internal/trycatch"
+	"github.com/zuoyebang/bitalostored/stored/internal/utils"
 	"github.com/zuoyebang/bitalostored/stored/server"
 )
 
@@ -34,17 +35,17 @@ type Queue struct {
 	workNum uint32
 	length  uint32
 	pD      *DiskKV
+	s       *server.Server
 	qchans  []chan *QData
 	wg      sync.WaitGroup
 }
 
 type QData struct {
-	data      [][]byte
-	isMigrate bool
-	keyHash   uint32
+	data    [][]byte
+	keyHash uint32
 }
 
-func NewQueue(workNum, length int, pD *DiskKV) *Queue {
+func NewQueue(workNum, length int, s *server.Server) *Queue {
 	if workNum < DefaultWorkNum {
 		workNum = DefaultWorkNum
 	}
@@ -56,7 +57,7 @@ func NewQueue(workNum, length int, pD *DiskKV) *Queue {
 		workNum: uint32(workNum),
 		length:  uint32(length),
 		qchans:  make([]chan *QData, workNum),
-		pD:      pD,
+		s:       s,
 	}
 
 	for i := 0; i < workNum; i++ {
@@ -87,16 +88,15 @@ func (q *Queue) QLength() int {
 	return maxQueueLen
 }
 
-func (q *Queue) push(data [][]byte, isMigrate bool, keyHash uint32) error {
+func (q *Queue) push(data [][]byte, keyHash uint32) error {
 	if len(data) < 2 || len(data[1]) <= 0 {
 		return errors.New("raft consume queue push data err")
 	}
 
 	index := (keyHash + uint32(data[1][len(data[1])/2])) % q.workNum
 	q.qchans[index] <- &QData{
-		data:      data,
-		isMigrate: isMigrate,
-		keyHash:   keyHash,
+		data:    data,
+		keyHash: keyHash,
 	}
 
 	return nil
@@ -107,11 +107,8 @@ func (q *Queue) consume(qchan chan *QData) {
 	go func(qch chan *QData) {
 		defer func() {
 			q.wg.Done()
-			if e := recover(); e != nil {
-				buf := make([]byte, 2048)
-				n := runtime.Stack(buf, false)
-				buf = buf[0:n]
-				log.Errorf("raft consume queue run panic err:%v panic:%s", e, string(buf))
+
+			if trycatch.Panic("raft consume queue run", recover()) {
 				time.Sleep(100 * time.Millisecond)
 				q.consume(qch)
 			}
@@ -123,14 +120,14 @@ func (q *Queue) consume(qchan chan *QData) {
 				return
 			}
 
-			c := server.GetRaftClientFromPool(q.pD.s, qdata.data, qdata.keyHash)
+			c := server.GetRaftClientFromPool(q.s, qdata.data, qdata.keyHash)
 			if c.Cmd == "script" {
 				if len(c.Args) < 1 {
 					log.Error("invalid script cmd")
 					server.PutRaftClientToPool(c)
 					continue
 				}
-				c.Cmd = c.Cmd + unsafe2.String(server.LowerSlice(c.Args[0]))
+				c.Cmd = c.Cmd + unsafe2.String(utils.LowerSlice(c.Args[0]))
 			}
 			if err := c.ApplyDB(0); err != nil {
 				log.Errorf("qchans consume applydb fail command:%s err:%v", c.Cmd, err)

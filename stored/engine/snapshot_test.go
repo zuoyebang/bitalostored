@@ -15,28 +15,31 @@
 package engine
 
 import (
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
 	"testing"
 
-	"github.com/zuoyebang/bitalostored/butils/hash"
-	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/btools"
 	"github.com/zuoyebang/bitalostored/stored/internal/config"
+	"github.com/zuoyebang/bitalostored/stored/internal/log"
+
+	"github.com/zuoyebang/bitalostored/butils/hash"
+	"github.com/stretchr/testify/require"
 )
 
 func TestDoCheckpoint(t *testing.T) {
 	config.GlobalConfig.Plugin.OpenRaft = false
-	const testDir = "testdir"
-	srcDir := filepath.Join(testDir, "src")
-	destDir := filepath.Join(testDir, "dest")
-	os.RemoveAll(testDir)
+	os.RemoveAll(testDBPath)
+	srcDir := filepath.Join(testDBPath, "src")
+	destDir := filepath.Join(testDBPath, "dest")
 	os.MkdirAll(srcDir, 0755)
 	os.MkdirAll(destDir, 0755)
+	log.NewLogger(&log.Options{
+		LogPath: testDBPath + "/log",
+	})
 	defer func() {
-		os.RemoveAll(testDir)
+		os.RemoveAll(testDBPath)
 		config.GlobalConfig.Plugin.OpenRaft = true
 	}()
 
@@ -59,11 +62,7 @@ func TestDoCheckpoint(t *testing.T) {
 		} else if n != 1 {
 			t.Fatal(n)
 		}
-		zaddArgs := btools.ScorePair{
-			Member: []byte("member"),
-			Score:  1,
-		}
-		if n, err := db.ZAdd([]byte("test-zset"), hash.Fnv32([]byte("test-zset")), zaddArgs); err != nil {
+		if n, err := db.ZAdd([]byte("test-zset"), hash.Fnv32([]byte("test-zset")), getFloatByte(1), []byte("member")); err != nil {
 			t.Fatal(err)
 		} else if n != 1 {
 			t.Fatal(n)
@@ -79,14 +78,6 @@ func TestDoCheckpoint(t *testing.T) {
 			if closer != nil {
 				closer()
 			}
-		}
-
-		if v, vCloser, err := db.HGet([]byte("test-hash"), hash.Fnv32([]byte("test-hash")), []byte("member")); err != nil {
-			t.Fatal(err)
-		} else if string(v) != "1" {
-			t.Fatalf("expect: %s, actual: %s", "1", v)
-		} else {
-			vCloser()
 		}
 
 		if v, err := db.SIsMember([]byte("test-set"), hash.Fnv32([]byte("test-set")), []byte("member")); err != nil {
@@ -106,44 +97,38 @@ func TestDoCheckpoint(t *testing.T) {
 		} else if int(v) != 1 {
 			t.Fatalf("expect: %d, actual: %d", 1, int(v))
 		}
+
+		if v, vCloser, err := db.HGet([]byte("test-hash"), hash.Fnv32([]byte("test-hash")), []byte("member")); err != nil {
+			t.Fatal(err)
+		} else if string(v) != "1" {
+			t.Fatalf("expect: %s, actual: %s", "1", v)
+		} else {
+			vCloser()
+		}
 	}
 
-	fmt.Println("db1 open")
-	db1, err := NewBitalos(srcDir)
-	if err != nil {
-		t.Fatal("init db error")
-	}
+	cfg := testGetDefaultConfig()
+	db1 := testOpenBitsDb(false, srcDir, cfg)
 	writeData(db1)
-	fmt.Println("db1 open readData")
 	readData(db1)
-	db1.Close()
 
-	db1, err = NewBitalos(srcDir)
-	if err != nil {
-		t.Fatal("init db error")
-	}
-
-	fmt.Println("db1 start checkpoint")
 	snapshotDir := filepath.Join(srcDir, "snapshot")
-	db1.Meta.SetUpdateIndex(123)
-	if _, err := db1.DoSnapshot(snapshotDir); err != nil {
-		t.Fatal(err)
-	}
-	defer db1.Close()
+	clusterId := uint64(1)
+	_, ssCloser, err1 := db1.DoSnapshot(snapshotDir, nil, clusterId)
+	require.NoError(t, err1)
 
-	updateIndex := strconv.FormatInt(int64(db1.Meta.GetUpdateIndex()), 10)
-	copySnapshotDir := filepath.Join(snapshotDir, updateIndex)
-	dstSnapshotDir := filepath.Join(destDir, updateIndex)
-	fmt.Println("db1 copySnapshotDir", copySnapshotDir, dstSnapshotDir)
+	// updateIndex := strconv.FormatInt(int64(db1.GetUpdateIndex()), 10)
+	copySnapshotDir := filepath.Join(snapshotDir, strconv.Itoa(int(clusterId)))
+	dstSnapshotDir := filepath.Join(testDBPath, "dest")
+	require.NoError(t, os.MkdirAll(dstSnapshotDir, 0755))
 	cmd := exec.Command("cp", "-rf", copySnapshotDir, dstSnapshotDir)
-	if err := cmd.Run(); err != nil {
-		t.Fatal(err)
-	}
 
-	db2, err := NewBitalos(dstSnapshotDir)
-	if err != nil {
-		t.Fatal("init db error")
-	}
-	defer db2.Close()
+	require.NoError(t, cmd.Run())
+
+	db2 := testOpenBitsDb(false, copySnapshotDir, cfg)
 	readData(db2)
+	db2.Close()
+
+	ssCloser()
+	db1.Close()
 }

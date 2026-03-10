@@ -1,0 +1,512 @@
+package bitsdb
+
+import (
+	"sort"
+	"sync"
+	"sync/atomic"
+	"time"
+
+	"github.com/zuoyebang/bitalostored/stored/engine/btools"
+	"github.com/zuoyebang/bitalostored/stored/internal/log"
+	"github.com/zuoyebang/bitalostored/stored/internal/tclock"
+	"github.com/zuoyebang/bitalostored/stored/internal/trycatch"
+
+	"github.com/zuoyebang/bitalostored/butils/unsafe2"
+	"github.com/RoaringBitmap/roaring/roaring64"
+)
+
+const (
+	bitmapItemCountDefault = 4096
+	bitmapFlushCycle       = 3600
+)
+
+type BitmapItem struct {
+	key   []byte
+	khash uint32
+	mu    struct {
+		sync.RWMutex
+		rb *roaring64.Bitmap
+	}
+	expireMs atomic.Uint64 // millisecond
+	modify   atomic.Int64  // second
+}
+
+type BitmapMem struct {
+	bdb          *BitsDB
+	enable       bool
+	maxItemCount int
+	flushing     atomic.Bool
+	fasting      bool
+	flushLock    sync.Mutex
+	flushCycle   int64
+	scanItems    []*BitmapItem
+	closeCh      chan struct{}
+	wg           sync.WaitGroup
+
+	mu struct {
+		sync.RWMutex
+		items map[string]*BitmapItem
+		count int
+	}
+}
+
+func NewBitmapItem(key []byte, khash uint32, rb *roaring64.Bitmap, timestamp uint64) *BitmapItem {
+	bi := &BitmapItem{
+		key:   key,
+		khash: khash,
+	}
+	bi.mu.rb = rb
+	bi.expireMs.Store(timestamp)
+	now := tclock.GetTimestampSecond()
+	bi.modify.Store(now)
+	return bi
+}
+
+func (bi *BitmapItem) GetReader() (*roaring64.Bitmap, func()) {
+	if bi.Expired() {
+		return nil, nil
+	} else {
+		bi.mu.RLock()
+		return bi.mu.rb, func() {
+			bi.mu.RUnlock()
+		}
+	}
+}
+
+func (bi *BitmapItem) Expired() bool {
+	expire := bi.expireMs.Load()
+	if expire == 0 {
+		return false
+	} else {
+		return expire <= uint64(tclock.GetTimestampMilli())
+	}
+}
+
+func (bi *BitmapItem) GetWriter() (*roaring64.Bitmap, func()) {
+	bi.mu.Lock()
+	if bi.Expired() {
+		bi.reset()
+	}
+	now := tclock.GetTimestampSecond()
+	bi.modify.Store(now)
+	return bi.mu.rb, func() {
+		bi.mu.Unlock()
+	}
+}
+
+func (bi *BitmapItem) reset() {
+	bi.mu.rb = roaring64.NewBitmap()
+	bi.expireMs.Store(0)
+}
+
+func (bi *BitmapItem) SetExpire(expire uint64) {
+	bi.expireMs.Store(expire)
+	bi.modify.Store(tclock.GetTimestampSecond())
+}
+
+func NewBitmapMem(db *BitsDB, maxItemCount int) *BitmapMem {
+	if maxItemCount <= 0 {
+		maxItemCount = bitmapItemCountDefault
+	}
+
+	bm := &BitmapMem{
+		bdb:          db,
+		flushCycle:   bitmapFlushCycle,
+		scanItems:    make([]*BitmapItem, 0, maxItemCount),
+		closeCh:      make(chan struct{}),
+		flushLock:    sync.Mutex{},
+		maxItemCount: maxItemCount,
+	}
+
+	bm.mu.items = make(map[string]*BitmapItem, 1<<4)
+	bm.wg.Add(1)
+	go bm.RunFlushWorker()
+	return bm
+}
+
+func (bm *BitmapMem) SetEnable() {
+	if !bm.enable {
+		bm.enable = true
+	}
+}
+
+func (bm *BitmapMem) GetEnable() bool {
+	return bm.enable
+}
+
+func (bm *BitmapMem) Get(key []byte) (*BitmapItem, bool) {
+	if !bm.enable {
+		return nil, false
+	}
+
+	bm.mu.RLock()
+	defer bm.mu.RUnlock()
+
+	if v, ok := bm.mu.items[unsafe2.String(key)]; ok {
+		return v, true
+	} else {
+		return nil, false
+	}
+}
+
+func (bm *BitmapMem) AddItem(key []byte, khash uint32, rb *roaring64.Bitmap, timestamp uint64) (bool, func()) {
+	if bm.flushing.Load() {
+		return false, nil
+	}
+
+	bm.mu.Lock()
+	defer bm.mu.Unlock()
+
+	if bm.IsFull() {
+		return false, nil
+	}
+
+	keyStr := string(key)
+	bmItem := NewBitmapItem(unsafe2.ByteSlice(keyStr), khash, rb, timestamp)
+	bm.mu.items[keyStr] = bmItem
+	bm.mu.count++
+	bmItem.mu.Lock()
+	return true, func() {
+		bmItem.mu.Unlock()
+	}
+}
+
+func (bm *BitmapMem) Delete(key []byte, deleteDB bool) (bool, error) {
+	if !bm.enable {
+		return false, nil
+	}
+
+	bm.mu.RLock()
+	_, exist := bm.mu.items[unsafe2.String(key)]
+	bm.mu.RUnlock()
+	if !exist {
+		return false, nil
+	}
+
+	bm.mu.Lock()
+	defer bm.mu.Unlock()
+	return bm.doDeleteKey(key, deleteDB)
+}
+
+func (bm *BitmapMem) deleteItem(it *BitmapItem, deleteDB bool) (bool, error) {
+	bm.mu.Lock()
+	defer bm.mu.Unlock()
+	return bm.doDeleteItem(it, deleteDB)
+}
+
+func (bm *BitmapMem) checkItem(it *BitmapItem) bool {
+	bm.mu.RLock()
+	defer bm.mu.RUnlock()
+	return bm.doCheckItem(it)
+}
+
+func (bm *BitmapMem) Close() {
+	close(bm.closeCh)
+	bm.wg.Wait()
+	log.Infof("bitmap mem closed")
+}
+
+func (bm *BitmapMem) RunFlushWorker() {
+	log.Infof("bitmap flush starts to work")
+	defer func() {
+		bm.wg.Done()
+		log.Infof("bitmap flush closed")
+	}()
+
+	worker := func() (closed bool) {
+		defer func() {
+			trycatch.Panic("bitmap flush", recover())
+		}()
+
+		tick := time.NewTicker(time.Duration(bm.flushCycle) * time.Second)
+		defer tick.Stop()
+		for {
+			select {
+			case <-tick.C:
+				now := tclock.GetTimestampSecond()
+				bm.Flush(false)
+				bm.Evict(now)
+			case <-bm.closeCh:
+				closed = true
+				bm.Flush(true)
+				return
+			}
+		}
+	}
+	for {
+		if worker() {
+			break
+		}
+	}
+}
+
+func (bm *BitmapMem) Flush(fast bool) {
+	if !bm.enable {
+		return
+	}
+
+	if fast {
+		bm.fasting = true
+	}
+	defer func() {
+		if fast {
+			bm.fasting = false
+		}
+	}()
+
+	bm.flushLock.Lock()
+	defer bm.flushLock.Unlock()
+
+	bm.flushing.Store(true)
+	defer bm.flushing.Store(false)
+
+	now := tclock.GetTimestampSecond()
+	bm.scanItems = bm.scanItems[:0]
+	bm.mu.RLock()
+	for _, it := range bm.mu.items {
+		bm.scanItems = append(bm.scanItems, it)
+	}
+	bm.mu.RUnlock()
+	total := len(bm.scanItems)
+
+	var expireNum, nullNum, flushNum, flushBytes int
+	for _, it := range bm.scanItems {
+		if bm.fasting != fast {
+			break
+		}
+
+		if it.Expired() {
+			bm.deleteItem(it, true)
+			expireNum++
+			continue
+		}
+
+		if now-it.modify.Load() >= 2*bm.flushCycle {
+			bm.deleteItem(it, false)
+			continue
+		}
+
+		it.mu.RLock()
+		if it.mu.rb.IsEmpty() {
+			nullNum++
+			it.mu.RUnlock()
+			bm.deleteItem(it, true)
+			continue
+		}
+
+		val, err := it.mu.rb.MarshalBinary()
+		it.mu.RUnlock()
+		if err != nil {
+			continue
+		}
+
+		if !bm.checkItem(it) {
+			continue
+		}
+
+		flushNum++
+		bm.bdb.SetKV(it.key, btools.GetSlotId(it.khash), btools.DataTypeString, it.expireMs.Load(), val)
+		flushBytes += len(val)
+
+		if !fast {
+			time.Sleep(500 * time.Millisecond)
+		}
+	}
+	log.Infof("bitmap item flush cost:%d(s) total:%d expireNum:%d nullNum:%d flushNum:%d flushBytes:%d",
+		tclock.GetTimestampSecond()-now, total, expireNum, nullNum, flushNum, flushBytes)
+}
+
+func (bm *BitmapMem) IsFull() bool {
+	return bm.mu.count >= bm.maxItemCount
+}
+
+func (bm *BitmapMem) doDeleteKey(key []byte, deleteDB bool) (bool, error) {
+	var err error
+	keyStr := unsafe2.String(key)
+	if v, ok := bm.mu.items[keyStr]; ok {
+		delete(bm.mu.items, keyStr)
+		bm.mu.count--
+
+		if deleteDB {
+			_, _, err = bm.bdb.Delete(v.key, v.khash)
+		}
+		return true, err
+	} else {
+		return false, nil
+	}
+}
+
+func (bm *BitmapMem) doDeleteItem(it *BitmapItem, deleteDB bool) (bool, error) {
+	var err error
+	keyStr := unsafe2.String(it.key)
+	if v, ok := bm.mu.items[keyStr]; ok && v == it {
+		delete(bm.mu.items, keyStr)
+		bm.mu.count--
+
+		if deleteDB {
+			_, _, err = bm.bdb.Delete(v.key, v.khash)
+		}
+		return true, err
+	}
+	return false, nil
+}
+
+func (bm *BitmapMem) doCheckItem(it *BitmapItem) bool {
+	if v, ok := bm.mu.items[unsafe2.String(it.key)]; ok && v == it {
+		return true
+	}
+	return false
+}
+
+func (bm *BitmapMem) Evict(modifyTime int64) {
+	bm.mu.RLock()
+	if !bm.IsFull() {
+		bm.mu.RUnlock()
+		return
+	}
+
+	bm.scanItems = bm.scanItems[:0]
+	for _, it := range bm.mu.items {
+		if it.modify.Load() < modifyTime {
+			bm.scanItems = append(bm.scanItems, it)
+		}
+	}
+	bm.mu.RUnlock()
+
+	sort.Slice(bm.scanItems, func(i, j int) bool {
+		if bm.scanItems[i].modify.Load() <= bm.scanItems[j].modify.Load() {
+			return true
+		} else {
+			return false
+		}
+	})
+
+	evictMax := bm.maxItemCount * 3 / 10
+	evictCount := 0
+	for _, it := range bm.scanItems {
+		if it.modify.Load() >= modifyTime {
+			continue
+		}
+		ok, _ := bm.deleteItem(it, false)
+		if ok {
+			evictCount++
+		}
+		if evictCount >= evictMax {
+			break
+		}
+	}
+	log.Infof("bitmap evict itemNum:%d", evictCount)
+}
+
+func (bm *BitmapMem) flushSlot(slotId uint32) {
+	if !bm.enable {
+		return
+	}
+
+	bm.flushLock.Lock()
+	defer bm.flushLock.Unlock()
+
+	bm.scanItems = bm.scanItems[:0]
+	bm.mu.RLock()
+	for _, item := range bm.mu.items {
+		itemSlot := uint32(btools.GetSlotId(item.khash))
+		if itemSlot == slotId {
+			bm.scanItems = append(bm.scanItems, item)
+		}
+	}
+	bm.mu.RUnlock()
+
+	for _, it := range bm.scanItems {
+		bm.mu.Lock()
+		if it.Expired() {
+			bm.doDeleteItem(it, true)
+			bm.mu.Unlock()
+			continue
+		}
+
+		it.mu.RLock()
+		if it.mu.rb.IsEmpty() {
+			it.mu.RUnlock()
+			bm.doDeleteItem(it, true)
+			bm.mu.Unlock()
+			continue
+		}
+
+		val, err := it.mu.rb.MarshalBinary()
+		it.mu.RUnlock()
+		if err != nil {
+			log.Errorf("flushSlot bitmap err:%s key:%s", err, it.key)
+			bm.doDeleteItem(it, false)
+			bm.mu.Unlock()
+			continue
+		}
+
+		if !bm.doCheckItem(it) {
+			bm.mu.Unlock()
+			continue
+		}
+
+		bm.bdb.SetKV(it.key, btools.GetSlotId(it.khash), btools.DataTypeString, it.expireMs.Load(), val)
+		bm.doDeleteItem(it, false)
+		bm.mu.Unlock()
+	}
+}
+
+func (bdb *BitsDB) bitmapMemExpireAt(key []byte, when uint64) (int64, bool) {
+	if bi, ok := bdb.BitmapMem.Get(key); ok {
+		if bi.Expired() {
+			return 0, true
+		} else {
+			bi.SetExpire(when)
+			return 1, true
+		}
+	}
+
+	return 0, false
+}
+
+func (bdb *BitsDB) bitmapMemTTL(key []byte) (int64, bool) {
+	if bi, ok := bdb.BitmapMem.Get(key); ok {
+		expire := int64(bi.expireMs.Load())
+		return checkTTL(expire), true
+	}
+
+	return 0, false
+}
+
+func checkTTL(expire int64) int64 {
+	if expire == 0 {
+		return ErrnoKeyPersist
+	} else {
+		nowtime := tclock.GetTimestampMilli()
+		if expire <= nowtime {
+			return ErrnoKeyNotFoundOrExpire
+		} else {
+			return expire - nowtime
+		}
+	}
+}
+
+func (bdb *BitsDB) bitmapMemPersist(key []byte) (int64, bool) {
+	if bi, ok := bdb.BitmapMem.Get(key); ok {
+		if bi.Expired() {
+			return 0, true
+		} else {
+			bi.SetExpire(0)
+			return 1, true
+		}
+	}
+
+	return 0, false
+}
+
+func (bdb *BitsDB) bitmapMemExists(key []byte) (int64, bool) {
+	if bi, ok := bdb.BitmapMem.Get(key); ok {
+		if bi.Expired() {
+			return 0, true
+		}
+		return 1, true
+	}
+
+	return 0, false
+}

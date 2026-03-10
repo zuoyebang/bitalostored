@@ -16,13 +16,15 @@ package config
 
 import (
 	"errors"
+	"fmt"
 	"path/filepath"
 	"strings"
 )
 
 const (
-	SnapshotDirName = "snapshot"
-	DataDbDirName   = "bitalos"
+	SnapshotDirName  = "snapshot"
+	DataDbDirName    = "bitalos"
+	RaftMetaFileName = "BSMANIFEST"
 )
 
 func GetBitalosDbPath() string {
@@ -66,18 +68,22 @@ func GetBitalosRaftNodeHostPath() string {
 	return filepath.Join(GlobalConfig.Server.DBPath, "raft-nodehost")
 }
 
-func GetBitalosDataDbPath(dataType string) string {
-	return filepath.Join(GlobalConfig.Server.DBPath, DataDbDirName, dataType)
+func GetBitalosDataDbPath() string {
+	return filepath.Join(GlobalConfig.Server.DBPath, DataDbDirName, "bitvector")
 }
 
-func GetBitalosIndexDbPath() string {
-	return filepath.Join(GlobalConfig.Server.DBPath, DataDbDirName, "zsetindex")
+func GetRaftConfigPath() string {
+	return filepath.Join(GlobalConfig.Server.DBPath, "raft-nodeconfig")
 }
 
-func GetBitalosMetaDbPath() string {
-	return filepath.Join(GlobalConfig.Server.DBPath, DataDbDirName, "meta")
+func GetRaftMetaPath() string {
+	return filepath.Join(GlobalConfig.Server.DBPath, "raft-meta")
 }
 
-func GetBitalosExireDbPath() string {
-	return filepath.Join(GlobalConfig.Server.DBPath, DataDbDirName, "expire")
+func GetRaftNodeMetaFile(clusterId uint64) string {
+	return fmt.Sprintf("raft-%d.%s", clusterId, "meta")
+}
+
+func GetRaftMetaFile() string {
+	return "raft.meta"
 }

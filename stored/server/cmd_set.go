@@ -17,6 +17,7 @@ package server
 import (
 	"strconv"
 
+	"github.com/zuoyebang/bitalostored/stored/engine/btools"
 	"github.com/zuoyebang/bitalostored/stored/internal/errn"
 	"github.com/zuoyebang/bitalostored/stored/internal/resp"
 	"github.com/zuoyebang/bitalostored/stored/internal/utils"
@@ -46,12 +47,12 @@ func saddCommand(c *Client) error {
 		return errn.CmdParamsErr(resp.SADD)
 	}
 
-	if n, err := c.DB.SAdd(args[0], c.KeyHash, args[1:]...); err != nil {
+	n, err := c.DB.SAdd(args[0], c.KeyHash, args[1:]...)
+	if err != nil {
 		return err
-	} else {
-		c.Writer.WriteInteger(n)
 	}
 
+	c.Writer.WriteInteger(n)
 	return nil
 }
 
@@ -76,6 +77,10 @@ func sismemberCommand(c *Client) error {
 		return errn.CmdParamsErr(resp.SISMEMBER)
 	}
 
+	if err := btools.CheckKeyFieldSize(args[0], args[1]); err != nil {
+		return err
+	}
+
 	if n, err := c.DB.SIsMember(args[0], c.KeyHash, args[1]); err != nil {
 		return err
 	} else {
@@ -89,12 +94,19 @@ func smembersCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 1 {
 		return errn.CmdParamsErr(resp.SMEMBERS)
+	} else if err := btools.CheckKeySize(args[0]); err != nil {
+		return err
 	}
 
-	res, err := c.DB.SMembers(args[0], c.KeyHash)
+	res, closer, err := c.DB.SMembers(args[0], c.KeyHash)
 	if err != nil {
 		return err
 	}
+	defer func() {
+		if closer != nil {
+			closer()
+		}
+	}()
 
 	c.Writer.WriteSliceArray(res)
 	return nil
@@ -103,24 +115,33 @@ func smembersCommand(c *Client) error {
 
 func srandmemberCommand(c *Client) error {
 	args := c.Args
-	if len(args) < 1 {
+	argNum := len(args)
+	if argNum < 1 {
 		return errn.CmdParamsErr(resp.SRANDMEMBER)
-	} else if len(args) > 2 {
+	} else if argNum > 2 {
 		return errn.ErrSyntax
+	} else if err := btools.CheckKeySize(args[0]); err != nil {
+		return err
 	}
 
 	count := 1
-	if len(args) == 2 {
+	if argNum == 2 {
 		var err error
 		if count, err = strconv.Atoi(string(args[1])); err != nil {
 			return errn.ErrValue
 		}
 	}
 
-	res, err := c.DB.SRandMember(args[0], c.KeyHash, int64(count))
+	res, closer, err := c.DB.SRandMember(args[0], c.KeyHash, int64(count))
 	if err != nil {
 		return err
 	}
+	defer func() {
+		if closer != nil {
+			closer()
+		}
+	}()
+
 	if len(args) == 2 {
 		c.Writer.WriteSliceArray(res)
 	} else {
@@ -131,7 +152,47 @@ func srandmemberCommand(c *Client) error {
 		}
 	}
 	return nil
+}
 
+func spopCommand(c *Client) error {
+	args := c.Args
+
+	if len(args) < 1 || len(args) > 2 {
+		return errn.CmdParamsErr(resp.SPOP)
+	} else if err := btools.CheckKeySize(args[0]); err != nil {
+		return err
+	}
+
+	var count int64 = 1
+	if len(args) == 2 {
+		var err error
+		count, err = utils.ByteToInt64(args[1])
+		if err != nil || count < 0 {
+			return errn.ErrValue
+		} else if count == 0 {
+			c.Writer.WriteSliceArray(nil)
+			return nil
+		}
+	}
+
+	res, closer, err := c.DB.SPop(args[0], c.KeyHash, count)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if closer != nil {
+			closer()
+		}
+	}()
+
+	if len(args) == 2 {
+		c.Writer.WriteSliceArray(res)
+	} else if len(res) >= 1 {
+		c.Writer.WriteBulk(res[0])
+	} else {
+		c.Writer.WriteBulk(nil)
+	}
+	return nil
 }
 
 func sremCommand(c *Client) error {
@@ -146,42 +207,6 @@ func sremCommand(c *Client) error {
 		c.Writer.WriteInteger(n)
 	}
 
-	return nil
-}
-
-func spopCommand(c *Client) error {
-	args := c.Args
-
-	if len(args) < 1 || len(args) > 2 {
-		return errn.CmdParamsErr(resp.SPOP)
-	}
-
-	var count int64 = 1
-	if len(args) == 2 {
-		var err error
-		count, err = utils.ByteToInt64(args[1])
-		if err != nil || count < 0 {
-			return errn.ErrValue
-		}
-		if count == 0 {
-			c.Writer.WriteSliceArray(nil)
-			return nil
-		}
-	}
-
-	res, err := c.DB.SPop(args[0], c.KeyHash, count)
-	if err != nil {
-		return err
-	}
-	if len(args) == 2 {
-		c.Writer.WriteSliceArray(res)
-	} else {
-		if len(res) >= 1 {
-			c.Writer.WriteBulk(res[0])
-		} else {
-			c.Writer.WriteBulk(nil)
-		}
-	}
 	return nil
 }
 
@@ -246,7 +271,7 @@ func sttlCommand(c *Client) error {
 		return errn.CmdParamsErr(resp.STTL)
 	}
 
-	if v, err := c.DB.TTl(args[0], c.KeyHash); err != nil {
+	if v, err := c.DB.TTL(args[0], c.KeyHash); err != nil {
 		return err
 	} else {
 		c.Writer.WriteInteger(v)

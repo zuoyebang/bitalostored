@@ -21,10 +21,12 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/btools"
 	"github.com/zuoyebang/bitalostored/stored/internal/errn"
 	"github.com/zuoyebang/bitalostored/stored/internal/geohash"
 	"github.com/zuoyebang/bitalostored/stored/internal/resp"
+
+	"github.com/zuoyebang/bitalostored/butils/numeric"
+	"github.com/zuoyebang/bitalostored/butils/unsafe2"
 )
 
 type direction int
@@ -52,30 +54,38 @@ func geoaddCommand(c *Client) error {
 		return errn.CmdParamsErr(resp.GEOADD)
 	}
 
-	key, args := args[0], args[1:]
-	var params []btools.ScorePair
-	for len(args) > 2 {
-		rawLong, rawLat, name := args[0], args[1], args[2]
-		args = args[3:]
-		longitude, err := strconv.ParseFloat(string(rawLong), 64)
-		if err != nil {
-			return errors.New("ERR value is not a valid float")
-		}
-		latitude, err := strconv.ParseFloat(string(rawLat), 64)
-		if err != nil {
-			return errors.New("ERR value is not a valid float")
-		}
+	key := args[0]
+	args = args[1:]
+	argNum := len(args)
+	argsDup := make(map[string]struct{}, argNum/2)
+	params := make([][]byte, 0, argNum)
+	for i := 0; i < argNum; i += 3 {
+		rawLong, rawLat, name := args[i], args[i+1], args[i+2]
+		member := unsafe2.String(name)
+		if _, exist := argsDup[member]; !exist {
+			longitude, err := strconv.ParseFloat(string(rawLong), 64)
+			if err != nil {
+				return errors.New("ERR value is not a valid float")
+			}
+			latitude, err := strconv.ParseFloat(string(rawLat), 64)
+			if err != nil {
+				return errors.New("ERR value is not a valid float")
+			}
 
-		if latitude < -85.05112878 ||
-			latitude > 85.05112878 ||
-			longitude < -180 ||
-			longitude > 180 {
-			return errors.New(fmt.Sprintf("ERR invalid longitude,latitude pair %.6f,%.6f", longitude, latitude))
-		}
-		if score, err := geohash.EncodeWGS84(longitude, latitude); err != nil {
-			return err
-		} else {
-			params = append(params, btools.ScorePair{Score: float64(score), Member: name})
+			if latitude < -85.05112878 ||
+				latitude > 85.05112878 ||
+				longitude < -180 ||
+				longitude > 180 {
+				return errors.New(fmt.Sprintf("ERR invalid longitude,latitude pair %.6f,%.6f", longitude, latitude))
+			}
+
+			score, err := geohash.EncodeWGS84(longitude, latitude)
+			if err != nil {
+				return err
+			}
+
+			params = append(params, numeric.Float64ToByteSort(float64(score), nil), name)
+			argsDup[member] = struct{}{}
 		}
 	}
 
@@ -123,7 +133,7 @@ func geoposCommand(c *Client) error {
 		return errn.CmdParamsErr(resp.GEOPOS)
 	}
 	key, args := args[0], args[1:]
-	arr := []interface{}{}
+	var arr []interface{}
 	for _, arg := range args {
 		if score, err := c.DB.ZScore(key, c.KeyHash, arg); err != nil {
 			arr = append(arr, nil)
@@ -142,7 +152,7 @@ func geohashCommand(c *Client) error {
 		return errn.CmdParamsErr(resp.GEOHASH)
 	}
 	key, args := args[0], args[1:]
-	arr := []interface{}{}
+	var arr []interface{}
 	for _, arg := range args {
 		if score, err := c.DB.ZScore(key, c.KeyHash, arg); err != nil {
 			arr = append(arr, nil)
@@ -357,7 +367,7 @@ func georadiusbymemberCommand(c *Client) error {
 		matches = matches[:count]
 	}
 
-	var arr []interface{}
+	arr := []interface{}{}
 	for _, member := range matches {
 		if !withDist && !withCoord && !withHash {
 			arr = append(arr, member.member)
@@ -407,7 +417,7 @@ func geoMembersOfAllNeighbors(c *Client, set []byte, geoRadius *geohash.Radius, 
 		&geoRadius.SouthWest,
 	}
 
-	var lastProcessed int = 0
+	var lastProcessed int
 	plist := make([]*geoPoints, 0, 64)
 
 	for i, area := range neighbors {
@@ -433,11 +443,15 @@ func geoMembersOfAllNeighbors(c *Client, set []byte, geoRadius *geohash.Radius, 
 func membersOfGeoHashBox(c *Client, zset []byte, longitude, latitude, radius float64, hash *geohash.HashBits) ([]*geoPoints, error) {
 	points := make([]*geoPoints, 0, 32)
 	min, max := scoresOfGeoHashBox(hash)
-	vlist, err := c.DB.ZRangeByScoreGeneric(zset, c.KeyHash, float64(min), float64(max), false, false, 0, -1, false)
+	vlist, closer, err := c.DB.ZRangeByScore(zset, c.KeyHash, float64(min), float64(max), false, false, 0, -1)
 	if err != nil {
 		return nil, err
 	}
-
+	defer func() {
+		if closer != nil {
+			closer()
+		}
+	}()
 	for _, v := range vlist {
 		x, y := geohash.DecodeToLongLatWGS84(uint64(v.Score))
 		dist := geohash.GetDistance(x, y, longitude, latitude)
@@ -446,7 +460,7 @@ func membersOfGeoHashBox(c *Client, zset []byte, longitude, latitude, radius flo
 				longitude: x,
 				latitude:  y,
 				dist:      dist,
-				score:     float64(v.Score),
+				score:     v.Score,
 				member:    v.Member,
 			}
 			points = append(points, p)

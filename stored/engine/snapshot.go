@@ -17,22 +17,22 @@ package engine
 import (
 	"bufio"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path"
 	"path/filepath"
-	"strconv"
 	"strings"
 
-	"github.com/cockroachdb/errors"
-	"github.com/zuoyebang/bitalostored/butils"
-	"github.com/zuoyebang/bitalostored/butils/unsafe2"
 	"github.com/zuoyebang/bitalostored/stored/internal/config"
 	"github.com/zuoyebang/bitalostored/stored/internal/log"
+
+	"github.com/zuoyebang/bitalostored/butils"
+	"github.com/zuoyebang/bitalostored/butils/unsafe2"
 )
 
-const readBufferSize = 2048
+const sfIOBufferSize = 8192
 
 var (
 	StartHeader = byte('$')
@@ -48,29 +48,32 @@ const (
 
 type SnapshotDetail struct {
 	SnapshotPath string
-	UpdateIndex  uint64
+	IsRoot       bool
+	ClusterId    uint64
 }
 
 func (detail SnapshotDetail) Clean() {
-	dir := detail.SnapshotPath
-	index := detail.UpdateIndex
-	indexSnapshotDir := path.Join(dir, strconv.FormatUint(index, 10))
+	deleteDir := detail.SnapshotPath
+	if detail.IsRoot {
+		deleteDir = path.Join(deleteDir, fmt.Sprintf("%d", detail.ClusterId))
+	}
 
-	e := os.RemoveAll(indexSnapshotDir)
+	e := os.RemoveAll(deleteDir)
 	if e != nil {
-		log.Warn("remove snapshot file : ", indexSnapshotDir, " ", e)
+		log.Warn("remove snapshot file : ", deleteDir, " ", e)
 	} else {
-		log.Info("remove snapshot file: ", indexSnapshotDir)
+		log.Info("remove snapshot file: ", deleteDir)
 	}
 }
 
 type SnapshotFile struct {
-	Size int64
-	Name string
+	size int64
+	name string
+	buf  []byte
 }
 
 func (sf *SnapshotFile) headerLen() int {
-	return HeaderStartLen + HeaderFileSizeLen + HeaderNameLen + len(sf.Name) + HeaderEndLen
+	return HeaderStartLen + HeaderFileSizeLen + HeaderNameLen + len(sf.name) + HeaderEndLen
 }
 
 func (sf *SnapshotFile) writeHeader(w io.Writer) error {
@@ -84,21 +87,21 @@ func (sf *SnapshotFile) writeHeader(w io.Writer) error {
 		wn += n
 	}
 
-	binary.BigEndian.PutUint64(buf[0:HeaderFileSizeLen], uint64(sf.Size))
+	binary.BigEndian.PutUint64(buf[0:HeaderFileSizeLen], uint64(sf.size))
 	if n, err := w.Write(buf[0:HeaderFileSizeLen]); err != nil {
 		return err
 	} else {
 		wn += n
 	}
 
-	binary.BigEndian.PutUint16(buf[0:HeaderNameLen], uint16(len(sf.Name)))
+	binary.BigEndian.PutUint16(buf[0:HeaderNameLen], uint16(len(sf.name)))
 	if n, err := w.Write(buf[0:HeaderNameLen]); err != nil {
 		return err
 	} else {
 		wn += n
 	}
 
-	if n, err := w.Write(unsafe2.ByteSlice(sf.Name)); err != nil {
+	if n, err := w.Write(unsafe2.ByteSlice(sf.name)); err != nil {
 		return err
 	} else {
 		wn += n
@@ -159,17 +162,21 @@ func (sf *SnapshotFile) readHeader(r *bufio.Reader) error {
 	if flagByte[0] != EndHeader {
 		return fmt.Errorf("snapshotFile readHeader not invalid header end type '\n', but %c", flagByte[0])
 	}
-	sf.Size = int64(binary.BigEndian.Uint64(fileSize[:]))
-	sf.Name = string(filename)
-	log.Infof("snapshotFile readHeader file:%s size:%d", sf.Name, sf.Size)
+	sf.size = int64(binary.BigEndian.Uint64(fileSize[:]))
+	sf.name = string(filename)
+	log.Infof("snapshotFile readHeader file:%s size:%d", sf.name, sf.size)
 	return nil
 }
 
 func (sf *SnapshotFile) writeToFile(br *bufio.Reader, dbsyncpath string) error {
-	buf := make([]byte, readBufferSize)
-	size := sf.Size
-	sfPath := path.Join(dbsyncpath, sf.Name)
-	log.Info("snapshotFile writeToFile sfPath : ", sfPath)
+	sfPath := path.Join(dbsyncpath, sf.name)
+	size := int(sf.size)
+	if size == 0 {
+		log.Warnf("snapshotFile writeToFile emtpy content to write sfPath:%s", sfPath)
+		return nil
+	}
+
+	log.Infof("snapshotFile writeToFile sfPath:%s", sfPath)
 
 	if index := strings.LastIndex(sfPath, "/"); index > 0 {
 		dirpath := sfPath[:index]
@@ -181,69 +188,53 @@ func (sf *SnapshotFile) writeToFile(br *bufio.Reader, dbsyncpath string) error {
 		}
 	}
 
-	hasContent := false
 	f, err := os.Create(sfPath)
 	if err != nil {
 		return err
 	}
 	defer f.Close()
 
+	var rn, wn int
 	for size > 0 {
-		hasContent = true
-		if size > 2048 {
-			rn, err := io.ReadFull(br, buf)
+		if size > sfIOBufferSize {
+			rn, err = io.ReadFull(br, sf.buf)
 			if err != nil {
 				return err
 			}
-			if rn != readBufferSize {
-				return errors.Errorf("SnapshotFile reader io byte err exp:%d act:%d", readBufferSize, rn)
+			if rn != sfIOBufferSize {
+				return fmt.Errorf("SnapshotFile writeToFile reade short n:%d", rn)
 			}
 
-			size = size - int64(rn)
-			if wn, err := f.Write(buf); err != nil {
+			size = size - rn
+			if wn, err = f.Write(sf.buf); err != nil {
 				return err
-			} else if wn != readBufferSize {
-				return errors.Errorf("SnapshotFile writeToFile byte err exp:%d act:%d", readBufferSize, wn)
+			} else if wn != sfIOBufferSize {
+				return fmt.Errorf("SnapshotFile writeToFile write short n:%d", wn)
 			}
-		} else if size > 0 {
-			last := size
-			newBuf := make([]byte, size)
-			if rn, err := io.ReadFull(br, newBuf); err == nil || err == io.EOF {
-				if int64(rn) != size {
-					return errors.Errorf("SnapshotFile last reader io byte err exp:%d act:%d", size, rn)
+		} else {
+			buf := sf.buf[:size]
+			rn, err = io.ReadFull(br, buf)
+			if err == nil || err == io.EOF {
+				if rn != size {
+					return fmt.Errorf("SnapshotFile writeToFile last reade short exp:%d act:%d", size, rn)
 				}
 
-				size = 0
-				if wn, err1 := f.Write(newBuf); err1 != nil {
-					return err1
-				} else if int64(wn) != last {
-					return errors.Errorf("SnapshotFile writeToFile byte err exp:%d, act:%d", last, wn)
-				}
-				if err == io.EOF {
+				if wn, err = f.Write(buf); err != nil {
 					return err
+				} else if wn != size {
+					return fmt.Errorf("SnapshotFile writeToFile last write short exp:%d act:%d", size, wn)
 				}
-			} else {
-				return err
 			}
-		}
-	}
 
-	if !hasContent {
-		log.Warnf("snapshotFile writeToFile emtpy content to write sfPath:%s", sfPath)
+			return err
+		}
 	}
 
 	return nil
 }
 
-func (b *Bitalos) DoSnapshot(snapshotPath string) (interface{}, error) {
-	updateIndex := b.Meta.GetUpdateIndex()
-	snapshotDir := path.Join(snapshotPath, strconv.FormatUint(updateIndex, 10))
-
-	if last := b.Meta.SetSnapshotIndex(updateIndex); last > 0 {
-		lastSnapshot := SnapshotDetail{SnapshotPath: snapshotPath, UpdateIndex: last}
-		lastSnapshot.Clean()
-	}
-
+func (b *Bitalos) DoSnapshot(snapshotRoot string, nodePrepare func(string) error, clusterId uint64) (interface{}, func(), error) {
+	snapshotDir := path.Join(snapshotRoot, fmt.Sprintf("%d", clusterId))
 	if _, err := os.Stat(snapshotDir); err == nil {
 		log.Infof(" remove all existed snapshotDir %s", snapshotDir)
 		_ = os.RemoveAll(snapshotDir)
@@ -251,19 +242,23 @@ func (b *Bitalos) DoSnapshot(snapshotPath string) (interface{}, error) {
 
 	_ = os.MkdirAll(snapshotDir, 0755)
 
-	if err := b.bitsdb.Checkpoint(snapshotDir); err != nil {
-		return nil, errors.Errorf("prepare do bitsdb checkpoint err:%s", err.Error())
+	if nodePrepare != nil {
+		if err := nodePrepare(snapshotDir); err != nil {
+			return nil, nil, err
+		}
 	}
 
-	if err := b.Meta.Checkpoint(snapshotDir); err != nil {
-		return nil, errors.Errorf("prepare do meta checkpoint err:%s", err.Error())
+	ckCloser, err := b.Checkpoint(snapshotDir)
+	if err != nil {
+		return nil, nil, err
 	}
 
 	sd := &SnapshotDetail{
 		SnapshotPath: snapshotDir,
-		UpdateIndex:  updateIndex,
+		IsRoot:       false,
+		ClusterId:    clusterId,
 	}
-	return sd, nil
+	return sd, ckCloser, nil
 }
 
 func (b *Bitalos) SaveSnapshot(ctx interface{}, w io.Writer, done <-chan struct{}) error {
@@ -275,7 +270,7 @@ func (b *Bitalos) SaveSnapshot(ctx interface{}, w io.Writer, done <-chan struct{
 	}
 
 	log.Info("bitalos SaveSnapshot start detail", sd)
-	defer log.Cost("bitalos SaveSnapshot finish ")()
+	defer log.Cost("bitalos SaveSnapshot finish")()
 
 	sf := &SnapshotFile{}
 	walkErr := filepath.Walk(sd.SnapshotPath, func(fpath string, info os.FileInfo, we error) error {
@@ -289,10 +284,10 @@ func (b *Bitalos) SaveSnapshot(ctx interface{}, w io.Writer, done <-chan struct{
 			return err
 		}
 
-		sf.Name = filename
-		sf.Size = info.Size()
+		sf.name = filename
+		sf.size = info.Size()
 
-		log.Infof("bitalos SaveSnapshot write file start file:%s name:%s size:%s", fpath, filename, butils.FmtSize(uint64(sf.Size)))
+		log.Infof("bitalos SaveSnapshot write file start file:%s name:%s size:%s", fpath, filename, butils.FmtSize(uint64(sf.size)))
 		f, err := os.Open(fpath)
 		if err != nil {
 			log.Errorf("bitalos SaveSnapshot open file fail file:%s err:%s", fpath, err.Error())
@@ -308,8 +303,8 @@ func (b *Bitalos) SaveSnapshot(ctx interface{}, w io.Writer, done <-chan struct{
 		if n, err := io.Copy(w, f); err != nil {
 			log.Errorf("bitalos SaveSnapshot write file fail file:%s err:%s", fpath, err.Error())
 			return err
-		} else if n != sf.Size {
-			log.Errorf("bitalos SaveSnapshot write file size err file:%s exp:%d act:%d", fpath, sf.Size, n)
+		} else if n != sf.size {
+			log.Errorf("bitalos SaveSnapshot write file size err file:%s exp:%d act:%d", fpath, sf.size, n)
 			return errors.New("send snapshot file size err")
 		}
 
@@ -332,7 +327,9 @@ func (b *Bitalos) RecoverFromSnapshot(r io.Reader, done <-chan struct{}) (string
 	os.MkdirAll(dbsyncPath, 0755)
 
 	br := bufio.NewReader(r)
-	sf := new(SnapshotFile)
+	sf := &SnapshotFile{
+		buf: make([]byte, sfIOBufferSize),
+	}
 
 	for {
 		if err = sf.readHeader(br); err != nil {
@@ -349,17 +346,17 @@ func (b *Bitalos) RecoverFromSnapshot(r io.Reader, done <-chan struct{}) (string
 			return "", err
 		}
 
-		rn += int64(sf.headerLen()) + sf.Size
+		rn += int64(sf.headerLen()) + sf.size
 	}
 
-	idx := strings.Index(sf.Name, "/")
+	idx := strings.Index(sf.name, "/")
 	if idx == -1 {
-		log.Errorf("bitalos recoverFromSnapshot parse updateIndex err sfName:%s", sf.Name)
+		log.Errorf("bitalos recoverFromSnapshot parse updateIndex err sfName:%s", sf.name)
 		return "", errors.New("bitalos recoverFromSnapshot parse updateIndex err")
 	}
-	updateIndex := sf.Name[:idx]
-	dbsyncUpdateIndexPath := filepath.Join(dbsyncPath, updateIndex)
-	log.Infof("bitalos recoverFromSnapshot finish readNum:%d updateIndex:%s indexPath:%s", rn, updateIndex, dbsyncUpdateIndexPath)
+	snapshotName := sf.name[:idx]
+	dbsyncSnapshotPath := filepath.Join(dbsyncPath, snapshotName)
+	log.Infof("bitalos recoverFromSnapshot finish readNum:%d snapshotDir:%s dbsyncPath:%s", rn, snapshotName, dbsyncSnapshotPath)
 
-	return dbsyncUpdateIndexPath, nil
+	return dbsyncSnapshotPath, nil
 }

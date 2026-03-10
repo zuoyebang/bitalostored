@@ -16,6 +16,7 @@ package vectormap
 
 import (
 	"bytes"
+	"encoding/binary"
 	"math"
 	"sync"
 	"sync/atomic"
@@ -171,7 +172,7 @@ func (m *LRUMap) Has(l uint64, key []byte) (ok bool) {
 	}
 }
 
-func (m *LRUMap) Get(l uint64, key []byte) (value []byte, closer func(), ok bool) {
+func (m *LRUMap) Get(l uint64, key []byte) (value []byte, closer func(), ts uint64, ok bool) {
 	m.queryCnt.Add(1)
 	m.rehashLock.RLock()
 	hi, lo := splitHash(l)
@@ -194,9 +195,11 @@ func (m *LRUMap) Get(l uint64, key []byte) (value []byte, closer func(), ok bool
 				vType := m.groups[g][s].valType()
 				if vType == 0 {
 					vOffset := (vHeader & IdxOffsetMask) * 4
-					vSize := vHeader & IdxSmallSizeMask >> 24
+					vSize := (vHeader & IdxSmallSizeMask >> 24) - 8
 					value, closer = VMBytePools.GetBytePool(int(vSize))
-					copy(value, m.kvHolder.data[vOffset:vOffset+vSize])
+					slip := vOffset + 8
+					ts = binary.LittleEndian.Uint64(m.kvHolder.data[vOffset:slip])
+					copy(value, m.kvHolder.data[slip:slip+vSize])
 					m.sinces[g][s] = uint16(time.Since(m.startTime) / UnitTime)
 					m.kvHolder.mutex.RUnlock()
 					value = value[:vSize]
@@ -206,9 +209,9 @@ func (m *LRUMap) Get(l uint64, key []byte) (value []byte, closer func(), ok bool
 					vSize := vHeader&IdxSmallSizeMask>>24 + vBig<<8
 					if vSize == overLongSize {
 						vSize = LoadUint32(m.kvHolder.data[vOffset:])
-						value, closer = m.kvHolder.getValue(vOffset+4, vSize)
+						value, closer, ts = m.kvHolder.getValue(vOffset+4, vSize)
 					} else {
-						value, closer = m.kvHolder.getValue(vOffset, vSize)
+						value, closer, ts = m.kvHolder.getValue(vOffset, vSize)
 					}
 
 					m.sinces[g][s] = uint16(time.Since(m.startTime) / UnitTime)
@@ -235,7 +238,7 @@ func (m *LRUMap) Get(l uint64, key []byte) (value []byte, closer func(), ok bool
 	}
 }
 
-func (m *LRUMap) Put(l uint64, key []byte, value []byte) bool {
+func (m *LRUMap) Put(l uint64, key []byte, value []byte, ts uint64) bool {
 	m.putLock.Lock()
 	hi, lo := splitHash(l)
 	g := probeStart(hi, len(m.groups))
@@ -249,7 +252,7 @@ func (m *LRUMap) Put(l uint64, key []byte, value []byte) bool {
 				kEnd := kOffset + 16
 				vHeader := LoadUint32(m.kvHolder.data[kEnd:])
 				vType := m.groups[g][s].valType()
-				lv := uint32(len(value))
+				lv := uint32(len(value)) + 8
 				if lv >= limitSize {
 					m.ctrl[g][s] = tombstone
 					m.dead++
@@ -297,7 +300,8 @@ func (m *LRUMap) Put(l uint64, key []byte, value []byte) bool {
 
 					vOffset := m.kvHolder.tail
 					StoreUint32(m.kvHolder.data[vOffset:], lv)
-					copy(m.kvHolder.data[vOffset+4:], value)
+					binary.LittleEndian.PutUint64(m.kvHolder.data[vOffset+4:], ts)
+					copy(m.kvHolder.data[vOffset+12:], value)
 
 					m.kvHolder.mutex.Lock()
 					m.groups[g][s] = kIdx(kOffset/storeUintBytes + overLongStoreHeaderH + mapTypeHeader)
@@ -334,7 +338,8 @@ func (m *LRUMap) Put(l uint64, key []byte, value []byte) bool {
 					vBig := lv & 0x7f00 >> 8
 					vSmall := uint32(lv) & 0xff
 
-					copy(m.kvHolder.data[m.kvHolder.tail:], value)
+					binary.LittleEndian.PutUint64(m.kvHolder.data[m.kvHolder.tail:], ts)
+					copy(m.kvHolder.data[m.kvHolder.tail+8:], value)
 
 					m.kvHolder.mutex.Lock()
 					m.groups[g][s] = kIdx(kOffset/storeUintBytes + vBig<<24 + mapTypeHeader)
@@ -344,13 +349,14 @@ func (m *LRUMap) Put(l uint64, key []byte, value []byte) bool {
 
 					m.kvHolder.tail = ntail
 					m.kvHolder.valUsed += vCap
-				} else if vType == 0 && lv <= m.groups[g][s].capOrBigSize()*4 && lv < overShortSize {
+				} else if vType == 0 && lv <= m.groups[g][s].capOrBigSize()<<2 && lv < overShortSize {
 					vOffset := vHeader & IdxOffsetMask
 
 					m.kvHolder.mutex.Lock()
 					StoreUint32(m.kvHolder.data[kEnd:], vOffset+lv<<24)
 					m.sinces[g][s] = uint16(time.Since(m.startTime) / UnitTime)
-					copy(m.kvHolder.data[vOffset*4:], value)
+					binary.LittleEndian.PutUint64(m.kvHolder.data[vOffset<<2:], ts)
+					copy(m.kvHolder.data[vOffset<<2+8:], value)
 					m.kvHolder.mutex.Unlock()
 				} else {
 					vCap := Cap4Size(lv)
@@ -378,7 +384,8 @@ func (m *LRUMap) Put(l uint64, key []byte, value []byte) bool {
 						return false
 					}
 
-					copy(m.kvHolder.data[m.kvHolder.tail:], value)
+					binary.LittleEndian.PutUint64(m.kvHolder.data[m.kvHolder.tail:], ts)
+					copy(m.kvHolder.data[m.kvHolder.tail+8:], value)
 					m.kvHolder.mutex.Lock()
 					m.groups[g][s] = kIdx(kOffset/storeUintBytes + vCap/storeUintBytes<<24)
 					m.sinces[g][s] = uint16(time.Since(m.startTime) / UnitTime)
@@ -405,188 +412,7 @@ func (m *LRUMap) Put(l uint64, key []byte, value []byte) bool {
 	}
 }
 
-func (m *LRUMap) PutMultiValue(l uint64, key []byte, vlen uint32, vals [][]byte) bool {
-	m.putLock.Lock()
-	hi, lo := splitHash(l)
-	g := probeStart(hi, len(m.groups))
-	for {
-		matches := metaMatchH2(&m.ctrl[g], lo)
-		for matches != 0 {
-			s := nextMatch(&matches)
-			k := m.kvHolder.getKey(m.groups[g][s])
-			if bytes.Equal(key, k) {
-				kOffset := m.groups[g][s].offset() * 4
-				kEnd := kOffset + 16
-				vHeader := LoadUint32(m.kvHolder.data[kEnd:])
-				vType := m.groups[g][s].valType()
-				if vlen >= limitSize {
-					m.ctrl[g][s] = tombstone
-					m.dead++
-
-					m.kvHolder.items--
-					if vType == 0 {
-						m.kvHolder.valUsed -= m.groups[g][s].capOrBigSize()
-					} else {
-						vBig := m.groups[g][s].capOrBigSize()
-						vSize := vHeader&IdxSmallSizeMask>>24 + vBig<<8
-						if vSize == overLongSize {
-							vOffset := (vHeader & IdxOffsetMask) * 4
-							vSize = LoadUint32(m.kvHolder.data[vOffset:])
-							m.kvHolder.valUsed -= Cap4Size(vSize) + 4
-						} else {
-							m.kvHolder.valUsed -= Cap4Size(vSize)
-						}
-					}
-
-					m.putLock.Unlock()
-					return false
-				} else if vlen >= overLongSize {
-					vCap := Cap4Size(vlen) + 4
-					ntail := m.kvHolder.tail + 20 + vCap
-					if vType == 0 {
-						m.kvHolder.valUsed -= m.groups[g][s].capOrBigSize()
-					} else {
-
-						vBig := m.groups[g][s].capOrBigSize()
-						vSize := vHeader&IdxSmallSizeMask>>24 + vBig<<8
-						if vSize == overLongSize {
-							vOffset := (vHeader & IdxOffsetMask) * 4
-							vSize = LoadUint32(m.kvHolder.data[vOffset:])
-							m.kvHolder.valUsed -= Cap4Size(vSize) + 4
-						} else {
-							m.kvHolder.valUsed -= Cap4Size(vSize)
-						}
-					}
-					if ntail > m.kvHolder.cap {
-						m.ctrl[g][s] = tombstone
-						m.dead++
-						m.kvHolder.items--
-						m.putLock.Unlock()
-						return false
-					}
-					vOffset := m.kvHolder.tail
-					StoreUint32(m.kvHolder.data[vOffset:], vlen)
-					m.kvHolder.tail += 4
-					for _, v := range vals {
-						copy(m.kvHolder.data[m.kvHolder.tail:], v)
-						m.kvHolder.tail += uint32(len(v))
-					}
-					m.kvHolder.mutex.Lock()
-					m.groups[g][s] = kIdx(kOffset/storeUintBytes + overLongStoreHeaderH + mapTypeHeader)
-					m.sinces[g][s] = uint16(time.Since(m.startTime) / UnitTime)
-					StoreUint32(m.kvHolder.data[kEnd:], vOffset/storeUintBytes+overLongStoreHeaderL)
-					m.kvHolder.mutex.Unlock()
-
-					m.kvHolder.tail = ntail
-					m.kvHolder.valUsed += vCap
-				} else if vlen >= overShortSize {
-					vCap := Cap4Size(vlen)
-					ntail := m.kvHolder.tail + vCap
-					if vType == 0 {
-						m.kvHolder.valUsed -= m.groups[g][s].capOrBigSize()
-					} else {
-						vBig := m.groups[g][s].capOrBigSize()
-						vSize := vHeader&IdxSmallSizeMask>>24 + vBig<<8
-						if vSize == overLongSize {
-							vOffset := (vHeader & IdxOffsetMask) * 4
-							vSize = LoadUint32(m.kvHolder.data[vOffset:])
-							m.kvHolder.valUsed -= Cap4Size(vSize) + 4
-						} else {
-							m.kvHolder.valUsed -= Cap4Size(vSize)
-						}
-					}
-					if ntail > m.kvHolder.cap {
-						m.ctrl[g][s] = tombstone
-						m.dead++
-						m.kvHolder.items--
-						m.putLock.Unlock()
-						return false
-					}
-					vBig := vlen & 0x7f00 >> 8
-					vSmall := uint32(vlen) & 0xff
-
-					vOffset := m.kvHolder.tail
-					for _, v := range vals {
-						copy(m.kvHolder.data[m.kvHolder.tail:], v)
-						m.kvHolder.tail += uint32(len(v))
-					}
-					m.kvHolder.mutex.Lock()
-					m.groups[g][s] = kIdx(kOffset/storeUintBytes + vBig<<24 + mapTypeHeader)
-					m.sinces[g][s] = uint16(time.Since(m.startTime) / UnitTime)
-					StoreUint32(m.kvHolder.data[kEnd:], vOffset/storeUintBytes+vSmall<<24)
-					m.kvHolder.mutex.Unlock()
-
-					m.kvHolder.tail = ntail
-					m.kvHolder.valUsed += vCap
-				} else if vType == 0 && vlen <= m.groups[g][s].capOrBigSize()*4 && vlen < overShortSize {
-					vOffset := vHeader & IdxOffsetMask
-
-					m.kvHolder.mutex.Lock()
-					StoreUint32(m.kvHolder.data[kEnd:], vOffset+vlen<<24)
-					idx := vOffset * 4
-					for _, v := range vals {
-						copy(m.kvHolder.data[idx:], v)
-						idx += uint32(len(v))
-					}
-					m.sinces[g][s] = uint16(time.Since(m.startTime) / UnitTime)
-					m.kvHolder.mutex.Unlock()
-				} else {
-					vCap := Cap4Size(vlen)
-					ntail := m.kvHolder.tail + vCap
-					if vType == 0 {
-						m.kvHolder.valUsed -= m.groups[g][s].capOrBigSize()
-					} else {
-						vBig := m.groups[g][s].capOrBigSize()
-						vSize := vHeader&IdxSmallSizeMask>>24 + vBig<<8
-						if vSize == overLongSize {
-							vOffset := (vHeader & IdxOffsetMask) * 4
-							vSize = LoadUint32(m.kvHolder.data[vOffset:])
-							m.kvHolder.valUsed -= Cap4Size(vSize) + 4
-						} else {
-							m.kvHolder.valUsed -= Cap4Size(vSize)
-						}
-					}
-					if ntail > m.kvHolder.cap {
-						m.ctrl[g][s] = tombstone
-						m.dead++
-
-						m.kvHolder.items--
-						m.groups[g][s] = kIdx(0)
-						m.putLock.Unlock()
-						return false
-					}
-
-					vOffset := m.kvHolder.tail
-					for _, v := range vals {
-						copy(m.kvHolder.data[m.kvHolder.tail:], v)
-						m.kvHolder.tail += uint32(len(v))
-					}
-					m.kvHolder.mutex.Lock()
-					m.groups[g][s] = kIdx(kOffset/storeUintBytes + vCap/storeUintBytes<<24)
-					m.sinces[g][s] = uint16(time.Since(m.startTime) / UnitTime)
-					StoreUint32(m.kvHolder.data[kEnd:], vOffset/storeUintBytes+(vlen<<24))
-					m.kvHolder.mutex.Unlock()
-					m.kvHolder.tail = ntail
-					m.kvHolder.valUsed += vCap
-				}
-				m.putLock.Unlock()
-				return true
-			}
-		}
-
-		matches = metaMatchEmpty(&m.ctrl[g])
-		if matches != 0 {
-			m.putLock.Unlock()
-			return false
-		}
-		g += 1
-		if g >= uint32(len(m.groups)) {
-			g = 0
-		}
-	}
-}
-
-func (m *LRUMap) RePut(l uint64, key []byte, value []byte) bool {
+func (m *LRUMap) RePut(l uint64, key []byte, value []byte, ts uint64) bool {
 	if m.kvHolder.tail >= m.kvHolder.limit {
 		return false
 	}
@@ -614,7 +440,7 @@ func (m *LRUMap) RePut(l uint64, key []byte, value []byte) bool {
 				kEnd := kOffset + 16
 				vHeader := LoadUint32(m.kvHolder.data[kEnd:])
 				vType := m.groups[g][s].valType()
-				lv := uint32(len(value))
+				lv := uint32(len(value)) + 8
 				if lv >= overLongSize {
 					vCap := Cap4Size(lv) + 4
 					if vType == 0 {
@@ -641,7 +467,8 @@ func (m *LRUMap) RePut(l uint64, key []byte, value []byte) bool {
 						return false
 					}
 					StoreUint32(m.kvHolder.data[m.kvHolder.tail:], lv)
-					copy(m.kvHolder.data[vOffset:], value)
+					binary.LittleEndian.PutUint64(m.kvHolder.data[vOffset:], ts)
+					copy(m.kvHolder.data[vOffset+8:], value)
 
 					m.kvHolder.mutex.Lock()
 					m.groups[g][s] = kIdx(kOffset/storeUintBytes + overLongStoreHeaderH + mapTypeHeader)
@@ -680,7 +507,8 @@ func (m *LRUMap) RePut(l uint64, key []byte, value []byte) bool {
 					vBig := lv & 0x7f00 >> 8
 					vSmall := uint32(lv) & 0xff
 
-					copy(m.kvHolder.data[m.kvHolder.tail:], value)
+					binary.LittleEndian.PutUint64(m.kvHolder.data[m.kvHolder.tail:], ts)
+					copy(m.kvHolder.data[m.kvHolder.tail+8:], value)
 
 					m.kvHolder.mutex.Lock()
 					m.groups[g][s] = kIdx(kOffset/storeUintBytes + vBig<<24 + mapTypeHeader)
@@ -690,12 +518,13 @@ func (m *LRUMap) RePut(l uint64, key []byte, value []byte) bool {
 
 					m.kvHolder.tail = ntail
 					m.kvHolder.valUsed += vCap
-				} else if vType == 0 && lv <= m.groups[g][s].capOrBigSize()*4 && lv < overShortSize {
+				} else if vType == 0 && lv <= m.groups[g][s].capOrBigSize()<<2 && lv < overShortSize {
 					vOffset := vHeader & IdxOffsetMask
 
 					m.kvHolder.mutex.Lock()
 					StoreUint32(m.kvHolder.data[kEnd:], vOffset+lv<<24)
-					copy(m.kvHolder.data[vOffset*4:], value)
+					binary.LittleEndian.PutUint64(m.kvHolder.data[vOffset<<2:], ts)
+					copy(m.kvHolder.data[vOffset<<2+8:], value)
 					m.sinces[g][s] = uint16(time.Since(m.startTime) / UnitTime)
 					m.kvHolder.mutex.Unlock()
 				} else {
@@ -724,7 +553,8 @@ func (m *LRUMap) RePut(l uint64, key []byte, value []byte) bool {
 						return false
 					}
 
-					copy(m.kvHolder.data[m.kvHolder.tail:], value)
+					binary.LittleEndian.PutUint64(m.kvHolder.data[m.kvHolder.tail:], ts)
+					copy(m.kvHolder.data[m.kvHolder.tail+8:], value)
 					m.kvHolder.mutex.Lock()
 					m.groups[g][s] = kIdx(kOffset/storeUintBytes + vCap/storeUintBytes<<24)
 					m.sinces[g][s] = uint16(time.Since(m.startTime) / UnitTime)
@@ -743,7 +573,7 @@ func (m *LRUMap) RePut(l uint64, key []byte, value []byte) bool {
 		if matches != 0 {
 			s := nextMatch(&matches)
 
-			lv := uint32(len(value))
+			lv := uint32(len(value)) + 8
 			if lv >= overLongSize {
 				vCap := Cap4Size(lv) + 4
 				ntail := m.kvHolder.tail + 20 + vCap
@@ -756,7 +586,8 @@ func (m *LRUMap) RePut(l uint64, key []byte, value []byte) bool {
 				copy(m.kvHolder.data[m.kvHolder.tail:], key)
 				vOffset := kEnd + 4
 				StoreUint32(m.kvHolder.data[vOffset:], lv)
-				copy(m.kvHolder.data[vOffset+4:], value)
+				binary.LittleEndian.PutUint64(m.kvHolder.data[vOffset+4:], ts)
+				copy(m.kvHolder.data[vOffset+12:], value)
 				m.kvHolder.mutex.Lock()
 				m.groups[g][s] = kIdx(m.kvHolder.tail/storeUintBytes + overLongStoreHeaderH + mapTypeHeader)
 				StoreUint32(m.kvHolder.data[kEnd:], vOffset/storeUintBytes+(overLongStoreHeaderL))
@@ -785,7 +616,8 @@ func (m *LRUMap) RePut(l uint64, key []byte, value []byte) bool {
 				kEnd := m.kvHolder.tail + 16
 				copy(m.kvHolder.data[m.kvHolder.tail:], key)
 				vOffset := kEnd + 4
-				copy(m.kvHolder.data[vOffset:], value)
+				binary.LittleEndian.PutUint64(m.kvHolder.data[vOffset:], ts)
+				copy(m.kvHolder.data[vOffset+8:], value)
 
 				m.kvHolder.mutex.Lock()
 				m.groups[g][s] = kIdx(m.kvHolder.tail/storeUintBytes + vBig<<24 + mapTypeHeader)
@@ -814,7 +646,8 @@ func (m *LRUMap) RePut(l uint64, key []byte, value []byte) bool {
 				kEnd := m.kvHolder.tail + 16
 				copy(m.kvHolder.data[m.kvHolder.tail:], key)
 				vOffset := kEnd + 4
-				copy(m.kvHolder.data[vOffset:], value)
+				binary.LittleEndian.PutUint64(m.kvHolder.data[vOffset:], ts)
+				copy(m.kvHolder.data[vOffset+8:], value)
 
 				m.kvHolder.mutex.Lock()
 				m.groups[g][s] = kIdx(m.kvHolder.tail/storeUintBytes + vCap/storeUintBytes<<24)
@@ -832,6 +665,51 @@ func (m *LRUMap) RePut(l uint64, key []byte, value []byte) bool {
 				m.putLock.Unlock()
 				return true
 			}
+		}
+		g += 1
+		if g >= uint32(len(m.groups)) {
+			g = 0
+		}
+	}
+}
+
+func (m *LRUMap) SetTimestamp(l uint64, key []byte, ts uint64) {
+	m.putLock.Lock()
+	defer m.putLock.Unlock()
+
+	hi, lo := splitHash(l)
+	g := probeStart(hi, len(m.groups))
+	for {
+		matches := metaMatchH2(&m.ctrl[g], lo)
+		for matches != 0 {
+			s := nextMatch(&matches)
+			k := m.kvHolder.getKey(m.groups[g][s])
+			if bytes.Equal(key, k) { // update
+				kOffset := m.groups[g][s].offset() * 4
+				kEnd := kOffset + 16
+				vHeader := LoadUint32(m.kvHolder.data[kEnd:])
+				vType := m.groups[g][s].valType()
+				vOffset := (vHeader & IdxOffsetMask) * 4
+				if vType == 0 {
+					binary.LittleEndian.PutUint64(m.kvHolder.data[vOffset:], ts)
+				} else {
+					vBig := m.groups[g][s].capOrBigSize()
+					vSize := vHeader&IdxSmallSizeMask>>24 + vBig<<8
+					if vSize == overLongSize {
+						vSize = LoadUint32(m.kvHolder.data[vOffset:])
+						binary.LittleEndian.PutUint64(m.kvHolder.data[vOffset+4:], ts)
+					} else {
+						binary.LittleEndian.PutUint64(m.kvHolder.data[vOffset:], ts)
+					}
+				}
+
+				return
+			}
+		}
+
+		matches = metaMatchEmpty(&m.ctrl[g])
+		if matches != 0 {
+			return
 		}
 		g += 1
 		if g >= uint32(len(m.groups)) {
@@ -961,7 +839,7 @@ func (m *LRUMap) rehash() {
 			if c == empty || c == tombstone {
 				continue
 			}
-			k, v := m.kvHolder.getKVUnlock(m.groups[g][s])
+			k, v, ts := m.kvHolder.getKVUnlock(m.groups[g][s])
 
 			_, l := md5hash.MD5HL(k)
 			hi, lo := splitHash(l)
@@ -970,7 +848,7 @@ func (m *LRUMap) rehash() {
 				matches := metaMatchEmpty(&ctrl[gN])
 				if matches != 0 {
 					sN := nextMatch(&matches)
-					groups[gN][sN], _ = kvholder.gcSet(k, v)
+					groups[gN][sN], _ = kvholder.gcSet(k, v, ts)
 					ctrl[gN][sN] = int8(lo)
 					sinces[gN][sN] = m.sinces[g][s]
 					resident++
@@ -1096,7 +974,7 @@ func (m *LRUMap) GCCopy() (deadCount int, gcMem int, skipReason int) {
 			if c == empty || c == tombstone {
 				continue
 			}
-			k, v := m.kvHolder.getKVUnlock(m.groups[g][s])
+			k, v, ts := m.kvHolder.getKVUnlock(m.groups[g][s])
 
 			_, l := md5hash.MD5HL(k)
 			hi, lo := splitHash(l)
@@ -1105,7 +983,7 @@ func (m *LRUMap) GCCopy() (deadCount int, gcMem int, skipReason int) {
 				matches := metaMatchEmpty(&ctrl[gN])
 				if matches != 0 {
 					sN := nextMatch(&matches)
-					groups[gN][sN], _ = kvholder.gcSet(k, v)
+					groups[gN][sN], _ = kvholder.gcSet(k, v, ts)
 					ctrl[gN][sN] = int8(lo)
 					sinces[gN][sN] = m.sinces[g][s]
 					break

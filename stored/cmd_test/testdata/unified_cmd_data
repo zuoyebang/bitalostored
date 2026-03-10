@@ -1,0 +1,427 @@
+# String command test data
+# Format: command|arg1|arg2|...|expected_result_type|expected_value
+
+# Basic SET/GET commands
+SET|string_test_key1|value1|simple|OK
+GET|string_test_key1|simple|value1
+GET|nonexistent_key|nil|
+
+# SET with options
+SET|string_test_key2|value2|NX|simple|OK
+SET|string_test_key2|value2|NX|simple|
+GET|string_test_key2|simple|value2
+
+# SETEX commands
+SETEX|string_test_key3|10|value3|simple|OK
+TTL|string_test_key3|int_pos|positive
+
+# SETNX commands
+SETNX|setnx_test_key|unique_value|simple|1
+GET|setnx_test_key|simple|unique_value
+SETNX|setnx_test_key|another_value|simple|0
+GET|setnx_test_key|simple|unique_value
+
+# SETEX commands
+SETEX|setex_test_key|100|setex_value|simple|OK
+TTL|setex_test_key|int_pos|positive
+
+# MSET/MGET commands
+MSET|string_mset_key1|val1|string_mset_key2|val2|simple|OK
+MGET|string_mset_key1|string_mset_key2|array|[val1 val2]
+MGET|string_mset_key1|nonexistent_key|array|[val1 <nil>]
+
+# GETSET command
+SET|getset_key|initial_value|simple|OK
+GETSET|getset_key|new_value|simple|initial_value
+GET|getset_key|simple|new_value
+
+# DEL command
+SET|del_test_key|del_me|simple|OK
+DEL|del_test_key|simple|1
+GET|del_test_key|nil|
+DEL|nonexistent_key|simple|0
+
+# EXISTS command
+SET|exists_test_key|test_val|simple|OK
+EXISTS|exists_test_key|simple|1
+EXISTS|nonexistent_key1|simple|0
+EXISTS|nonexistent_key2|simple|0
+
+# INCR/DECR commands
+SET|counter_key|10|simple|OK
+INCR|counter_key|simple|11
+DECR|counter_key|simple|10
+INCRBY|counter_key|5|simple|15
+DECRBY|counter_key|3|simple|12
+
+# APPEND command
+SET|append_key|hello|simple|OK
+APPEND|append_key| world|simple|11
+GET|append_key|simple|hello world
+
+# INCRBYFLOAT command
+INCRBYFLOAT|incrbyfloat_key|10.50|simple|10.5
+INCRBYFLOAT|incrbyfloat_key|0.1|simple|10.6
+INCRBYFLOAT|incrbyfloat_key|-5|simple|5.6
+INCRBYFLOAT|incrbyfloat_key|0.000000001|simple|5.600000001
+SET|incrfloat_key|5.0e3|simple|OK
+INCRBYFLOAT|incrfloat_key|2.0e2|simple|5200
+
+# STRLEN command
+STRLEN|append_key|simple|11
+STRLEN|nonexistent_key|simple|0
+
+# GETRANGE/SETRANGE commands
+SET|range_key|hello world|simple|OK
+GETRANGE|range_key|0|4|simple|hello
+GETRANGE|range_key|6|10|simple|world
+SETRANGE|range_key|6|everyone|simple|14
+GET|range_key|simple|hello everyone
+
+# Hash command test data
+# Format: command|arg1|arg2|...|expected_result_type|expected_value
+
+# HSET command tests
+HSET|hset_test_key|field1|value1|simple|1
+HSET|hset_test_key|field1|value1_updated|simple|0
+HSET|hset_test_key|field2|value2|simple|1
+
+# HGET command tests
+HGET|hset_test_key|field1|simple|value1_updated
+HGET|hset_test_key|field2|simple|value2
+HGET|hset_test_key|nonexistent_field|nil|
+
+# HEXISTS command tests
+HEXISTS|hset_test_key|field1|simple|1
+HEXISTS|hset_test_key|nonexistent_field|simple|0
+
+# HLEN command tests
+HLEN|hset_test_key|simple|2
+HSET|hset_test_key|field3|value3|simple|1
+HLEN|hset_test_key|simple|3
+
+# HMSET command tests
+HMSET|hmset_test_key|field1|val1|field2|val2|field3|val3|simple|OK
+
+# HMGET command tests
+HMGET|hmset_test_key|field1|field2|field3|array|[val1 val2 val3]
+HMGET|hmset_test_key|field1|nonexistent|field3|array|[val1 <nil> val3]
+
+# HGETALL command tests
+HGETALL|hmset_test_key|array|[field1 val1 field2 val2 field3 val3]
+HSET|hmset_test_key|field4|val4|simple|1
+HGETALL|hmset_test_key|array|[field1 val1 field2 val2 field3 val3 field4 val4]
+
+# HKEYS command tests
+HKEYS|hmset_test_key|array|[field1 field2 field3 field4]
+HDEL|hmset_test_key|field4|simple|1
+HKEYS|hmset_test_key|array|[field1 field2 field3]
+
+# HVALS command tests
+HVALS|hmset_test_key|array|[val1 val2 val3]
+
+# HDEL command tests
+HDEL|hmset_test_key|field4|simple|0
+HDEL|hmset_test_key|field1|simple|1
+HDEL|hmset_test_key|field1|simple|0
+HDEL|hmset_test_key|field2|field3|simple|2
+
+# Test HDEL with multiple fields (batch deletion)
+HSET|batch_del_test|field1|val1|simple|1
+HSET|batch_del_test|field2|val2|simple|1
+HSET|batch_del_test|field3|val3|simple|1
+HDEL|batch_del_test|field1|field2|simple|2
+HDEL|batch_del_test|field1|field2|field3|simple|1
+HGETALL|hmset_test_key|array|[]
+
+# HINCRBY command tests
+HSET|hincrby_test_key|counter|10|simple|1
+HINCRBY|hincrby_test_key|counter|5|simple|15
+HINCRBY|hincrby_test_key|counter|-3|simple|12
+HINCRBY|hincrby_test_key|new_counter|1|simple|1
+HINCRBY|hincrby_test_key|new_counter|10|simple|11
+
+# Hash expiration commands tests
+HSET|expire_test_hash|field1|value1|simple|1
+HEXPIRE|expire_test_hash|100|simple|1
+HTTL|expire_test_hash|int_pos|positive
+HPERSIST|expire_test_hash|simple|1
+HTTL|expire_test_hash|simple|-1
+
+# HKEYEXISTS command tests
+HKEYEXISTS|hset_test_key|simple|1
+HKEYEXISTS|nonexistent_hash|simple|0
+
+# HCLEAR command tests
+HSET|hclear_test_key|field1|val1|simple|1
+HSET|hclear_test_key|field2|val2|simple|1
+HLEN|hclear_test_key|simple|2
+HCLEAR|hclear_test_key|simple|1
+HLEN|hclear_test_key|simple|0
+HGETALL|hclear_test_key|array|[]
+
+# HGETALL edge cases
+HGETALL|nonexistent_hash|array|[]
+HKEYS|nonexistent_hash|array|[]
+HVALS|nonexistent_hash|array|[]
+
+# HLEN edge cases
+HLEN|nonexistent_hash|simple|0
+
+# Multiple operations on same hash
+HSET|multi_ops_hash|f1|v1|simple|1
+HSET|multi_ops_hash|f2|v2|simple|1
+HSET|multi_ops_hash|f3|v3|simple|1
+HLEN|multi_ops_hash|simple|3
+HGETALL|multi_ops_hash|array|[f1 v1 f2 v2 f3 v3]
+HDEL|multi_ops_hash|f2|simple|1
+HLEN|multi_ops_hash|simple|2
+HGET|multi_ops_hash|f1|simple|v1
+HGET|multi_ops_hash|f2|nil|
+HGET|multi_ops_hash|f3|simple|v3
+
+# Hash expiration commands tests
+HSET|expire_test_hash2|field1|val1|simple|1
+HEXPIRE|expire_test_hash2|100|simple|1
+HTTL|expire_test_hash2|int_pos|positive
+HPERSIST|expire_test_hash2|simple|1
+HTTL|expire_test_hash2|simple|-1
+HEXPIREAT|expire_test_hash2|{{future_time}}|simple|1
+HTTL|expire_test_hash2|int_pos|positive
+
+# Set command test data
+# Format: command|arg1|arg2|...|expected_result_type|expected_value
+
+# SADD command tests
+SADD|set_test_key|member1|member2|simple|2
+SADD|set_test_key|member1|member3|simple|1
+SCARD|set_test_key|simple|3
+
+# Test SADD with invalid syntax (missing member) - should return error
+SADD|sadd_error_test|error|
+
+# SISMEMBER command tests
+SISMEMBER|set_test_key|member1|simple|1
+SISMEMBER|set_test_key|nonexistent_member|simple|0
+
+# SMEMBERS command tests
+SMEMBERS|set_test_key|array|[member1 member2 member3]
+SADD|empty_set|element1|simple|1
+SMEMBERS|empty_set|array|[element1]
+
+# SREM command tests
+SREM|set_test_key|member1|simple|1
+SREM|set_test_key|nonexistent_member|simple|0
+SCARD|set_test_key|simple|2
+
+# Test SREM with multiple elements (batch deletion)
+SADD|srem_batch_test|elem1|elem2|elem3|elem4|simple|4
+SREM|srem_batch_test|elem1|elem2|simple|2
+SREM|srem_batch_test|elem1|elem2|elem3|elem5|simple|1
+
+# SRANDMEMBER command tests
+SADD|rand_test_set|a|b|c|d|e|simple|5
+SRANDMEMBER|rand_test_set|1|random|a^b^c^d^e
+SRANDMEMBER|rand_test_set|2|random|a^b^c^d^e
+SRANDMEMBER|rand_test_set|7|random|a^b^c^d^e
+SRANDMEMBER|rand_test_set|-7|random|a^b^c^d^e
+
+# Set operation commands tests
+SADD|set_a|x|y|z|simple|3
+SADD|set_b|a|y|b|simple|3
+SADD|set_c|x|a|m|simple|3
+
+# SKEYEXISTS command tests
+SKEYEXISTS|set_test_key|simple|1
+SKEYEXISTS|nonexistent_set|simple|0
+
+# SCLEAR command tests
+SADD|clear_test_set|a|b|c|simple|3
+SCARD|clear_test_set|simple|3
+SCLEAR|clear_test_set|simple|1
+SCARD|clear_test_set|simple|0
+
+# Set expiration commands tests
+SADD|expire_test_set|item1|item2|simple|2
+SEXPIRE|expire_test_set|100|simple|1
+STTL|expire_test_set|int_pos|positive
+SPERSIST|expire_test_set|simple|1
+STTL|expire_test_set|simple|-1
+SEXPIREAT|expire_test_set|{{future_time}}|simple|1
+STTL|expire_test_set|int_pos|positive
+
+# ZSet command test data
+# Format: command|arg1|arg2|...|expected_result_type|expected_value
+
+# ZADD command tests
+ZADD|zset_test_key|1|member1|2|member2|simple|2
+ZADD|zset_test_key|3|member3|simple|1
+ZCARD|zset_test_key|simple|3
+
+# ZSCORE command tests
+ZSCORE|zset_test_key|member1|simple|1
+ZSCORE|zset_test_key|member3|simple|3
+ZSCORE|zset_test_key|nonexistent_member|nil|
+
+# ZREM command tests
+ZREM|zset_test_key|member1|simple|1
+ZREM|zset_test_key|nonexistent_member|simple|0
+ZCARD|zset_test_key|simple|2
+
+# Test ZREM with multiple members (batch deletion)
+ZADD|zrem_batch_test|1|member_a|2|member_b|3|member_c|4|member_d|simple|4
+ZREM|zrem_batch_test|member_a|member_b|simple|2
+ZREM|zrem_batch_test|member_a|member_b|member_c|member_e|simple|1
+
+# ZINCRBY command tests
+ZADD|zincrby_test|0|member2|simple|1
+ZINCRBY|zincrby_test|5|member2|simple|5
+ZINCRBY|zincrby_test|3|member2|simple|8
+ZSCORE|zincrby_test|member2|simple|8
+
+# ZCOUNT command tests
+ZADD|zcount_test|1|a|2|b|3|c|4|d|simple|4
+ZCOUNT|zcount_test|2|4|simple|3
+ZCOUNT|zcount_test|4|4|simple|1
+ZCOUNT|zcount_test|5|6|simple|0
+
+# ZRANK/ZREVRANK command tests
+ZRANK|zcount_test|c|simple|2
+ZREVRANK|zcount_test|c|simple|1
+
+# ZRANGE/ZREVRANGE command tests
+ZADD|range_test|1|a|2|b|3|c|4|d|simple|4
+ZRANGE|range_test|0|3|array|[a b c d]
+ZRANGE|range_test|1|3|array|[b c d]
+ZRANGE|range_test|-2|-1|WITHSCORES|array|[c 3 d 4]
+ZRANGE|range_test|0|-1|WITHSCORES|array|[a 1 b 2 c 3 d 4]
+ZREVRANGE|range_test|0|4|WITHSCORES|array|[d 4 c 3 b 2 a 1]
+ZREVRANGE|range_test|0|-1|WITHSCORES|array|[d 4 c 3 b 2 a 1]
+ZREVRANGE|range_test|2|3|WITHSCORES|array|[b 2 a 1]
+ZREVRANGE|range_test|-2|-1|WITHSCORES|array|[b 2 a 1]
+
+# ZRANGEBYSCORE/ZREVRANGEBYSCORE command tests
+ZRANGEBYSCORE|range_test|2|4|array|[b c d]
+ZRANGEBYSCORE|range_test|2|4|WITHSCORES|array|[b 2 c 3 d 4]
+ZREVRANGEBYSCORE|range_test|4|2|array|[d c b]
+ZREVRANGEBYSCORE|range_test|4|2|WITHSCORES|array|[d 4 c 3 b 2]
+
+# ZREMRANGEBYRANK/ZREMRANGEBYSCORE command tests
+ZADD|rem_test|1|x|2|y|3|z|simple|3
+ZREMRANGEBYRANK|rem_test|0|1|simple|2
+ZCARD|rem_test|simple|1
+ZADD|rem_test2|1|a|2|b|3|c|4|d|simple|4
+ZREMRANGEBYSCORE|rem_test2|2|3|simple|2
+ZCARD|rem_test2|simple|2
+
+# ZKEYEXISTS command tests
+ZKEYEXISTS|zset_test_key|simple|1
+ZKEYEXISTS|nonexistent_zset|simple|0
+
+# ZCLEAR command tests
+ZADD|clear_test_zset|1|a|2|b|simple|2
+ZCARD|clear_test_zset|simple|2
+ZCLEAR|clear_test_zset|simple|1
+ZCARD|clear_test_zset|simple|0
+
+# ZSet expiration commands tests
+ZADD|expire_test_zset|1|item1|2|item2|simple|2
+ZEXPIRE|expire_test_zset|100|simple|1
+ZTTL|expire_test_zset|int_pos|positive
+ZPERSIST|expire_test_zset|simple|1
+ZTTL|expire_test_zset|simple|-1
+ZEXPIREAT|expire_test_zset|{{future_time}}|simple|1
+ZTTL|expire_test_zset|int_pos|positive
+
+# List command test data
+# Format: command|arg1|arg2|...|expected_result_type|expected_value
+
+# LPUSH/RPUSH command tests
+LPUSH|list_test_key|value1|simple|1
+LPUSH|list_test_key|value2|simple|2
+RPUSH|list_test_key|value3|simple|3
+RPUSH|list_test_key|value4|simple|4
+
+# LRANGE command tests
+LRANGE|list_test_key|0|-1|array|[value2 value1 value3 value4]
+LRANGE|list_test_key|0|1|array|[value2 value1]
+LRANGE|nonexistent_list|0|-1|array|[]
+
+# LINDEX command tests
+LINDEX|list_test_key|0|simple|value2
+LINDEX|list_test_key|2|simple|value3
+LINDEX|list_test_key|-1|simple|value4
+LINDEX|list_test_key|10|nil|
+
+# LLEN command tests
+LLEN|list_test_key|simple|4
+LLEN|nonexistent_list|simple|0
+
+# LPOP/RPOP command tests
+LPOP|list_test_key|simple|value2
+RPOP|list_test_key|simple|value4
+LLEN|list_test_key|simple|2
+
+# LTRIM command tests
+LPUSH|trim_test_list|a|b|c|d|e|simple|5
+LTRIM|trim_test_list|1|-1|simple|OK
+LLEN|trim_test_list|simple|4
+LTRIM|trim_test_list|2|2|simple|OK
+LLEN|trim_test_list|simple|1
+
+# LKEYEXISTS command tests
+LKEYEXISTS|list_test_key|simple|1
+LKEYEXISTS|nonexistent_list|simple|0
+
+# LCLEAR command tests
+LPUSH|clear_test_list|a|b|c|simple|3
+LLEN|clear_test_list|simple|3
+LCLEAR|clear_test_list|simple|1
+LLEN|clear_test_list|simple|0
+
+# List expiration commands tests
+LPUSH|expire_test_list|item1|item2|simple|2
+LEXPIRE|expire_test_list|100|simple|1
+LTTL|expire_test_list|int_pos|positive
+LPERSIST|expire_test_list|simple|1
+LTTL|expire_test_list|simple|-1
+LEXPIREAT|expire_test_list|{{future_time}}|simple|1
+LTTL|expire_test_list|int_pos|positive
+
+# GEO command test data
+# Format: command|arg1|arg2|...|expected_result_type|expected_value
+
+# GEOADD command tests
+GEOADD|sicily|13.361389|38.115556|palermo|15.087269|37.502669|catania|simple|2
+
+# GEOPOS command tests - using improved array validation for nested structures
+GEOPOS|sicily|palermo|array|[[13.36138933897018433 38.11555639549629859]]
+GEOPOS|sicily|palermo|catania|array|[[13.36138933897018433 38.11555639549629859] [15.08726745843887329 37.50266842333162032]]
+GEOPOS|sicily|nonexistent|array|[<nil>]
+
+# GEOHASH command tests
+GEOADD|geohash_test|13.361389|38.115556|palermo|15.087269|37.502669|catania|simple|2
+GEOHASH|geohash_test|palermo|catania|array|[sqc8b49rny0 sqdtr74hyu0]
+GEOHASH|geohash_test|nonexistent|array|[<nil>]
+
+# GEODIST command tests
+GEODIST|sicily|palermo|catania|float|166274.1516
+GEODIST|sicily|palermo|catania|km|float|166.2742
+
+# GEORADIUS command tests
+GEOADD|sicily_radius_test|13.361389|38.115556|palermo|15.087269|37.502669|catania|simple|2
+GEORADIUS|sicily_radius_test|15|37|200|km|array|[palermo catania]
+GEORADIUS|sicily_radius_test|15|37|200|km|WITHDIST|WITHCOORD|WITHHASH|DESC|array|[[palermo 190.4424 3479099956230698 [13.36138933897018433 38.11555639549629859]] [catania 56.4413 3479447370796909 [15.08726745843887329 37.50266842333162032]]]
+GEORADIUS|sicily_radius_test|15|37|200|km|WITHDIST|WITHCOORD|WITHHASH|array|[[palermo 190.4424 3479099956230698 [13.36138933897018433 38.11555639549629859]] [catania 56.4413 3479447370796909 [15.08726745843887329 37.50266842333162032]]]
+GEORADIUS|sicily_radius_test|15|37|2000000|ft|WITHDIST|WITHCOORD|WITHHASH|DESC|array|[[palermo 624811.1215 3479099956230698 [13.36138933897018433 38.11555639549629859]] [catania 185174.7305 3479447370796909 [15.08726745843887329 37.50266842333162032]]]
+GEORADIUS|sicily_radius_test|15|37|200|km|WITHCOORD|DESC|array|[[palermo [13.36138933897018433 38.11555639549629859]] [catania [15.08726745843887329 37.50266842333162032]]]
+GEORADIUS|sicily_radius_test|15|37|200|km|WITHDIST|DESC|array|[[palermo 190.4424] [catania 56.4413]]
+GEORADIUS|sicily_radius_test|15|37|200|km|WITHDIST|WITHCOORD|ASC|array|[[catania 56.4413 [15.08726745843887329 37.50266842333162032]] [palermo 190.4424 [13.36138933897018433 38.11555639549629859]]]
+GEORADIUS|sicily_radius_nonexistent|15|37|200|km|WITHDIST|WITHCOORD|ASC|array|[]
+
+# GEORADIUSBYMEMBER command tests
+GEOADD|sicily_test|13.361389|38.115556|palermo|15.087269|37.502669|catania|simple|2
+GEORADIUSBYMEMBER|sicily_test|palermo|200|km|WITHDIST|ASC|array|[[palermo 0.0000] [catania 166.2742]]
+GEORADIUSBYMEMBER|sicily_test|palermo|200|km|WITHCOORD|array|[[palermo [13.36138933897018433 38.11555639549629859]] [catania [15.08726745843887329 37.50266842333162032]]]
+GEORADIUSBYMEMBER|sicily_test|palermo|200|km|WITHDIST|WITHCOORD|WITHHASH|ASC|array|[[palermo 0.0000 3479099956230698 [13.36138933897018433 38.11555639549629859]] [catania 166.2742 3479447370796909 [15.08726745843887329 37.50266842333162032]]]
+GEORADIUSBYMEMBER|sicily_test|palermo|200|km|ASC|WITHDIST|COUNT|1|array|[[palermo 0.0000]]

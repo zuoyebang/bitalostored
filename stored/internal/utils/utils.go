@@ -28,8 +28,25 @@ import (
 	"github.com/zuoyebang/bitalostored/butils/unsafe2"
 )
 
-const TotalSlot uint32 = 1024
-const TxParallelLimit int32 = 200
+func LowerSlice(buf []byte) []byte {
+	for i, r := range buf {
+		if 'A' <= r && r <= 'Z' {
+			r += 'a' - 'A'
+		}
+
+		buf[i] = r
+	}
+	return buf
+}
+
+func CloneBytes(v []byte) []byte {
+	if v == nil {
+		return nil
+	}
+	clone := make([]byte, len(v))
+	copy(clone, v)
+	return clone
+}
 
 func BoolToString(flag bool) string {
 	if flag {
@@ -67,6 +84,20 @@ func Sha1Hex(s string) string {
 	return hex.EncodeToString(h.Sum(nil))
 }
 
+func ByteToUint32(v []byte) (uint32, error) {
+	if v == nil {
+		return 0, nil
+	}
+	return extend.ParseUint32(unsafe2.String(v))
+}
+
+func ByteToInt(v []byte) (int, error) {
+	if v == nil {
+		return 0, nil
+	}
+	return extend.ParseInt(unsafe2.String(v))
+}
+
 func ByteToInt64(v []byte) (int64, error) {
 	if v == nil {
 		return 0, nil
@@ -79,14 +110,6 @@ func ByteToFloat64(v []byte) (float64, error) {
 		return 0, nil
 	}
 	return extend.ParseFloat64(unsafe2.String(v))
-}
-
-func GetSlotId(khash uint32) uint16 {
-	return uint16(khash % TotalSlot)
-}
-
-func GetKeySlotId(key []byte) uint32 {
-	return hash.Fnv32(key) % TotalSlot
 }
 
 func GetCurrentTimeString() string {
@@ -106,13 +129,6 @@ func GetLocalIp() string {
 		}
 	}
 	return ""
-}
-
-func FirstError(err1 error, err2 error) error {
-	if err1 != nil {
-		return err1
-	}
-	return err2
 }
 
 func AppendInfoUint(buf []byte, key string, value uint64) []byte {

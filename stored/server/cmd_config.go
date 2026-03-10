@@ -19,7 +19,9 @@ import (
 	"strings"
 
 	"github.com/zuoyebang/bitalostored/butils/unsafe2"
+	"github.com/zuoyebang/bitalostored/stored/internal/cmd"
 	"github.com/zuoyebang/bitalostored/stored/internal/errn"
+	"github.com/zuoyebang/bitalostored/stored/internal/log"
 	"github.com/zuoyebang/bitalostored/stored/internal/resp"
 )
 
@@ -36,7 +38,7 @@ func init() {
 
 func configCommand(c *Client) error {
 	args := c.Args
-	if len(args) < 2 {
+	if len(args) < 3 {
 		return errn.CmdParamsErr(resp.CONFIG)
 	}
 
@@ -45,30 +47,86 @@ func configCommand(c *Client) error {
 		return errn.ErrNotImplement
 	}
 
-	configName := strings.ToUpper(unsafe2.String(args[1]))
-	if configName == "AUTOCOMPACT" {
-		if len(args) < 3 {
-			return errn.CmdParamsErr(resp.CONFIG)
-		}
-		configValue, err := strconv.Atoi(string(args[2]))
-		if err != nil {
-			return err
-		}
+	configName := strings.ToLower(unsafe2.String(args[1]))
+	configValue, err := strconv.Atoi(string(args[2]))
+	if err != nil {
+		return err
+	}
 
-		db := c.server.GetDB()
-		if db != nil {
-			if configValue == 1 {
-				db.SetAutoCompact(true)
-				c.server.Info.Server.AutoCompact = true
-			} else {
-				db.SetAutoCompact(false)
-				c.server.Info.Server.AutoCompact = false
-			}
-			c.server.Info.Server.UpdateCache()
-			c.Writer.WriteStatus(resp.ReplyOK)
+	switch configName {
+	case cmd.ConfigSetDBAUTOCOMPACT:
+		return configSetDBAutoCompact(c, configValue)
+	case cmd.ConfigSetRaftFullSync:
+		if len(args) != 4 || !cmd.CheckCmdToken(string(args[3])) {
+			return errn.ErrCmdToken
 		}
-	} else {
+		return configSetRaftFullSync(c, configValue)
+	case cmd.ConfigSetRaftLogCompact:
+		if len(args) != 4 || !cmd.CheckCmdToken(string(args[3])) {
+			return errn.ErrCmdToken
+		}
+		return configSetRaftLogCompact(c, configValue)
+	default:
 		return errn.ErrNotImplement
 	}
+}
+
+func configSetDBAutoCompact(c *Client, value int) error {
+	db := c.server.GetDB()
+	if db != nil {
+		if value == 1 {
+			db.SetAutoCompact(true)
+			c.server.Info.Server.AutoCompact = true
+		} else {
+			db.SetAutoCompact(false)
+			c.server.Info.Server.AutoCompact = false
+		}
+		c.server.Info.Server.UpdateCache()
+		c.Writer.WriteStatus(resp.ReplyOK)
+	}
+	return nil
+}
+
+func configSetRaftFullSync(c *Client, on int) error {
+	if c.server.IsWitness || !c.server.isOpenRaft {
+		return nil
+	}
+
+	newValue := false
+	if on == 1 {
+		newValue = true
+	}
+
+	oldValue := c.server.Info.Server.ForbidRaftFullSync
+	c.server.Info.Server.ForbidRaftFullSync = newValue
+	c.server.SetRaftNodeState(cmd.ConfigSetRaftFullSync, newValue)
+	if oldValue != newValue {
+		c.server.Info.Server.UpdateCache()
+	}
+
+	log.Infof("[CMD] config set raft full sync %v to %v success", oldValue, newValue)
+	c.Writer.WriteStatus(resp.ReplyOK)
+	return nil
+}
+
+func configSetRaftLogCompact(c *Client, on int) error {
+	if c.server.IsWitness || !c.server.isOpenRaft {
+		return nil
+	}
+
+	newValue := false
+	if on == 1 {
+		newValue = true
+	}
+
+	oldValue := c.server.Info.Server.ForbidRaftLogCompact
+	c.server.Info.Server.ForbidRaftLogCompact = newValue
+	c.server.SetRaftNodeState(cmd.ConfigSetRaftLogCompact, newValue)
+	if oldValue != newValue {
+		c.server.Info.Server.UpdateCache()
+	}
+
+	log.Infof("[CMD] config set raft log compact %v to %v success", oldValue, newValue)
+	c.Writer.WriteStatus(resp.ReplyOK)
 	return nil
 }

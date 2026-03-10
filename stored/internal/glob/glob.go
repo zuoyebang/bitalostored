@@ -61,28 +61,3 @@ func Compile(pattern string, separators ...rune) (Glob, error) {
 
 	return matcher, nil
 }
-
-func MustCompile(pattern string, separators ...rune) Glob {
-	g, err := Compile(pattern, separators...)
-	if err != nil {
-		panic(err)
-	}
-
-	return g
-}
-
-func QuoteMeta(s string) string {
-	b := make([]byte, 2*len(s))
-
-	j := 0
-	for i := 0; i < len(s); i++ {
-		if syntax.Special(s[i]) {
-			b[j] = '\\'
-			j++
-		}
-		b[j] = s[i]
-		j++
-	}
-
-	return string(b[0:j])
-}

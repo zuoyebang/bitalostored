@@ -17,7 +17,7 @@ package server
 import (
 	"strconv"
 
-	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/btools"
+	"github.com/zuoyebang/bitalostored/stored/engine/btools"
 	"github.com/zuoyebang/bitalostored/stored/internal/errn"
 	"github.com/zuoyebang/bitalostored/stored/internal/resp"
 	"github.com/zuoyebang/bitalostored/stored/internal/utils"
@@ -42,10 +42,6 @@ func init() {
 		resp.MGET:        {Sync: resp.IsWriteCmd(resp.MGET), Handler: mgetCommand, KeySkip: 1},
 		resp.STRLEN:      {Sync: resp.IsWriteCmd(resp.STRLEN), Handler: strlenCommand},
 		resp.GET:         {Sync: resp.IsWriteCmd(resp.GET), Handler: getCommand},
-		resp.BITCOUNT:    {Sync: resp.IsWriteCmd(resp.BITCOUNT), Handler: bitcountCommand},
-		resp.BITPOS:      {Sync: resp.IsWriteCmd(resp.BITPOS), Handler: bitposCommand},
-		resp.GETBIT:      {Sync: resp.IsWriteCmd(resp.GETBIT), Handler: getbitCommand},
-		resp.SETBIT:      {Sync: resp.IsWriteCmd(resp.SETBIT), Handler: setbitCommand},
 
 		resp.KDEL:      {Sync: resp.IsWriteCmd(resp.KDEL), Handler: kdelCommand, KeySkip: 1},
 		resp.KTTL:      {Sync: resp.IsWriteCmd(resp.KTTL), Handler: kttlCommand},
@@ -419,7 +415,7 @@ func kttlCommand(c *Client) error {
 		return errn.CmdParamsErr(resp.KTTL)
 	}
 
-	if v, err := c.DB.TTl(args[0], c.KeyHash); err != nil {
+	if v, err := c.DB.TTL(args[0], c.KeyHash); err != nil {
 		return err
 	} else {
 		c.Writer.WriteInteger(v)
@@ -521,123 +517,6 @@ func strlenCommand(c *Client) error {
 	}
 
 	if n, err := c.DB.StrLen(c.Args[0], c.KeyHash); err != nil {
-		return err
-	} else {
-		c.Writer.WriteInteger(n)
-	}
-	return nil
-}
-
-func parseBitRange(args [][]byte) (start int, end int, err error) {
-	start = 0
-	end = -1
-	if len(args) > 0 {
-		if start, err = strconv.Atoi(string(args[0])); err != nil {
-			return
-		}
-	}
-
-	if len(args) == 2 {
-		if end, err = strconv.Atoi(string(args[1])); err != nil {
-			return
-		}
-	}
-	return
-}
-
-func bitcountCommand(c *Client) error {
-	args := c.Args
-
-	if len(args) != 1 && len(args) != 3 {
-		return errn.CmdParamsErr(resp.BITCOUNT)
-	}
-
-	key := args[0]
-	start, end, err := parseBitRange(args[1:])
-	if err != nil {
-		return err
-	}
-	if start > end && len(args[1:]) != 0 {
-		c.Writer.WriteInteger(0)
-		return nil
-	}
-
-	if n, err := c.DB.BitCount(key, c.KeyHash, start, end); err != nil {
-		return err
-	} else {
-		c.Writer.WriteInteger(n)
-	}
-	return nil
-}
-
-func bitposCommand(c *Client) error {
-	args := c.Args
-	if len(args) < 2 {
-		return errn.CmdParamsErr(resp.BITPOS)
-	}
-
-	key := args[0]
-	bit, err := strconv.Atoi(string(args[1]))
-	if err != nil {
-		return err
-	}
-	start, end, err := parseBitRange(args[2:])
-	if err != nil {
-		return err
-	}
-
-	if n, err := c.DB.BitPos(key, c.KeyHash, bit, start, end); err != nil {
-		return err
-	} else {
-		c.Writer.WriteInteger(n)
-	}
-	return nil
-}
-
-func getbitCommand(c *Client) error {
-	args := c.Args
-	if len(args) != 2 {
-		return errn.CmdParamsErr(resp.GETBIT)
-	}
-
-	key := args[0]
-	offset, err := strconv.Atoi(string(args[1]))
-	if err != nil {
-		return err
-	}
-	if offset < 0 {
-		return errn.ErrBitOffset
-	}
-
-	if n, err := c.DB.GetBit(key, c.KeyHash, offset); err != nil {
-		return err
-	} else {
-		c.Writer.WriteInteger(n)
-	}
-	return nil
-}
-
-func setbitCommand(c *Client) error {
-	args := c.Args
-	if len(args) != 3 {
-		return errn.CmdParamsErr(resp.SETBIT)
-	}
-
-	key := args[0]
-	offset, err := strconv.Atoi(string(args[1]))
-	if err != nil {
-		return err
-	}
-	if offset < 0 {
-		return errn.ErrBitOffset
-	}
-
-	value, err := strconv.Atoi(string(args[2]))
-	if err != nil {
-		return err
-	}
-
-	if n, err := c.DB.SetBit(key, c.KeyHash, offset, value); err != nil {
 		return err
 	} else {
 		c.Writer.WriteInteger(n)

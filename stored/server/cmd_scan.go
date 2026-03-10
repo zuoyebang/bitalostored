@@ -21,22 +21,22 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/zuoyebang/bitalostored/butils/extend"
-	"github.com/zuoyebang/bitalostored/butils/unsafe2"
-	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/btools"
+	"github.com/zuoyebang/bitalostored/stored/engine/btools"
 	"github.com/zuoyebang/bitalostored/stored/internal/errn"
 	"github.com/zuoyebang/bitalostored/stored/internal/resp"
+
+	"github.com/zuoyebang/bitalostored/butils/unsafe2"
 )
 
 func init() {
 	AddCommand(map[string]*Cmd{
-		resp.SCAN:   {Sync: resp.IsWriteCmd(resp.SCAN), Handler: scanCommand, NotAllowedInTx: true},
-		resp.ZSCAN:  {Sync: resp.IsWriteCmd(resp.ZSCAN), Handler: scanGroup.xzscanCommand, NotAllowedInTx: true},
-		resp.SSCAN:  {Sync: resp.IsWriteCmd(resp.SSCAN), Handler: scanGroup.xsscanCommand, NotAllowedInTx: true},
-		resp.HSCAN:  {Sync: resp.IsWriteCmd(resp.HSCAN), Handler: scanGroup.xhscanCommand, NotAllowedInTx: true},
-		resp.XZSCAN: {Sync: resp.IsWriteCmd(resp.XZSCAN), Handler: xScanGroup.xzscanCommand, NotAllowedInTx: true},
-		resp.XSSCAN: {Sync: resp.IsWriteCmd(resp.XSSCAN), Handler: xScanGroup.xsscanCommand, NotAllowedInTx: true},
-		resp.XHSCAN: {Sync: resp.IsWriteCmd(resp.XHSCAN), Handler: xScanGroup.xhscanCommand, NotAllowedInTx: true},
+		resp.SCAN: {Sync: resp.IsWriteCmd(resp.SCAN), Handler: scanCommand, NotAllowedInTx: true},
+		//resp.ZSCAN: {Sync: resp.IsWriteCmd(resp.ZSCAN), Handler: scanGroup.xzscanCommand, NotAllowedInTx: true},
+		//resp.SSCAN:  {Sync: resp.IsWriteCmd(resp.SSCAN), Handler: scanGroup.xsscanCommand, NotAllowedInTx: true},
+		//resp.HSCAN:  {Sync: resp.IsWriteCmd(resp.HSCAN), Handler: scanGroup.xhscanCommand, NotAllowedInTx: true},
+		//resp.XZSCAN: {Sync: resp.IsWriteCmd(resp.XZSCAN), Handler: xScanGroup.xzscanCommand, NotAllowedInTx: true},
+		//resp.XSSCAN: {Sync: resp.IsWriteCmd(resp.XSSCAN), Handler: xScanGroup.xsscanCommand, NotAllowedInTx: true},
+		//resp.XHSCAN: {Sync: resp.IsWriteCmd(resp.XHSCAN), Handler: xScanGroup.xhscanCommand, NotAllowedInTx: true},
 	})
 }
 
@@ -102,179 +102,85 @@ type scanCommandGroup struct {
 	parseArgs  func(args [][]byte) (cursor []byte, match string, count int, err error)
 }
 
-func (scg scanCommandGroup) xhscanCommand(c *Client) error {
-	args := c.Args
+//func (scg scanCommandGroup) xhscanCommand(c *Client) error {
+//	args := c.Args
+//	if len(args) < 2 {
+//		return errn.CmdParamsErr(resp.HSCAN)
+//	} else if err := btools.CheckKeySize(args[0]); err != nil {
+//		return err
+//	}
+//
+//	cursor, match, count, e := scg.parseArgs(args[1:])
+//	if e != nil {
+//		return e
+//	}
+//
+//	newCursor, ay, err := c.DB.HScan(args[0], c.KeyHash, cursor, count, match)
+//	if err != nil {
+//		return err
+//	}
+//
+//	var data [2]interface{}
+//	data[0] = newCursor
+//	data[1] = ay
+//	c.Writer.WriteArray(data[:])
+//	return nil
+//}
 
-	if len(args) < 2 {
-		return errn.CmdParamsErr(resp.HSCAN)
-	}
-
-	key := args[0]
-
-	cursor, match, count, err := scg.parseArgs(args[1:])
-
-	if err != nil {
-		return err
-	}
-
-	var ay []btools.FVPair
-
-	cursor, ay, err = c.DB.HScan(key, c.KeyHash, cursor, count, match)
-	if err != nil {
-		return err
-	}
-
-	data := make([]interface{}, 2)
-	vv := make([][]byte, 0, len(ay)*2)
-
-	for _, v := range ay {
-		vv = append(vv, v.Field, v.Value)
-	}
-
-	data[0] = cursor
-	data[1] = vv
-
-	c.Writer.WriteArray(data)
-	return nil
-}
-
-func (scg scanCommandGroup) xsscanCommand(c *Client) error {
-	args := c.Args
-
-	if len(args) < 2 {
-		return errn.CmdParamsErr(resp.SSCAN)
-	}
-
-	key := args[0]
-
-	cursor, match, count, err := scg.parseArgs(args[1:])
-
-	if err != nil {
-		return err
-	}
-
-	var ay [][]byte
-
-	cursor, ay, err = c.DB.SScan(key, c.KeyHash, cursor, count, match)
-
-	if err != nil {
-		return err
-	}
-
-	data := make([]interface{}, 2)
-	data[0] = cursor
-	data[1] = ay
-
-	c.Writer.WriteArray(data)
-	return nil
-}
-
-func (scg scanCommandGroup) xzscanCommand(c *Client) error {
-	args := c.Args
-
-	if len(args) < 2 {
-		return errn.CmdParamsErr(resp.ZSCAN)
-	}
-
-	key := args[0]
-
-	cursor, match, count, err := scg.parseArgs(args[1:])
-
-	if err != nil {
-		return err
-	}
-
-	var ay []btools.ScorePair
-
-	cursor, ay, err = c.DB.ZScan(key, c.KeyHash, cursor, count, match)
-	if err != nil {
-		return err
-	}
-
-	var data [2]interface{}
-	vv := make([][]byte, 0, len(ay)*2)
-	for _, v := range ay {
-		vv = append(vv, v.Member, extend.FormatFloat64ToSlice(v.Score))
-	}
-
-	data[0] = cursor
-	data[1] = vv
-
-	c.Writer.WriteArray(data[:])
-	return nil
-}
-
-func scanCommand(c *Client) error {
-	args := c.Args
-	if len(args) < 1 {
-		return errn.CmdParamsErr(resp.SCAN)
-	}
-
-	cursor, match, count, tp, err := parseGScanArgs(args)
-	if err != nil {
-		return err
-	}
-
-	if count < 0 {
-		return errn.ErrSyntax
-	} else if count > 5000 {
-		return errors.New("ERR count more than 5000")
-	}
-
-	var cur []byte
-	var ks [][]byte
-
-	dataType := btools.StringToDataType(tp)
-	cur, ks, err = c.DB.Scan(cursor, count, match, dataType)
-	if err != nil {
-		return err
-	}
-
-	if cur == nil {
-		cur = []byte("0")
-	}
-	c.Writer.WriteArray([]interface{}{cur, ks})
-
-	return nil
-}
-
-func scanSlotIdCommand(c *Client) error {
-	slotId, err := strconv.ParseUint(string(c.Args[0]), 10, 32)
-	if err != nil {
-		return errn.CmdParamsErr(resp.SCANSLOTID)
-	}
-
-	args := c.Args[1:]
-	if len(args) < 1 {
-		return errn.CmdParamsErr(resp.SCANSLOTID)
-	}
-
-	cursor, match, count, _, err := parseGScanArgs(args)
-	if err != nil {
-		return err
-	}
-
-	if count < 0 {
-		return errn.ErrSyntax
-	} else if count > 5000 {
-		return errors.New("ERR count more than 5000")
-	}
-
-	var cur []byte
-	var ks [][]byte
-
-	cur, ks, err = c.DB.ScanSlotId(uint32(slotId), cursor, count, match)
-	if err != nil {
-		return err
-	}
-
-	if cur == nil {
-		cur = []byte("0")
-	}
-	c.Writer.WriteArray([]interface{}{cur, ks})
-
-	return nil
-}
+//func (scg scanCommandGroup) xsscanCommand(c *Client) error {
+//	args := c.Args
+//	if len(args) < 2 {
+//		return errn.CmdParamsErr(resp.SSCAN)
+//	} else if err := btools.CheckKeySize(args[0]); err != nil {
+//		return err
+//	}
+//
+//	cursor, match, count, e := scg.parseArgs(args[1:])
+//	if e != nil {
+//		return e
+//	}
+//
+//	newCursor, ay, err := c.DB.SScan(args[0], c.KeyHash, cursor, count, match)
+//	if err != nil {
+//		return err
+//	}
+//
+//	var data [2]interface{}
+//	data[0] = newCursor
+//	data[1] = ay
+//	c.Writer.WriteArray(data[:])
+//	return nil
+//}
+//
+//func (scg scanCommandGroup) xzscanCommand(c *Client) error {
+//	args := c.Args
+//	if len(args) < 2 {
+//		return errn.CmdParamsErr(resp.ZSCAN)
+//	} else if err := btools.CheckKeySize(args[0]); err != nil {
+//		return err
+//	}
+//
+//	cursor, match, count, e := scg.parseArgs(args[1:])
+//	if e != nil {
+//		return e
+//	}
+//
+//	newCursor, res, err := c.DB.ZScan(args[0], c.KeyHash, cursor, count, match)
+//	if err != nil {
+//		return err
+//	}
+//
+//	vv := make([][]byte, 0, len(res)*2)
+//	for _, v := range res {
+//		vv = append(vv, v.Member, extend.FormatFloat64ToSlice(v.Score))
+//	}
+//
+//	var data [2]interface{}
+//	data[0] = newCursor
+//	data[1] = vv
+//	c.Writer.WriteArray(data[:])
+//	return nil
+//}
 
 func parseGScanArgs(args [][]byte) (cursor []byte, match string, count int, tp string, err error) {
 	cursor = args[0]
@@ -321,4 +227,38 @@ func parseGScanArgs(args [][]byte) (cursor []byte, match string, count int, tp s
 	}
 
 	return
+}
+
+func scanCommand(c *Client) error {
+	args := c.Args
+	if len(args) < 1 {
+		return errn.CmdParamsErr(resp.SCAN)
+	}
+
+	cursor, match, count, tp, err := parseGScanArgs(args)
+	if err != nil {
+		return err
+	}
+
+	if count < 0 {
+		return errn.ErrSyntax
+	} else if count > 5000 {
+		return errors.New("ERR count more than 5000")
+	}
+
+	var cur []byte
+	var ks [][]byte
+
+	dataType := btools.StringToDataType(tp)
+	cur, ks, err = c.DB.Scan(cursor, count, match, dataType)
+	if err != nil {
+		return err
+	}
+
+	if cur == nil {
+		cur = []byte("0")
+	}
+	c.Writer.WriteArray([]interface{}{cur, ks})
+
+	return nil
 }

@@ -17,6 +17,7 @@ package vectormap
 import (
 	"bytes"
 	"fmt"
+	"math/rand"
 	"strconv"
 	"sync"
 	"testing"
@@ -27,12 +28,13 @@ import (
 
 func TestVectorGet(t *testing.T) {
 	n := 10000
+	ts := uint64(rand.Int63())
 	values := genBytesData(100, n)
 	m := NewVectorMap(uint32(n), WithBuckets(16))
 	for i := 0; i < n; i++ {
 		key := []byte(strconv.Itoa(i))
 		value := values[i]
-		m.RePut(key, value)
+		m.RePut(key, value, ts)
 	}
 	var wg sync.WaitGroup
 	var closeCh = make(chan struct{})
@@ -49,9 +51,8 @@ func TestVectorGet(t *testing.T) {
 						j = 0
 					}
 					key := []byte(strconv.Itoa(j))
-					value, closer, ok := m.Get(key)
-					assert.Equal(t, true, ok)
-					assert.Equal(t, values[j], value, "ex: %s \nac: %s\n", string(values[j]), string(value))
+					value, closer, ts1, ok := m.Get(key)
+					checkValue(t, ok, true, value, values[j], ts1, ts)
 					if closer != nil {
 						closer()
 					}
@@ -68,16 +69,17 @@ func TestVectorGet(t *testing.T) {
 func TestVectorMap1m(t *testing.T) {
 	value := bytes.Repeat([]byte("a"), 1*1024*1024)
 	keyNum := 10
+	ts := uint64(rand.Int63())
 	m := NewVectorMap(uint32(20), WithType(MapTypeLRU), WithBuckets(8), WithSkipCheck(), WithEliminate(Byte(5<<30), 0, time.Duration(10)*time.Second))
 	for k := 1; k <= keyNum; k++ {
 		newKey := []byte("performance_test_key_prefix_" + strconv.Itoa(k))
-		ok := m.RePut(newKey, value)
+		ok := m.RePut(newKey, value, ts)
 		assert.Equal(t, true, ok)
 	}
 	fmt.Println(m.Items())
 	for k := 1; k <= keyNum; k++ {
 		newKey := []byte("performance_test_key_prefix_" + strconv.Itoa(k))
-		v, closer, _ := m.Get(newKey)
+		v, closer, _, _ := m.Get(newKey)
 		if len(v) <= 0 {
 			fmt.Println("error vlen=0")
 		}
@@ -93,99 +95,61 @@ func TestVectorMapPut(t *testing.T) {
 	oldValue := []byte("old")
 	newValue := []byte("new")
 	key := []byte("key")
-
-	checkValue := func(getOk bool, expectOk bool, getVal, expectVal []byte) {
-		assert.Equal(t, expectOk, getOk)
-		assert.Equal(t, expectVal, getVal)
-	}
+	ts := uint64(rand.Int63())
 
 	m := NewVectorMap(100, WithBuckets(1024))
-	if ok := m.RePut(key, oldValue); !ok {
+	if ok := m.RePut(key, oldValue, ts); !ok {
 		t.Fatal("reput error")
 	}
-	v, closer, ok := m.Get(key)
-	checkValue(ok, true, v, oldValue)
+	v, closer, ts1, ok := m.Get(key)
+	checkValue(t, ok, true, v, oldValue, ts1, ts)
 	if closer != nil {
 		closer()
 	}
 
-	if ok := m.Put(key, newValue); !ok {
+	if ok := m.Put(key, newValue, ts); !ok {
 		t.Fatal("put error")
 	}
-	v, closer, ok = m.Get(key)
-	checkValue(ok, true, v, newValue)
+	v, closer, ts1, ok = m.Get(key)
+	checkValue(t, ok, true, v, newValue, ts1, ts)
 	if closer != nil {
 		closer()
 	}
 	m.Clear()
 }
 
-func TestVectorMapPutMulti(t *testing.T) {
-	values := genBytesData(256, 2)
-	oldValue := values[0]
-	newValue := values[1]
-	key := []byte("key")
-
-	checkValue := func(getOk bool, expectOk bool, getVal, expectVal []byte) {
-		assert.Equal(t, expectOk, getOk)
-		assert.Equal(t, expectVal, getVal)
-	}
-
-	m := NewVectorMap(100, WithBuckets(1024))
-	if ok := m.RePut(key, oldValue); !ok {
-		t.Fatal("reput error")
-	}
-	v, closer, ok := m.Get(key)
-	checkValue(ok, true, v, oldValue)
-	if closer != nil {
-		closer()
-	}
-
-	if ok := m.PutMultiValue(key, 256, newValue[:128], newValue[128:]); !ok {
-		t.Fatal("put error")
-	}
-	v, closer, ok = m.Get(key)
-	checkValue(ok, true, v, newValue)
-	if closer != nil {
-		closer()
-	}
-}
-
 func TestVectorMap_Base(t *testing.T) {
 	keys := genStringData(16, 100)
+	ts := uint64(rand.Int63())
 
 	// insert
 	m := NewVectorMap(2, WithSkipCheck(), WithBuckets(1), WithEliminate(1*GB, 0, 1*time.Second))
-	m.RePut([]byte(keys[0]), []byte(keys[1]))
-	v, closer, ok := m.Get([]byte(keys[0]))
-	assert.Equal(t, true, ok)
-	assert.Equal(t, []byte(keys[1]), v)
+	m.RePut([]byte(keys[0]), []byte(keys[1]), ts)
+	v, closer, ts1, ok := m.Get([]byte(keys[0]))
+	checkValue(t, ok, true, v, []byte(keys[1]), ts1, ts)
 	if closer != nil {
 		closer()
 	}
 
 	lv := make([]byte, 256)
-	m.RePut([]byte(keys[2]), lv)
-	v, closer, ok = m.Get([]byte(keys[2]))
-	assert.Equal(t, true, ok)
-	assert.Equal(t, lv, v)
+	m.RePut([]byte(keys[2]), lv, ts)
+	v, closer, ts1, ok = m.Get([]byte(keys[2]))
+	checkValue(t, ok, true, v, lv, ts1, ts)
 	if closer != nil {
 		closer()
 	}
 
-	m.RePut([]byte(keys[3]), lv)
-	v, closer, ok = m.Get([]byte(keys[3]))
-	assert.Equal(t, true, ok)
-	assert.Equal(t, lv, v)
+	m.RePut([]byte(keys[3]), lv, ts)
+	v, closer, ts1, ok = m.Get([]byte(keys[3]))
+	checkValue(t, ok, true, v, lv, ts1, ts)
 	if closer != nil {
 		closer()
 	}
 
 	for i := 0; i < 100; i += 2 {
-		if ok := m.RePut([]byte(keys[i]), []byte(keys[i+1])); ok {
-			v, closer, ok = m.Get([]byte(keys[i]))
-			assert.Equal(t, true, ok)
-			assert.Equal(t, []byte(keys[i+1]), v, "key: %s, i: %d", keys[i], i)
+		if ok := m.RePut([]byte(keys[i]), []byte(keys[i+1]), ts); ok {
+			v, closer, ts1, ok = m.Get([]byte(keys[i]))
+			checkValue(t, ok, true, v, []byte(keys[i+1]), ts1, ts)
 			if closer != nil {
 				closer()
 			}
@@ -205,52 +169,32 @@ func TestVectorMap_Base(t *testing.T) {
 	assert.Equal(t, m.shards[0].Resident()-m.shards[0].Dead(), resident, "%d : %d", m.shards[0].Resident()-m.shards[0].Dead(), resident)
 	assert.Equal(t, m.shards[0].Resident()-m.shards[0].Dead(), m.shards[0].kvholder().items)
 	assert.Equal(t, m.Count(), int(m.Items()))
-
-	sliceKey := []byte("slice")
-	m.RePut(sliceKey, []byte("slice"))
-	m.PutMultiValue(sliceKey, 8, []byte("new"), []byte("slice"))
-	slice, closer, ok := m.Get(sliceKey)
-	assert.Equal(t, true, ok)
-	assert.Equal(t, []byte("newslice"), slice)
-	if closer != nil {
-		closer()
-	}
-
-	m.Delete(sliceKey)
-	_, closer, ok = m.Get(sliceKey)
-	assert.Equal(t, false, ok)
-	assert.Equal(t, m.Count(), int(m.Items()))
-	if closer != nil {
-		closer()
-	}
-	fmt.Printf(">>> %d, %d\n", m.Count(), int(m.Items()))
 
 	m.Clear()
 }
 
 func TestVectorMap_BaseLRU(t *testing.T) {
 	keys := genStringData(16, 100)
+	ts := uint64(rand.Int63())
 
 	m := NewVectorMap(2, WithSkipCheck(), WithType(MapTypeLRU), WithBuckets(1), WithEliminate(1*GB, 0, 1*time.Second))
-	m.RePut([]byte(keys[0]), []byte(keys[1]))
-	v, closer, ok := m.Get([]byte(keys[0]))
-	assert.Equal(t, true, ok)
-	assert.Equal(t, []byte(keys[1]), v)
+	m.RePut([]byte(keys[0]), []byte(keys[1]), ts)
+	v, closer, ts1, ok := m.Get([]byte(keys[0]))
+	checkValue(t, ok, true, v, []byte(keys[1]), ts1, ts)
 	if closer != nil {
 		closer()
 	}
 
 	lv := make([]byte, 256)
-	m.RePut([]byte(keys[2]), lv)
-	v, closer, ok = m.Get([]byte(keys[2]))
-	assert.Equal(t, true, ok)
-	assert.Equal(t, lv, v)
+	m.RePut([]byte(keys[2]), lv, ts)
+	v, closer, ts1, ok = m.Get([]byte(keys[2]))
+	checkValue(t, ok, true, v, lv, ts1, ts)
 	if closer != nil {
 		closer()
 	}
 
-	m.RePut([]byte(keys[3]), lv)
-	v, closer, ok = m.Get([]byte(keys[3]))
+	m.RePut([]byte(keys[3]), lv, ts)
+	v, closer, ts1, ok = m.Get([]byte(keys[3]))
 	assert.Equal(t, true, ok)
 	assert.Equal(t, lv, v)
 	if closer != nil {
@@ -258,10 +202,9 @@ func TestVectorMap_BaseLRU(t *testing.T) {
 	}
 
 	for i := 0; i < 100; i += 2 {
-		if ok := m.RePut([]byte(keys[i]), []byte(keys[i+1])); ok {
-			v, closer, ok = m.Get([]byte(keys[i]))
-			assert.Equal(t, true, ok)
-			assert.Equal(t, []byte(keys[i+1]), v, "key: %s, i: %d", keys[i], i)
+		if ok := m.RePut([]byte(keys[i]), []byte(keys[i+1]), ts); ok {
+			v, closer, ts1, ok = m.Get([]byte(keys[i]))
+			checkValue(t, ok, true, v, []byte(keys[i+1]), ts1, ts)
 			if closer != nil {
 				closer()
 			}
@@ -282,34 +225,17 @@ func TestVectorMap_BaseLRU(t *testing.T) {
 	assert.Equal(t, m.shards[0].Resident()-m.shards[0].Dead(), m.shards[0].kvholder().items)
 	assert.Equal(t, m.Count(), int(m.Items()))
 
-	sliceKey := []byte("slice")
-	m.RePut(sliceKey, []byte("slice"))
-	m.PutMultiValue(sliceKey, 8, []byte("new"), []byte("slice"))
-	slice, closer, ok := m.Get(sliceKey)
-	assert.Equal(t, true, ok)
-	assert.Equal(t, []byte("newslice"), slice)
-	if closer != nil {
-		closer()
-	}
-
-	m.Delete(sliceKey)
-	_, closer, ok = m.Get(sliceKey)
-	assert.Equal(t, false, ok)
-	assert.Equal(t, m.Count(), int(m.Items()))
-	if closer != nil {
-		closer()
-	}
-
 	m.Clear()
 }
 
 func TestVectorMap_GC_Release(t *testing.T) {
+	ts := uint64(rand.Int63())
 	m := NewVectorMap(4, WithSkipCheck(), WithBuckets(1), WithEliminate(3*KB, 0, 100*time.Millisecond))
 	{
-		m.RePut([]byte("a"), []byte("b"))
-		m.RePut([]byte("c"), make([]byte, 1024))
+		m.RePut([]byte("a"), []byte("b"), ts)
+		m.RePut([]byte("c"), make([]byte, 1016), ts)
 
-		_, closer, _ := m.Get([]byte("c"))
+		_, closer, _, _ := m.Get([]byte("c"))
 		assert.Equal(t, int32(2), m.shards[0].kvholder().buffer.ref.refs())
 		m.Delete([]byte("c"))
 		m.shards[0].GCCopy()
@@ -323,28 +249,30 @@ func TestVectorMap_GC_Release(t *testing.T) {
 }
 
 func TestVectorMap_GC(t *testing.T) {
+	ts := uint64(rand.Int63())
 	m := NewVectorMap(4, WithSkipCheck(), WithBuckets(1), WithEliminate(3*KB, 0, 100*time.Millisecond))
 	{
-		m.RePut([]byte("a"), []byte("b"))
-		m.RePut([]byte("c"), []byte("d"))
+		m.RePut([]byte("a"), []byte("b"), ts)
+		m.RePut([]byte("c"), []byte("d"), ts)
 		m.Delete([]byte("c"))
 		m.shards[0].GCCopy()
-		assert.Equal(t, float32(32+20+4)/(3*1024), m.shards[0].itemsMemUsage())
-		assert.Equal(t, float32(32+20+4+20+4)/(3*1024), m.shards[0].memUsage())
+		assert.Equal(t, float32(32+20+12)/(3*1024), m.shards[0].itemsMemUsage())
+		assert.Equal(t, float32(32+20+12+20+12)/(3*1024), m.shards[0].memUsage())
 	}
 
 	{
-		m.RePut([]byte("c"), make([]byte, 1024))
-		assert.Equal(t, float32(32+20+4+20+4+20+1024)/(3*1024), m.shards[0].memUsage())
+		m.RePut([]byte("c"), make([]byte, 1024), ts)
+		assert.Equal(t, float32(32+20+12+20+12+20+1024+8)/(3*1024), m.shards[0].memUsage())
 		m.Delete([]byte("c"))
 		m.shards[0].GCCopy()
-		assert.Equal(t, float32(32+20+4)/(3*1024), m.shards[0].memUsage())
+		assert.Equal(t, float32(32+20+12)/(3*1024), m.shards[0].memUsage())
 	}
 
 	m.Clear()
 }
 
 func TestVectorMap_EliminateAndGC(t *testing.T) {
+	ts := uint64(rand.Int63())
 	m := NewVectorMap(4, WithSkipCheck(), WithBuckets(1), WithEliminate(3*KB, 0, 100*time.Millisecond))
 
 	{
@@ -354,28 +282,28 @@ func TestVectorMap_EliminateAndGC(t *testing.T) {
 
 	m.Get([]byte("b"))
 	m.Get([]byte("c"))
-	vlen := 992
+	vlen := 984
 
-	m.RePut([]byte("a"), make([]byte, vlen))
+	m.RePut([]byte("a"), make([]byte, vlen), ts)
 
-	m.RePut([]byte("b"), make([]byte, vlen))
+	m.RePut([]byte("b"), make([]byte, vlen), ts)
 	m.shards[0].Eliminate()
-	assert.Equal(t, float32(32+20+vlen+20+vlen)/(3*1024), m.shards[0].itemsMemUsage())
-	assert.Equal(t, float32(32+20+vlen+20+vlen)/(3*1024), m.shards[0].memUsage())
+	assert.Equal(t, float32(32+20+vlen+8+20+vlen+8)/(3*1024), m.shards[0].itemsMemUsage())
+	assert.Equal(t, float32(32+20+vlen+8+20+vlen+8)/(3*1024), m.shards[0].memUsage())
 
-	ok := m.RePut([]byte("c"), make([]byte, vlen))
+	ok := m.RePut([]byte("c"), make([]byte, vlen), ts)
 	assert.Equal(t, true, ok)
-	assert.Equal(t, float32(32+20+vlen+20+vlen+20+vlen)/(3*1024), m.shards[0].itemsMemUsage())
-	assert.Equal(t, float32(32+20+vlen+20+vlen+20+vlen)/(3*1024), m.shards[0].memUsage())
+	assert.Equal(t, float32(32+20+vlen+8+20+vlen+8+20+vlen+8)/(3*1024), m.shards[0].itemsMemUsage())
+	assert.Equal(t, float32(32+20+vlen+8+20+vlen+8+20+vlen+8)/(3*1024), m.shards[0].memUsage())
 
 	m.Get([]byte("a"))
 	m.Get([]byte("c"))
 
 	m.shards[0].Eliminate()
-	assert.Equal(t, float32(32+20+vlen+20+vlen)/(3*1024), m.shards[0].itemsMemUsage())
-	assert.Equal(t, float32(32+20+vlen+20+vlen+20+vlen)/(3*1024), m.shards[0].memUsage())
+	assert.Equal(t, float32(32+20+vlen+8+20+vlen+8)/(3*1024), m.shards[0].itemsMemUsage())
+	assert.Equal(t, float32(32+20+vlen+8+20+vlen+8+20+vlen+8)/(3*1024), m.shards[0].memUsage())
 	{
-		_, closer, ok := m.Get([]byte("b"))
+		_, closer, _, ok := m.Get([]byte("b"))
 		assert.Equal(t, false, ok)
 		assert.Equal(t, uint32(1), m.shards[0].Dead())
 		if closer != nil {
@@ -384,13 +312,16 @@ func TestVectorMap_EliminateAndGC(t *testing.T) {
 	}
 
 	m.shards[0].GCCopy()
-	assert.Equal(t, float32(32+20+vlen+20+vlen)/(3*1024), m.shards[0].itemsMemUsage())
-	assert.Equal(t, float32(32+20+vlen+20+vlen)/(3*1024), m.shards[0].memUsage())
+	assert.Equal(t, float32(32+20+vlen+8+20+vlen+8)/(3*1024), m.shards[0].itemsMemUsage())
+	assert.Equal(t, float32(32+20+vlen+8+20+vlen+8)/(3*1024), m.shards[0].memUsage())
 
 	m.Clear()
 }
 
 func TestVectorMap_EliminateAndGC_LRU(t *testing.T) {
+	temp := UnitTime
+	UnitTime = time.Second
+	ts := uint64(rand.Int63())
 	m := NewVectorMap(4, WithSkipCheck(), WithType(MapTypeLRU), WithBuckets(1), WithEliminate(3*KB, 0, 100*time.Millisecond))
 
 	{
@@ -399,37 +330,38 @@ func TestVectorMap_EliminateAndGC_LRU(t *testing.T) {
 	}
 	m.Get([]byte("b"))
 	m.Get([]byte("c"))
-	vlen := 992
+	vlen := 984
 
-	m.RePut([]byte("a"), make([]byte, vlen))
-	m.RePut([]byte("b"), make([]byte, vlen))
+	m.RePut([]byte("a"), make([]byte, vlen), ts)
+	m.RePut([]byte("b"), make([]byte, vlen), ts)
 	m.shards[0].Eliminate()
-	assert.Equal(t, float32(32+20+vlen+20+vlen)/(3*1024), m.shards[0].itemsMemUsage())
-	assert.Equal(t, float32(32+20+vlen+20+vlen)/(3*1024), m.shards[0].memUsage())
+	assert.Equal(t, float32(32+20+vlen+8+20+vlen+8)/(3*1024), m.shards[0].itemsMemUsage())
+	assert.Equal(t, float32(32+20+vlen+8+20+vlen+8)/(3*1024), m.shards[0].memUsage())
 
-	ok := m.RePut([]byte("c"), make([]byte, vlen))
+	ok := m.RePut([]byte("c"), make([]byte, vlen), ts)
 	assert.Equal(t, true, ok)
-	assert.Equal(t, float32(32+20+vlen+20+vlen+20+vlen)/(3*1024), m.shards[0].itemsMemUsage())
-	assert.Equal(t, float32(32+20+vlen+20+vlen+20+vlen)/(3*1024), m.shards[0].memUsage())
+	assert.Equal(t, float32(32+20+vlen+8+20+vlen+8+20+vlen+8)/(3*1024), m.shards[0].itemsMemUsage())
+	assert.Equal(t, float32(32+20+vlen+8+20+vlen+8+20+vlen+8)/(3*1024), m.shards[0].memUsage())
 
 	m.shards[0].Eliminate()
-	assert.Equal(t, float32(32+20+vlen+20+vlen)/(3*1024), m.shards[0].itemsMemUsage())
-	assert.Equal(t, float32(32+20+vlen+20+vlen+20+vlen)/(3*1024), m.shards[0].memUsage())
+	assert.Equal(t, float32(32+20+vlen+8+20+vlen+8)/(3*1024), m.shards[0].itemsMemUsage())
+	assert.Equal(t, float32(32+20+vlen+8+20+vlen+8+20+vlen+8)/(3*1024), m.shards[0].memUsage())
 	m.shards[0].GCCopy()
-	assert.Equal(t, float32(32+20+vlen+20+vlen)/(3*1024), m.shards[0].memUsage())
+	assert.Equal(t, float32(32+20+vlen+8+20+vlen+8)/(3*1024), m.shards[0].memUsage())
 	{
-		_, closer, ok := m.Get([]byte("a"))
+		_, closer, _, ok := m.Get([]byte("a"))
 		assert.Equal(t, false, ok)
 		if closer != nil {
 			closer()
 		}
 	}
 	time.Sleep(UnitTime)
-	m.RePut([]byte("a"), make([]byte, vlen))
+	UnitTime = temp
+	m.RePut([]byte("a"), make([]byte, vlen), ts)
 	// key[b] should be deleted
-	m.Put([]byte("b"), make([]byte, vlen))
+	m.Put([]byte("b"), make([]byte, vlen), ts)
 	{
-		_, closer, ok := m.Get([]byte("a"))
+		_, closer, _, ok := m.Get([]byte("a"))
 		assert.Equal(t, true, ok)
 		assert.Equal(t, uint32(1), m.shards[0].Dead())
 		if closer != nil {
@@ -438,17 +370,17 @@ func TestVectorMap_EliminateAndGC_LRU(t *testing.T) {
 	}
 	m.shards[0].GCCopy()
 	{
-		_, closer, ok := m.Get([]byte("b"))
+		_, closer, _, ok := m.Get([]byte("b"))
 		assert.Equal(t, false, ok)
 		if closer != nil {
 			closer()
 		}
 	}
-	m.RePut([]byte("b"), make([]byte, vlen))
+	m.RePut([]byte("b"), make([]byte, vlen), ts)
 	m.shards[0].Eliminate()
 	m.shards[0].GCCopy()
 	{
-		_, closer, ok := m.Get([]byte("c"))
+		_, closer, _, ok := m.Get([]byte("c"))
 		assert.Equal(t, false, ok)
 		if closer != nil {
 			closer()
@@ -456,13 +388,14 @@ func TestVectorMap_EliminateAndGC_LRU(t *testing.T) {
 	}
 
 	m.shards[0].GCCopy()
-	assert.Equal(t, float32(32+20+vlen+20+vlen)/(3*1024), m.shards[0].itemsMemUsage())
-	assert.Equal(t, float32(32+20+vlen+20+vlen)/(3*1024), m.shards[0].memUsage())
+	assert.Equal(t, float32(32+20+vlen+8+20+vlen+8)/(3*1024), m.shards[0].itemsMemUsage())
+	assert.Equal(t, float32(32+20+vlen+8+20+vlen+8)/(3*1024), m.shards[0].memUsage())
 
 	m.Clear()
 }
 
 func TestVectorMap_WithOption(t *testing.T) {
+	ts := uint64(rand.Int63())
 	count := 100000
 	keys := genStringData(16, 2*count)
 
@@ -470,24 +403,22 @@ func TestVectorMap_WithOption(t *testing.T) {
 	failKeys := make(map[string][]byte, count)
 
 	m := NewVectorMap(100000, WithBuckets(1024), WithEliminate(1*GB, 1, 1*time.Second))
-	m.RePut([]byte(keys[0]), []byte(keys[1]))
-	v, closer, ok := m.Get([]byte(keys[0]))
-	assert.Equal(t, true, ok)
-	assert.Equal(t, []byte(keys[1]), v)
+	m.RePut([]byte(keys[0]), []byte(keys[1]), ts)
+	v, closer, ts1, ok := m.Get([]byte(keys[0]))
+	checkValue(t, ok, true, v, []byte(keys[1]), ts1, ts)
 	if closer != nil {
 		closer()
 	}
 
-	m.RePut([]byte(keys[0]), []byte(keys[0]))
-	v, closer, ok = m.Get([]byte(keys[0]))
-	assert.Equal(t, true, ok)
-	assert.Equal(t, []byte(keys[0]), v)
+	m.RePut([]byte(keys[0]), []byte(keys[0]), ts)
+	v, closer, ts1, ok = m.Get([]byte(keys[0]))
+	checkValue(t, ok, true, v, []byte(keys[0]), ts1, ts)
 	if closer != nil {
 		closer()
 	}
 
 	for i := 0; i < 2*count; i += 2 {
-		if ok := m.RePut([]byte(keys[i]), []byte(keys[i+1])); !ok {
+		if ok := m.RePut([]byte(keys[i]), []byte(keys[i+1]), ts); !ok {
 			failKeys[keys[i]] = []byte(keys[i+1])
 		}
 	}
@@ -498,9 +429,8 @@ func TestVectorMap_WithOption(t *testing.T) {
 	for i := 0; i < 2*count; i += 2 {
 		if _, del := delKeys[keys[i]]; !del {
 			if _, fail := failKeys[keys[i]]; !fail {
-				v, closer, ok := m.Get([]byte(keys[i]))
-				assert.Equal(t, true, ok)
-				assert.Equal(t, []byte(keys[i+1]), v)
+				v, closer, ts1, ok := m.Get([]byte(keys[i]))
+				checkValue(t, ok, true, v, []byte(keys[i+1]), ts1, ts)
 				if closer != nil {
 					closer()
 				}
@@ -513,12 +443,11 @@ func TestVectorMap_WithOption(t *testing.T) {
 
 	{
 		v := []byte("1234567890")
-		res := m.Put([]byte(succ), v)
+		res := m.Put([]byte(succ), v, ts)
 		assert.Equal(t, true, res)
 
-		vRes, closer, ok := m.Get([]byte(succ))
-		assert.Equal(t, true, ok)
-		assert.Equal(t, vRes, v)
+		vRes, closer, ts1, ok := m.Get([]byte(succ))
+		checkValue(t, ok, true, vRes, v, ts1, ts)
 		if closer != nil {
 			closer()
 		}
@@ -552,10 +481,9 @@ func TestVectorMap_WithOption(t *testing.T) {
 
 	i := 0
 	for {
-		if m.RePut([]byte(keys[i]), nil) {
-			res, closer, ok := m.Get([]byte(keys[i]))
-			assert.Equal(t, true, ok)
-			assert.Equal(t, []byte{}, res)
+		if m.RePut([]byte(keys[i]), nil, ts) {
+			res, closer, ts1, ok := m.Get([]byte(keys[i]))
+			checkValue(t, ok, true, res, []byte(""), ts1, ts)
 			if closer != nil {
 				closer()
 			}
@@ -708,6 +636,7 @@ func TestVectorMap_WithOption(t *testing.T) {
 //}
 
 func TestVectorMapLRU_BigValue(t *testing.T) {
+	ts := uint64(rand.Int63())
 	logger := &defaultLogger{}
 	k := []byte("K1234567890")
 	k1 := []byte("K1")
@@ -722,27 +651,24 @@ func TestVectorMapLRU_BigValue(t *testing.T) {
 		WithType(MapTypeLRU),
 		WithBuckets(1),
 		WithEliminate(Byte(ca), 0, 0))
-	ok := m.RePut(k, vs[0])
+	ok := m.RePut(k, vs[0], ts)
 	assert.Equal(t, true, ok)
 
-	v, c, ok := m.Get(k)
-	assert.Equal(t, true, ok)
-	assert.Equal(t, vs[0], v)
+	v, c, ts1, ok := m.Get(k)
+	checkValue(t, ok, true, v, vs[0], ts1, ts)
 	if c != nil {
 		c()
 	}
 
-	m.RePut(k1, vs[1])
-	v, c, ok = m.Get(k1)
-	assert.Equal(t, true, ok)
-	assert.Equal(t, vs[1], v)
+	m.RePut(k1, vs[1], ts)
+	v, c, ts1, ok = m.Get(k1)
+	checkValue(t, ok, true, v, vs[1], ts1, ts)
 	if c != nil {
 		c()
 	}
 
-	v, c, ok = m.Get(k)
-	assert.Equal(t, true, ok)
-	assert.Equal(t, vs[0], v)
+	v, c, ts1, ok = m.Get(k)
+	checkValue(t, ok, true, v, vs[0], ts1, ts)
 	if c != nil {
 		c()
 	}
@@ -764,10 +690,9 @@ func TestVectorMapLRU_BigValue(t *testing.T) {
 		} else {
 			v = vs2[i%4]
 		}
-		if ok = m.RePut(k, v); ok {
-			res, c, ok := m.Get(k)
-			assert.Equal(t, true, ok)
-			assert.Equal(t, v, res)
+		if ok = m.RePut(k, v, ts); ok {
+			res, c, ts1, ok := m.Get(k)
+			checkValue(t, ok, true, res, v, ts1, ts)
 			if c != nil {
 				c()
 			}
@@ -776,22 +701,22 @@ func TestVectorMapLRU_BigValue(t *testing.T) {
 		m.shards[0].GCCopy()
 	}
 
-	if ok = m.RePut(k1, vs[1]); ok {
+	if ok = m.RePut(k1, vs[1], ts); ok {
 		assert.Equal(t, true, ok)
-		v, c, ok = m.Get(k1)
-		assert.Equal(t, true, ok)
-		assert.Equal(t, vs[1], v)
+		v, c, ts1, ok = m.Get(k1)
+		checkValue(t, ok, true, v, vs[1], ts1, ts)
 		if c != nil {
 			c()
 		}
 	}
-	m.Put(k1, vs[2])
-	m.Put(k1, vs[3])
+	m.Put(k1, vs[2], ts)
+	m.Put(k1, vs[3], ts)
 	m.shards[0].Eliminate()
 	m.shards[0].GCCopy()
 }
 
 func TestVectorMapLFU_BigValue(t *testing.T) {
+	ts := uint64(rand.Int63())
 	logger := &defaultLogger{}
 	k := []byte("K1234567890")
 	k1 := []byte("K1")
@@ -805,27 +730,24 @@ func TestVectorMapLFU_BigValue(t *testing.T) {
 		WithType(MapTypeLFU),
 		WithBuckets(1),
 		WithEliminate(Byte(ca), 0, 0))
-	ok := m.RePut(k, vs[0])
+	ok := m.RePut(k, vs[0], ts)
 	assert.Equal(t, true, ok)
 
-	v, c, ok := m.Get(k)
-	assert.Equal(t, true, ok)
-	assert.Equal(t, vs[0], v)
+	v, c, ts1, ok := m.Get(k)
+	checkValue(t, ok, true, v, vs[0], ts1, ts)
 	if c != nil {
 		c()
 	}
 
-	m.RePut(k1, vs[1])
-	v, c, ok = m.Get(k1)
-	assert.Equal(t, true, ok)
-	assert.Equal(t, vs[1], v)
+	m.RePut(k1, vs[1], ts)
+	v, c, ts1, ok = m.Get(k1)
+	checkValue(t, ok, true, v, vs[1], ts1, ts)
 	if c != nil {
 		c()
 	}
 
-	v, c, ok = m.Get(k)
-	assert.Equal(t, true, ok)
-	assert.Equal(t, vs[0], v)
+	v, c, ts1, ok = m.Get(k)
+	checkValue(t, ok, true, v, vs[0], ts1, ts)
 	if c != nil {
 		c()
 	}
@@ -846,10 +768,9 @@ func TestVectorMapLFU_BigValue(t *testing.T) {
 		} else {
 			v = vs2[i%4]
 		}
-		if ok = m.RePut(k, v); ok {
-			res, c, ok := m.Get(k)
-			assert.Equal(t, true, ok)
-			assert.Equal(t, v, res)
+		if ok = m.RePut(k, v, ts); ok {
+			res, c, ts1, ok := m.Get(k)
+			checkValue(t, ok, true, res, v, ts1, ts)
 			if c != nil {
 				c()
 			}
@@ -858,26 +779,26 @@ func TestVectorMapLFU_BigValue(t *testing.T) {
 		m.shards[0].GCCopy()
 	}
 
-	if ok = m.RePut(k1, vs[1]); ok {
+	if ok = m.RePut(k1, vs[1], ts); ok {
 		assert.Equal(t, true, ok)
-		v, c, ok = m.Get(k1)
-		assert.Equal(t, true, ok)
-		assert.Equal(t, vs[1], v)
+		v, c, ts1, ok = m.Get(k1)
+		checkValue(t, ok, true, v, vs[1], ts1, ts)
 		if c != nil {
 			c()
 		}
 	}
-	m.Put(k1, vs[2])
-	m.Put(k1, vs[3])
+	m.Put(k1, vs[2], ts)
+	m.Put(k1, vs[3], ts)
 	m.shards[0].Eliminate()
 	m.shards[0].GCCopy()
 }
 
 func TestGCTime(t *testing.T) {
 	vs := genBytesData(128, 1)
+	ts := uint64(rand.Int63())
 	m := NewVectorMap(4, WithSkipCheck(), WithBuckets(1), WithEliminate(64*MB, 0, 100*time.Millisecond))
 	for i := 0; i < 460000; i++ {
-		m.RePut([]byte(strconv.Itoa(i)), vs[0])
+		m.RePut([]byte(strconv.Itoa(i)), vs[0], ts)
 	}
 	t.Logf("MemUse: %d", m.shards[0].ItemsUsedMem())
 	t.Logf("memUsage: %.3f", m.shards[0].memUsage())
@@ -897,6 +818,7 @@ func TestGCTime(t *testing.T) {
 }
 
 func TestVectorMap_LRU_AdaptStartTime(t *testing.T) {
+	ts := uint64(rand.Int63())
 	vs := genBytesData(128, 4)
 	m := NewVectorMap(4,
 		WithSkipCheck(),
@@ -910,7 +832,7 @@ func TestVectorMap_LRU_AdaptStartTime(t *testing.T) {
 	lm0.lastSubTime = time.Now().Add(-time.Hour * 1 * 24)
 
 	for i := 0; i < 8; i++ {
-		m.RePut([]byte(strconv.Itoa(i)), vs[0])
+		m.RePut([]byte(strconv.Itoa(i)), vs[0], ts)
 	}
 	origin := time.Since(lm0.startTime) / UnitTime
 
@@ -919,6 +841,128 @@ func TestVectorMap_LRU_AdaptStartTime(t *testing.T) {
 	for _, s := range lm0.sinces[0] {
 		if s > 0 {
 			assert.Equal(t, uint16(origin-(LRUSubDuration/UnitTime)), s)
+		}
+	}
+}
+
+func TestVectorMap_LRU_SetTimestamp(t *testing.T) {
+	ts := uint64(rand.Int63())
+	k := []byte("test")
+	vMini := genBytesData(10, 1)[0]
+	vShort := genBytesData(int(overShortSize), 1)[0]
+	vLong := genBytesData(int(overLongSize), 1)[0]
+	m := NewVectorMap(4,
+		WithSkipCheck(),
+		WithType(MapTypeLRU),
+		WithBuckets(1),
+		WithEliminate(10*MB, 0, 5*time.Second))
+
+	{
+		m.RePut(k, vMini, ts)
+		v, c, ts1, ok := m.Get(k)
+		checkValue(t, ok, true, v, vMini, ts1, ts)
+		if c != nil {
+			c()
+		}
+
+		m.SetTimestamp(k, ts+100)
+		v, c, ts1, ok = m.Get(k)
+		checkValue(t, ok, true, v, vMini, ts1, ts+100)
+		if c != nil {
+			c()
+		}
+	}
+
+	{
+		m.RePut(k, vShort, ts)
+		v, c, ts1, ok := m.Get(k)
+		checkValue(t, ok, true, v, vShort, ts1, ts)
+		if c != nil {
+			c()
+		}
+
+		m.SetTimestamp(k, ts+100)
+		v, c, ts1, ok = m.Get(k)
+		checkValue(t, ok, true, v, vShort, ts1, ts+100)
+		if c != nil {
+			c()
+		}
+	}
+
+	{
+		m.RePut(k, vLong, ts)
+		v, c, ts1, ok := m.Get(k)
+		checkValue(t, ok, true, v, vLong, ts1, ts)
+		if c != nil {
+			c()
+		}
+
+		m.SetTimestamp(k, ts+100)
+		v, c, ts1, ok = m.Get(k)
+		checkValue(t, ok, true, v, vLong, ts1, ts+100)
+		if c != nil {
+			c()
+		}
+	}
+}
+
+func TestVectorMap_LFU_SetTimestamp(t *testing.T) {
+	ts := uint64(rand.Int63())
+	k := []byte("test")
+	vMini := genBytesData(10, 1)[0]
+	vShort := genBytesData(int(overShortSize), 1)[0]
+	vLong := genBytesData(int(overLongSize), 1)[0]
+	m := NewVectorMap(4,
+		WithSkipCheck(),
+		WithType(MapTypeLFU),
+		WithBuckets(1),
+		WithEliminate(10*MB, 0, 5*time.Second))
+
+	{
+		m.RePut(k, vMini, ts)
+		v, c, ts1, ok := m.Get(k)
+		checkValue(t, ok, true, v, vMini, ts1, ts)
+		if c != nil {
+			c()
+		}
+
+		m.SetTimestamp(k, ts+100)
+		v, c, ts1, ok = m.Get(k)
+		checkValue(t, ok, true, v, vMini, ts1, ts+100)
+		if c != nil {
+			c()
+		}
+	}
+
+	{
+		m.RePut(k, vShort, ts)
+		v, c, ts1, ok := m.Get(k)
+		checkValue(t, ok, true, v, vShort, ts1, ts)
+		if c != nil {
+			c()
+		}
+
+		m.SetTimestamp(k, ts+100)
+		v, c, ts1, ok = m.Get(k)
+		checkValue(t, ok, true, v, vShort, ts1, ts+100)
+		if c != nil {
+			c()
+		}
+	}
+
+	{
+		m.RePut(k, vLong, ts)
+		v, c, ts1, ok := m.Get(k)
+		checkValue(t, ok, true, v, vLong, ts1, ts)
+		if c != nil {
+			c()
+		}
+
+		m.SetTimestamp(k, ts+100)
+		v, c, ts1, ok = m.Get(k)
+		checkValue(t, ok, true, v, vLong, ts1, ts+100)
+		if c != nil {
+			c()
 		}
 	}
 }
@@ -935,6 +979,12 @@ func TestVectorMap_Logger(t *testing.T) {
 
 	time.Sleep(7 * time.Second)
 	m.Close()
+}
+
+func checkValue(t *testing.T, getOk bool, expectOk bool, getVal, expectVal []byte, ts, expectTS uint64) {
+	assert.Equal(t, expectOk, getOk)
+	assert.Equal(t, expectVal, getVal)
+	assert.Equal(t, expectTS, ts)
 }
 
 func genBytesData(size, count int) (keys [][]byte) {

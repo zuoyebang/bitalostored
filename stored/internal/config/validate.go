@@ -20,9 +20,10 @@ import (
 	"path"
 	"time"
 
+	"github.com/zuoyebang/bitalostored/stored/internal/log"
+
 	"github.com/zuoyebang/bitalostored/butils/bytesize"
 	"github.com/zuoyebang/bitalostored/butils/timesize"
-	"github.com/zuoyebang/bitalostored/stored/internal/log"
 )
 
 const (
@@ -53,6 +54,7 @@ func (c *Config) Validate() error {
 	if err := c.checkRaftClusterConfig(); err != nil {
 		return err
 	}
+	c.ConvertRaft()
 	return nil
 }
 
@@ -129,4 +131,31 @@ func (c *Config) checkLRUCacheConfig() error {
 
 func (c *Config) checkRaftClusterConfig() error {
 	return nil
+}
+
+func (c *Config) ConvertRaft() {
+	c.FiexedRaftNodeHost = FixedRaftNodeHostConfig{
+		HostName:                      c.RaftNodeHost.HostName,
+		RaftAddress:                   c.RaftNodeHost.RaftAddress,
+		Rtt:                           c.RaftNodeHost.Rtt,
+		MaxSendQueueSize:              0,
+		MaxReceiveQueueSize:           0,
+		MaxSnapshotSendBytesPerSecond: c.RaftNodeHost.MaxSnapshotSendBytesPerSecond,
+		MaxSnapshotRecvBytesPerSecond: c.RaftNodeHost.MaxSnapshotRecvBytesPerSecond,
+		DeploymentId:                  c.RaftNodeHost.DeploymentId,
+	}
+	c.FiexedRaftCluster = FixedRaftClusterConfig{
+		ElectionRTT:             c.RaftCluster.ElectionRTT,
+		HeartbeatRTT:            c.RaftCluster.HeartbeatRTT,
+		CheckQuorum:             c.RaftCluster.CheckQuorum,
+		SnapshotEntries:         c.RaftCluster.SnapshotEntries,
+		CompactionOverhead:      c.RaftCluster.CompactionOverhead,
+		MaxInMemLogSize:         0,
+		SnapshotCompressionType: c.RaftCluster.SnapshotCompressionType,
+		EntryCompressionType:    c.RaftCluster.EntryCompressionType,
+		DisableAutoCompactions:  c.RaftCluster.DisableAutoCompactions,
+		TimeOut:                 c.RaftCluster.TimeOut,
+		RetryTimes:              c.RaftCluster.RetryTimes,
+		AsyncPropose:            c.RaftCluster.AsyncPropose,
+	}
 }

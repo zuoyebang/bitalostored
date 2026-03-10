@@ -18,50 +18,46 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"path/filepath"
 
-	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/bitsdb"
-	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/btools"
-	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/dbconfig"
-	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/dbmeta"
+	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb"
+	"github.com/zuoyebang/bitalostored/stored/engine/btools"
+	"github.com/zuoyebang/bitalostored/stored/engine/dbconfig"
+	"github.com/zuoyebang/bitalostored/stored/engine/dbmeta"
 	"github.com/zuoyebang/bitalostored/stored/internal/config"
 	"github.com/zuoyebang/bitalostored/stored/internal/log"
 )
 
 type Bitalos struct {
-	Meta    *dbmeta.Meta
-	Migrate *Migrate
-
+	meta   *dbmeta.Meta
 	bitsdb *bitsdb.BitsDB
 }
 
 func NewBitalos(dir string) (*Bitalos, error) {
 	cfg := newDbConfig(dir)
-	dbPath := cfg.DBPath
-	if err := os.MkdirAll(dbPath, 0755); err != nil {
-		return nil, err
-	}
-
-	meta, err := newBitalosMeta(dbPath)
+	meta, err := NewMeta(cfg.DBPath)
 	if err != nil {
 		return nil, err
 	}
 
+	cfg.DisableStoreKey = config.GlobalConfig.Bitalos.DisableStoreKey
+	cfg.CompressionType = config.GlobalConfig.Bitalos.CompressionType
 	cfg.GetNextKeyId = meta.GetNextKeyUniqId
 	cfg.GetCurrentKeyId = meta.GetCurrentKeyUniqId
-	bdb, err := bitsdb.NewBitsDB(cfg, meta)
+	bdb, err := bitsdb.NewBitsDB(cfg)
 	if err != nil {
 		return nil, err
 	}
 
 	b := &Bitalos{
 		bitsdb: bdb,
-		Meta:   meta,
+		meta:   meta,
 	}
 
 	b.tryClean()
+	b.meta.Flush()
 
 	log.Infof("new bitalos success dumpDbConfig[%s]", b.dumpDbConfig(cfg))
-
 	return b, nil
 }
 
@@ -73,21 +69,26 @@ func (b *Bitalos) dumpDbConfig(cfg *dbconfig.Config) string {
 	fmt.Fprintf(&buf, "MaxValueSize:%d ", btools.MaxValueSize)
 	fmt.Fprintf(&buf, "MaxIOWriteLoadQPS:%d ", btools.MaxIOWriteLoadQPS)
 	fmt.Fprintf(&buf, "DisableWAL:%v ", cfg.DisableWAL)
-	fmt.Fprintf(&buf, "EnableRaftlogRestore:%v ", cfg.EnableRaftlogRestore)
-	fmt.Fprintf(&buf, "BithashCompressionType:%d ", cfg.BithashCompressionType)
+	fmt.Fprintf(&buf, "CompressionType:%d ", cfg.CompressionType)
 	fmt.Fprintf(&buf, "WriteBufferSize:%d ", cfg.WriteBufferSize)
 	fmt.Fprintf(&buf, "CompactStartTime:%d ", cfg.CompactStartTime)
 	fmt.Fprintf(&buf, "CompactEndTime:%d ", cfg.CompactEndTime)
-	fmt.Fprintf(&buf, "CompactInterval:%d ", cfg.CompactInterval)
 	fmt.Fprintf(&buf, "BithashGcThreshold:%.3f ", cfg.BithashGcThreshold)
 	fmt.Fprintf(&buf, "EnablePageBlockCompression:%v ", cfg.EnablePageBlockCompression)
 	fmt.Fprintf(&buf, "PageBlockCacheSize:%v ", cfg.PageBlockCacheSize)
-	fmt.Fprintf(&buf, "ExpiredDeletionQpsThreshold:%d ", config.GlobalConfig.Bitalos.ExpiredDeletionQpsThreshold)
 	fmt.Fprintf(&buf, "EnableClockCache:%v ", config.GlobalConfig.Bitalos.EnableClockCache)
 	fmt.Fprintf(&buf, "FlushPrefixDeleteKeyMultiplier:%d ", config.GlobalConfig.Bitalos.FlushPrefixDeleteKeyMultiplier)
 	fmt.Fprintf(&buf, "FlushFileLifetime:%d ", config.GlobalConfig.Bitalos.FlushFileLifetime)
-	fmt.Fprintf(&buf, "BitpageFlushSize:%d ", config.GlobalConfig.Bitalos.BitpageFlushSize)
-	fmt.Fprintf(&buf, "BitpageSplitSize:%d ", config.GlobalConfig.Bitalos.BitpageSplitSize)
+	fmt.Fprintf(&buf, "VectorTableCount:%d ", cfg.VectorTableCount)
+	fmt.Fprintf(&buf, "VectorTableHashSize:%d ", cfg.VectorTableHashSize)
+	fmt.Fprintf(&buf, "VectorTableGcThreshold:%.3f ", cfg.VectorTableGcThreshold)
+	fmt.Fprintf(&buf, "DisableStoreKey:%v ", cfg.DisableStoreKey)
+	fmt.Fprintf(&buf, "BitpageFlushSize:%d ", cfg.BitpageFlushSize)
+	fmt.Fprintf(&buf, "BitpageSplitSize:%d ", cfg.BitpageSplitSize)
+	fmt.Fprintf(&buf, "BitpageTaskWorkerNum:%d ", cfg.BitpageTaskWorkerNum)
+	fmt.Fprintf(&buf, "BitpageDisableMiniVi:%v ", cfg.BitpageDisableMiniVi)
+	fmt.Fprintf(&buf, "MemTableSize:%d ", cfg.MemTableSize)
+	fmt.Fprintf(&buf, "VmTableSize:%d ", cfg.VmTableSize)
 
 	fmt.Fprintf(&buf, "CacheSize:%d ", cfg.CacheSize)
 	fmt.Fprintf(&buf, "CacheInitCap:%d ", cfg.CacheHashSize)
@@ -95,9 +96,9 @@ func (b *Bitalos) dumpDbConfig(cfg *dbconfig.Config) string {
 	fmt.Fprintf(&buf, "CacheEliminateDuration:%d ", cfg.CacheEliminateDuration)
 	fmt.Fprintf(&buf, "EnableMissCache:%v ", cfg.EnableMissCache)
 
-	fmt.Fprintf(&buf, "MetaUpdateIndex:%d ", b.Meta.GetUpdateIndex())
-	fmt.Fprintf(&buf, "MetaFlushIndex:%d ", b.Meta.GetFlushIndex())
-	fmt.Fprintf(&buf, "MetaGetCurrentKeyUniqId:%d ", b.Meta.GetCurrentKeyUniqId())
+	fmt.Fprintf(&buf, "MetaUpdateIndex:%d ", b.meta.GetUpdateIndex())
+	fmt.Fprintf(&buf, "MetaFlushIndex:%d ", b.meta.GetFlushIndex())
+	fmt.Fprintf(&buf, "MetaGetCurrentKeyUniqId:%d ", b.meta.GetCurrentKeyUniqId())
 
 	return buf.String()
 }
@@ -114,82 +115,90 @@ func newDbConfig(path string) *dbconfig.Config {
 	cfg.CompactStartTime = config.GlobalConfig.Bitalos.CompactStartTime
 	cfg.CompactEndTime = config.GlobalConfig.Bitalos.CompactEndTime
 	cfg.BithashGcThreshold = config.GlobalConfig.Bitalos.BithashGcThreshold
-	cfg.CompactInterval = config.GlobalConfig.Bitalos.CompactInterval
 	cfg.BithashCompressionType = config.GlobalConfig.Bitalos.BithashCompressionType
+	cfg.CompressionType = config.GlobalConfig.Bitalos.CompressionType
 	cfg.EnablePageBlockCompression = config.GlobalConfig.Bitalos.EnablePageBlockCompression
 	cfg.PageBlockCacheSize = config.GlobalConfig.Bitalos.PageBlockCacheSize.AsInt()
 	cfg.FlushPrefixDeleteKeyMultiplier = config.GlobalConfig.Bitalos.FlushPrefixDeleteKeyMultiplier
 	cfg.FlushFileLifetime = config.GlobalConfig.Bitalos.FlushFileLifetime
+	cfg.VectorTableCount = config.GlobalConfig.Bitalos.VectorTableCount
+	cfg.VectorTableHashSize = config.GlobalConfig.Bitalos.VectorTableHashSize
+	cfg.VectorTableGcThreshold = config.GlobalConfig.Bitalos.VectorTableGcThreshold
+	cfg.DisableStoreKey = config.GlobalConfig.Bitalos.DisableStoreKey
 	cfg.BitmapCacheItemCount = config.GlobalConfig.Bitalos.BitmapCacheItemCount
-	cfg.BitpageFlushSize = config.GlobalConfig.Bitalos.BitpageFlushSize
-	cfg.BitpageSplitSize = config.GlobalConfig.Bitalos.BitpageSplitSize
-	if config.GlobalConfig.Bitalos.EnableWAL {
-		cfg.DisableWAL = false
-		cfg.EnableRaftlogRestore = false
-	} else {
-		cfg.DisableWAL = true
-		cfg.EnableRaftlogRestore = config.GlobalConfig.Bitalos.EnableRaftlogRestore
-	}
+	cfg.BitpageFlushSize = config.GlobalConfig.Bitalos.BitpageFlushSize.AsInt()
+	cfg.BitpageSplitSize = config.GlobalConfig.Bitalos.BitpageSplitSize.AsInt()
+	cfg.BitpageTaskWorkerNum = config.GlobalConfig.Bitalos.BitpageTaskWorkerNum
+	cfg.BitpageDisableMiniVi = config.GlobalConfig.Bitalos.BitpageDisableMiniVi
+	cfg.MemTableSize = config.GlobalConfig.Bitalos.MemTableSize.AsInt()
+	cfg.VmTableSize = config.GlobalConfig.Bitalos.VmTableSize.AsInt()
 	return cfg
 }
 
-func newBitalosMeta(dir string) (*dbmeta.Meta, error) {
+func NewMeta(dir string) (*dbmeta.Meta, error) {
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return nil, err
+	}
 	meta, err := dbmeta.OpenMeta(dir)
 	if err != nil {
 		return nil, err
 	}
 
-	if !config.GlobalConfig.Bitalos.EnableRaftlogRestore {
-		meta.SetFlushIndex(0)
+	meta.SetFlushIndex(0)
+
+	if !meta.IsMigrateV6Completed() {
+		_, ocType := meta.GetBitalosdbCompressTypeCfg()
+		if config.GlobalConfig.Bitalos.CompressionType != int(ocType) {
+			meta.SetBitalosdbCompressTypeCfg(uint16(config.GlobalConfig.Bitalos.CompressionType))
+			log.Infof("migrateV6 meta reset CompressionType set %d to %d", ocType, config.GlobalConfig.Bitalos.CompressionType)
+		}
 	}
 
-	cfgCompressionType := config.GlobalConfig.Bitalos.BithashCompressionType
-	isSet, cType := meta.GetBitalosdbCompressTypeCfg()
-	if isSet {
-		config.GlobalConfig.Bitalos.BithashCompressionType = int(cType)
+	isSetCompressionType, cType := meta.GetBitalosdbCompressTypeCfg()
+	if isSetCompressionType {
+		config.GlobalConfig.Bitalos.CompressionType = int(cType)
 	} else {
-		meta.SetBitalosdbCompressTypeCfg(uint16(cfgCompressionType))
+		meta.SetBitalosdbCompressTypeCfg(uint16(config.GlobalConfig.Bitalos.CompressionType))
 	}
+
+	isSetStoreKey, disableStoreKey := meta.GetBitalosdbStoreKeyCfg()
+	if isSetStoreKey {
+		config.GlobalConfig.Bitalos.DisableStoreKey = disableStoreKey
+	} else {
+		if config.GlobalConfig.Bitalos.DisableStoreKey {
+			meta.SetBitalosdbStoreKeyCfg(1)
+		} else {
+			meta.SetBitalosdbStoreKeyCfg(2)
+		}
+	}
+
+	log.Infof("meta load config isSetCompressionType:%v CompressionType:%d isSetStoreKey:%v DisableStoreKey:%v",
+		isSetCompressionType, cType, isSetStoreKey, disableStoreKey)
 
 	return meta, nil
 }
 
 func (b *Bitalos) Close() {
-	if b.bitsdb != nil {
-		b.bitsdb.Close()
-		b.bitsdb = nil
-	}
-	b.Meta.Close()
-}
-
-func (b *Bitalos) Flush(reason btools.FlushType, compactIndex uint64) {
-	if reason == btools.FlushTypeCheckpoint {
-		b.bitsdb.StringObj.BaseDb.BitmapMem.Flush(true)
-	}
-	b.bitsdb.Flush(reason, compactIndex)
-}
-
-func (b *Bitalos) IsOpenRaftRestore() bool {
-	return b.bitsdb.IsOpenRaftRestore()
+	b.bitsdb.Close()
+	b.meta.Close()
 }
 
 func (b *Bitalos) RaftReset() {
-	b.Meta.RaftReset()
-	b.bitsdb.RaftReset()
+	b.meta.RaftReset()
 }
 
 func (b *Bitalos) tryClean() {
-	b.CleanSnapshot()
+	snapshotPath := config.GetBitalosSnapshotPath()
+	if err := os.RemoveAll(snapshotPath); err != nil {
+		log.Infof("remove snapshot err:%s", err)
+	} else {
+		log.Info("remove snapshot succ")
+	}
 }
 
-func (b *Bitalos) CleanSnapshot() {
-	lastIndex := b.Meta.GetSnapshotIndex()
-	if lastIndex <= 0 {
-		return
-	}
-
+func (b *Bitalos) CleanSnapshot(clusterId uint64) {
 	snapshotPath := config.GetBitalosSnapshotPath()
-	lastSnapshot := SnapshotDetail{SnapshotPath: snapshotPath, UpdateIndex: lastIndex}
+	lastSnapshot := SnapshotDetail{SnapshotPath: snapshotPath, IsRoot: true, ClusterId: uint64(clusterId)}
 	lastSnapshot.Clean()
 }
 
@@ -198,24 +207,6 @@ func (b *Bitalos) BitalosdbUsage(bu *bitsdb.BitsUsage) {
 		return
 	}
 	b.bitsdb.BitskvUsage(bu)
-}
-
-func (b *Bitalos) ScanDelExpire(jobId uint64) {
-	if b.bitsdb == nil {
-		return
-	}
-
-	b.bitsdb.ScanDeleteExpireDb(jobId)
-}
-
-func (b *Bitalos) ScanDelExpireAsync() {
-	if b.bitsdb == nil {
-		return
-	}
-
-	go func() {
-		b.ScanDelExpire(0)
-	}()
 }
 
 func (b *Bitalos) Compact() {
@@ -228,24 +219,34 @@ func (b *Bitalos) Compact() {
 	}()
 }
 
-func (b *Bitalos) CompactExpire(start, end []byte) error {
+func (b *Bitalos) VtableGC(slotId uint16) {
 	if b.bitsdb == nil {
-		return nil
+		return
 	}
+
 	go func() {
-		b.bitsdb.CompactExpire(start, end)
+		b.bitsdb.DB.VtableGC(slotId)
 	}()
-	return nil
 }
 
-func (b *Bitalos) CompactBitree() error {
+func (b *Bitalos) FlushBitpage() {
 	if b.bitsdb == nil {
-		return nil
+		return
 	}
+
 	go func() {
-		b.bitsdb.CompactBitree()
+		b.bitsdb.DB.FlushBitpage()
 	}()
-	return nil
+}
+
+func (b *Bitalos) FlushDB(flushForce bool) {
+	if b.bitsdb == nil {
+		return
+	}
+
+	go func() {
+		b.bitsdb.DB.Flush(flushForce)
+	}()
 }
 
 func (b *Bitalos) DebugInfo() []byte {
@@ -256,39 +257,33 @@ func (b *Bitalos) DebugInfo() []byte {
 	return b.bitsdb.DebugInfo()
 }
 
+func (b *Bitalos) RemoveSlot(slot uint16) error {
+	if b.bitsdb == nil {
+		return nil
+	}
+
+	return b.bitsdb.RemoveSlot(slot)
+}
+
+func (b *Bitalos) DirDiskInfo() []byte {
+	if b.bitsdb == nil {
+		return nil
+	}
+
+	return b.bitsdb.DirDiskInfo()
+}
+
 func (b *Bitalos) CacheInfo() []byte {
 	if b.bitsdb == nil {
 		return nil
 	}
 
-	return b.bitsdb.CacheInfo()
-}
-
-func (b *Bitalos) GetIsDelExpire() int {
-	if b.bitsdb == nil {
-		return 0
-	}
-	return b.bitsdb.IsDelExpireRun()
+	cacheInfo := b.bitsdb.CacheInfo()
+	return []byte(cacheInfo)
 }
 
 func (b *Bitalos) IsBitsdbClosed() bool {
 	return b.bitsdb == nil
-}
-
-func (b *Bitalos) CheckpointPrepareStart() {
-	b.bitsdb.SetCheckpointHighPriority(true)
-	b.bitsdb.CheckpointExpireLock(true)
-	b.bitsdb.CheckpointPrepareForBitalosdb(true)
-}
-
-func (b *Bitalos) CheckpointPrepareEnd() {
-	b.bitsdb.CheckpointPrepareForBitalosdb(false)
-	b.bitsdb.CheckpointExpireLock(false)
-	b.bitsdb.SetCheckpointHighPriority(false)
-}
-
-func (b *Bitalos) FlushAllDB() {
-	b.bitsdb.FlushAllDB()
 }
 
 func (b *Bitalos) SetQPS(qps uint64) {
@@ -298,5 +293,40 @@ func (b *Bitalos) SetQPS(qps uint64) {
 }
 
 func (b *Bitalos) SetAutoCompact(val bool) {
-	b.bitsdb.SetAutoCompact(val)
+	b.bitsdb.DB.SetAutoCompact(val)
+}
+
+func (b *Bitalos) Checkpoint(path string) (func(), error) {
+	if err := b.meta.Checkpoint(path); err != nil {
+		return nil, err
+	}
+
+	b.bitsdb.BitmapMem.Flush(true)
+
+	dbPath := filepath.Join(path, bitsdb.DataDbDirname)
+	return b.bitsdb.DB.Checkpoint(dbPath)
+}
+
+func (b *Bitalos) FlushMem() {
+	b.bitsdb.BitmapMem.Flush(true)
+}
+
+func (b *Bitalos) GetMeta() *dbmeta.Meta {
+	return b.meta
+}
+
+func (b *Bitalos) GetCurrentKeyUniqId() uint64 {
+	return b.meta.GetCurrentKeyUniqId()
+}
+
+func (b *Bitalos) GetUpdateIndex() uint64 {
+	return b.meta.GetUpdateIndex()
+}
+
+func (b *Bitalos) SetUpdateIndex(index uint64) {
+	b.meta.SetUpdateIndex(index)
+}
+
+func (b *Bitalos) SetSnapshotIndex(index uint64) uint64 {
+	return b.meta.SetSnapshotIndex(index)
 }

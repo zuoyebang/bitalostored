@@ -17,16 +17,16 @@ package main
 import (
 	"fmt"
 	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"os/signal"
 	"syscall"
 
 	"github.com/zuoyebang/bitalostored/stored/internal/config"
+	"github.com/zuoyebang/bitalostored/stored/internal/log"
 	"github.com/zuoyebang/bitalostored/stored/internal/raft"
 	"github.com/zuoyebang/bitalostored/stored/internal/tclock"
 	"github.com/zuoyebang/bitalostored/stored/server"
-
-	"github.com/zuoyebang/bitalostored/stored/internal/log"
 
 	"github.com/spf13/pflag"
 )
@@ -56,16 +56,17 @@ func main() {
 
 	s, err := server.NewServer()
 	if err != nil {
-		log.Errorf("new server fail err:%s", err.Error())
+		log.Fatalf("new server fail err:%s", err.Error())
 		os.Exit(1)
 	}
 
 	log.Info("server is working ...")
 
-	server.InitLuaPool(s)
-	raft.RaftInit(s)
+	if err = raft.InitRaftInstance(config.GlobalConfig, s); err != nil {
+		log.Fatalf("new raft fail err:%s", err.Error())
+		os.Exit(1)
+	}
 	server.RunInfoCollection(s)
-	raft.RaftStart(s)
 
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc,

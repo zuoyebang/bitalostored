@@ -16,7 +16,7 @@ package raft
 
 import (
 	jsoniter "github.com/json-iterator/go"
-	braft "github.com/zuoyebang/bitalostored/raft"
+	"github.com/zuoyebang/bitalosraft"
 )
 
 type RetType int
@@ -35,44 +35,8 @@ const (
 	R_JOSON_ERR     RetType = 9
 )
 
-type NodeInfo struct {
-	ClusterID uint64 `json:"clusterID"`
-	NodeID    uint64 `json:"nodeID"`
-}
-
-type ClusterInfo struct {
-	ClusterID         uint64            `json:"clusterID"`
-	NodeID            uint64            `json:"nodeID"`
-	Nodes             map[uint64]string `json:"nodes"`
-	ConfigChangeIndex uint64            `json:"configChangeIndex"`
-	StateMachineType  uint64            `json:"stateMachineType"`
-	IsLeader          bool              `json:"isLeader"`
-	IsObserver        bool              `json:"isObserver"`
-	IsWitness         bool              `json:"isWitness "`
-	Pending           bool              `json:"pending"`
-}
-
-type NodeHostInfo struct {
-	RaftAddress     string        `json:"raftAddress"`
-	ClusterInfoList []ClusterInfo `json:"clusterInfoList"`
-	LogInfo         []NodeInfo    `json:"LogInfo"`
-}
-
 type NodeHostInfoV2 struct {
-	Info braft.NodeHostInfo `json:"info"`
-}
-
-type MembershipV2 struct {
-	Info Membership `json:"info"`
-}
-
-func (m *MembershipV2) InitByDragonboatMembership(ms *braft.Membership) {
-	m.Info.ConfigChangeID = ms.ConfigChangeID
-	m.Info.Nodes = ms.Nodes
-	m.Info.Observers = ms.NonVotings
-	m.Info.NonVotings = ms.NonVotings
-	m.Info.Witnesses = ms.Witnesses
-	m.Info.Removed = ms.Removed
+	Info bitalosraft.NodeHostInfo `json:"info"`
 }
 
 type Membership struct {
@@ -82,6 +46,19 @@ type Membership struct {
 	NonVotings     map[uint64]string   `json:"nonvotings"`
 	Witnesses      map[uint64]string   `json:"witnesses"`
 	Removed        map[uint64]struct{} `json:"removed"`
+}
+
+type MembershipV2 struct {
+	Info Membership `json:"info"`
+}
+
+func (m *MembershipV2) InitByDragonboatMembership(ms *bitalosraft.Membership) {
+	m.Info.ConfigChangeID = ms.ConfigChangeID
+	m.Info.Nodes = ms.Nodes
+	m.Info.Observers = ms.NonVotings
+	m.Info.NonVotings = ms.NonVotings
+	m.Info.Witnesses = ms.Witnesses
+	m.Info.Removed = ms.Removed
 }
 
 func (m *MembershipV2) Marshal() (string, error) {

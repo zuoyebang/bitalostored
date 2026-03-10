@@ -21,13 +21,16 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/zuoyebang/bitalostored/butils"
-	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/bitsdb"
+	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb"
 	"github.com/zuoyebang/bitalostored/stored/internal/bytepools"
 	"github.com/zuoyebang/bitalostored/stored/internal/config"
 	"github.com/zuoyebang/bitalostored/stored/internal/trycatch"
 	"github.com/zuoyebang/bitalostored/stored/internal/utils"
+
+	"github.com/zuoyebang/bitalostored/butils"
 )
+
+const MajorVersion = "v8"
 
 type SInfo struct {
 	Server         SinfoServer
@@ -41,7 +44,7 @@ type SInfo struct {
 
 func (sinfo *SInfo) Marshal() ([]byte, func()) {
 	var pos int = 0
-	buf, closer := bytepools.BytePools.GetBytePool(8192)
+	buf, closer := bytepools.GlobalBytePools.GetBytePool(8192)
 	pos += sinfo.Server.AppendTo(buf, pos)
 	pos += sinfo.Client.AppendTo(buf, pos)
 	pos += sinfo.Cluster.AppendTo(buf, pos)
@@ -72,7 +75,7 @@ func (sc *SinfoCluster) Marshal() ([]byte, func()) {
 	sc.mutex.RLock()
 	defer sc.mutex.RUnlock()
 
-	info, closer := bytepools.BytePools.GetBytePool(len(sc.cache))
+	info, closer := bytepools.GlobalBytePools.GetBytePool(len(sc.cache))
 	num := copy(info[0:], sc.cache)
 	return info[:num], closer
 }
@@ -90,30 +93,34 @@ func (sc *SinfoCluster) UpdateCache() {
 
 	sc.cache = sc.cache[:0]
 
-	sc.cache = append(sc.cache, []byte("# ClusterInfo\n")...)
-	sc.cache = utils.AppendInfoString(sc.cache, "start_model:", sc.StartModel.String())
-	sc.cache = utils.AppendInfoString(sc.cache, "status:", boolToString(sc.Status))
-	sc.cache = utils.AppendInfoString(sc.cache, "role:", sc.Role)
-	sc.cache = utils.AppendInfoUint(sc.cache, "cluster_id:", sc.ClusterId)
-	sc.cache = utils.AppendInfoUint(sc.cache, "current_node_id:", sc.CurrentNodeId)
-	sc.cache = utils.AppendInfoString(sc.cache, "raft_address:", sc.RaftAddress)
-	sc.cache = utils.AppendInfoUint(sc.cache, "leader_node_id:", sc.LeaderNodeId)
-	sc.cache = utils.AppendInfoString(sc.cache, "leader_address:", sc.LeaderAddress)
-	sc.cache = utils.AppendInfoString(sc.cache, "cluster_nodes:", sc.ClusterNodes)
-	sc.cache = append(sc.cache, sc.ClusterNodesList...)
-	sc.cache = append(sc.cache, '\n')
+	// sc.cache = append(sc.cache, []byte("# ClusterInfo\n")...)
+	// sc.cache = utils.AppendInfoString(sc.cache, "start_model:", sc.StartModel.String())
+	// sc.cache = utils.AppendInfoString(sc.cache, "status:", boolToString(sc.Status))
+	// sc.cache = utils.AppendInfoString(sc.cache, "role:", sc.Role)
+	// sc.cache = utils.AppendInfoUint(sc.cache, "cluster_id:", sc.ClusterId)
+	// sc.cache = utils.AppendInfoUint(sc.cache, "current_node_id:", sc.CurrentNodeId)
+	// sc.cache = utils.AppendInfoString(sc.cache, "raft_address:", sc.RaftAddress)
+	// sc.cache = utils.AppendInfoUint(sc.cache, "leader_node_id:", sc.LeaderNodeId)
+	// sc.cache = utils.AppendInfoString(sc.cache, "leader_address:", sc.LeaderAddress)
+	// sc.cache = utils.AppendInfoString(sc.cache, "cluster_nodes:", sc.ClusterNodes)
+	// sc.cache = append(sc.cache, sc.ClusterNodesList...)
+	// sc.cache = append(sc.cache, '\n')
 }
 
 type SinfoServer struct {
-	ProcessId     int    `json:"process_id"`
-	StartTime     string `json:"start_time"`
-	ServerAddress string `json:"server_address"`
-	MaxClient     int64  `json:"max_client"`
-	SingleDegrade bool   `json:"single_degrade"`
-	GitVersion    string `json:"git_version"`
-	Compile       string `json:"compile"`
-	ConfigFile    string `json:"config_file"`
-	AutoCompact   bool   `json:"auto_compact"`
+	ProcessId            int    `json:"process_id"`
+	StartTime            string `json:"start_time"`
+	ServerAddress        string `json:"server_address"`
+	MaxClient            int64  `json:"max_client"`
+	SingleDegrade        bool   `json:"single_degrade"`
+	GitVersion           string `json:"git_version"`
+	Compile              string `json:"compile"`
+	ConfigFile           string `json:"config_file"`
+	AutoCompact          bool   `json:"auto_compact"`
+	MajorVersion         string `json:"major_version"`
+	RaftSplit            bool   `json:"raft_split"`
+	ForbidRaftFullSync   bool   `json:"forbid_raft_full_sync"`
+	ForbidRaftLogCompact bool   `json:"forbid_raft_log_compaction"`
 
 	mutex sync.RWMutex
 	cache []byte
@@ -123,7 +130,7 @@ func (ss *SinfoServer) Marshal() ([]byte, func()) {
 	ss.mutex.RLock()
 	defer ss.mutex.RUnlock()
 
-	info, closer := bytepools.BytePools.GetBytePool(len(ss.cache))
+	info, closer := bytepools.GlobalBytePools.GetBytePool(len(ss.cache))
 	num := copy(info[0:], ss.cache)
 	return info[:num], closer
 }
@@ -151,6 +158,10 @@ func (ss *SinfoServer) UpdateCache() {
 	ss.cache = utils.AppendInfoString(ss.cache, "compile:", ss.Compile)
 	ss.cache = utils.AppendInfoString(ss.cache, "config_file:", ss.ConfigFile)
 	ss.cache = utils.AppendInfoString(ss.cache, "auto_compact:", utils.BoolToString(ss.AutoCompact))
+	ss.cache = utils.AppendInfoString(ss.cache, "major_version:", ss.MajorVersion)
+	ss.cache = utils.AppendInfoString(ss.cache, "raft_split:", utils.BoolToString(ss.RaftSplit))
+	ss.cache = utils.AppendInfoString(ss.cache, "forbid_raft_full_sync:", utils.BoolToString(ss.ForbidRaftFullSync))
+	ss.cache = utils.AppendInfoString(ss.cache, "forbid_raft_log_compaction:", utils.BoolToString(ss.ForbidRaftLogCompact))
 	ss.cache = append(ss.cache, '\n')
 }
 
@@ -166,7 +177,7 @@ func (sc *SinfoClient) Marshal() ([]byte, func()) {
 	sc.mutex.RLock()
 	defer sc.mutex.RUnlock()
 
-	info, closer := bytepools.BytePools.GetBytePool(len(sc.cache))
+	info, closer := bytepools.GlobalBytePools.GetBytePool(len(sc.cache))
 	num := copy(info[0:], sc.cache)
 	return info[:num], closer
 }
@@ -256,12 +267,10 @@ type SinfoStats struct {
 	QPS           atomic.Uint64
 	QueueLen      int
 	RaftLogIndex  uint64
-	IsDelExpire   int
 	StartModel    ModelType
 	DbSyncRunning atomic.Int32
 	DbSyncStatus  DbSyncStatusType
 	DbSyncErr     string
-	IsMigrate     atomic.Int32 `json:"is_migrate"`
 
 	mutex sync.RWMutex
 	cache []byte
@@ -271,7 +280,7 @@ func (ss *SinfoStats) Marshal() ([]byte, func()) {
 	ss.mutex.RLock()
 	defer ss.mutex.RUnlock()
 
-	info, closer := bytepools.BytePools.GetBytePool(len(ss.cache))
+	info, closer := bytepools.GlobalBytePools.GetBytePool(len(ss.cache))
 	num := copy(info[0:], ss.cache)
 	return info[:num], closer
 }
@@ -294,8 +303,6 @@ func (ss *SinfoStats) UpdateCache() {
 	ss.cache = utils.AppendInfoUint(ss.cache, "instantaneous_ops_per_sec:", ss.QPS.Load())
 	ss.cache = utils.AppendInfoUint(ss.cache, "sync_queue_length:", uint64(ss.QueueLen))
 	ss.cache = utils.AppendInfoUint(ss.cache, "raft_log_index:", ss.RaftLogIndex)
-	ss.cache = utils.AppendInfoInt(ss.cache, "is_del_expire:", int64(ss.IsDelExpire))
-	ss.cache = utils.AppendInfoInt(ss.cache, "is_migrate:", int64(ss.IsMigrate.Load()))
 	ss.cache = utils.AppendInfoInt(ss.cache, "db_sync_running:", int64(ss.DbSyncRunning.Load()))
 	ss.cache = utils.AppendInfoString(ss.cache, "db_sync_status:", ss.DbSyncStatus.String())
 	ss.cache = utils.AppendInfoString(ss.cache, "db_sync_err:", ss.DbSyncErr)
@@ -335,7 +342,7 @@ func (sd *SinfoData) Marshal() ([]byte, func()) {
 	sd.mutex.RLock()
 	defer sd.mutex.RUnlock()
 
-	info, closer := bytepools.BytePools.GetBytePool(len(sd.cache))
+	info, closer := bytepools.GlobalBytePools.GetBytePool(len(sd.cache))
 	num := copy(info[0:], sd.cache)
 	return info[:num], closer
 }
@@ -361,11 +368,9 @@ func (sd *SinfoData) UpdateCache() {
 	sd.cache = utils.AppendInfoInt(sd.cache, "disk_raft_nodehost_size:", sd.RaftNodeHostSize)
 	sd.cache = utils.AppendInfoInt(sd.cache, "disk_raft_wal_size:", sd.RaftWalSize)
 	sd.cache = utils.AppendInfoInt(sd.cache, "disk_snapshot_size:", sd.SnapshotSize)
-
-	sd.cache = utils.AppendInfoInt(sd.cache, "bithash_compression_type:", int64(config.GlobalConfig.Bitalos.BithashCompressionType))
+	sd.cache = utils.AppendInfoInt(sd.cache, "compression_type:", int64(config.GlobalConfig.Bitalos.CompressionType))
+	sd.cache = utils.AppendInfoString(sd.cache, "disable_store_key:", utils.BoolToString(config.GlobalConfig.Bitalos.DisableStoreKey))
 	sd.cache = utils.AppendInfoString(sd.cache, "cache_fmt_size:", butils.FmtSize(uint64(config.GlobalConfig.Bitalos.CacheSize.Int64())))
-	sd.cache = utils.AppendInfoString(sd.cache, "enable_wal:", boolToString(config.GlobalConfig.Bitalos.EnableWAL))
-	sd.cache = utils.AppendInfoString(sd.cache, "enable_raftlog_restore:", boolToString(config.GlobalConfig.Bitalos.EnableRaftlogRestore))
 
 	sd.cache = append(sd.cache, '\n')
 }
@@ -408,7 +413,7 @@ func (srs *SRuntimeStats) Marshal() ([]byte, func()) {
 	srs.mutex.RLock()
 	defer srs.mutex.RUnlock()
 
-	info, closer := bytepools.BytePools.GetBytePool(len(srs.cache))
+	info, closer := bytepools.GlobalBytePools.GetBytePool(len(srs.cache))
 	num := copy(info[0:], srs.cache)
 	return info[:num], closer
 }
@@ -482,7 +487,7 @@ func (srs *SRuntimeStats) Samples() {
 const (
 	infoRuntimeInterval = 4
 	infoClientInterval  = 16
-	infoDiskInterval    = 120
+	infoDiskInterval    = 180
 )
 
 func RunInfoCollection(s *Server) {
@@ -505,16 +510,21 @@ func RunInfoCollection(s *Server) {
 			db := s.GetDB()
 			if db != nil {
 				db.SetQPS(qps)
-				s.Info.Stats.RaftLogIndex = db.Meta.GetUpdateIndex()
-				if db.Migrate != nil {
-					s.Info.Stats.IsMigrate.Store(db.Migrate.IsMigrate.Load())
-				}
-				s.Info.Stats.IsDelExpire = db.GetIsDelExpire()
 			}
 
+			isServerUpdate := false
 			singleDegradeChange := s.Info.Server.SingleDegrade != config.GlobalConfig.Server.DegradeSingleNode
 			s.Info.Server.SingleDegrade = config.GlobalConfig.Server.DegradeSingleNode
 			if singleDegradeChange {
+				isServerUpdate = true
+			}
+
+			if s.isOpenRaft && s.Info.Server.RaftSplit != s.SlotSpliting() {
+				s.Info.Server.RaftSplit = s.SlotSpliting()
+				isServerUpdate = true
+			}
+
+			if isServerUpdate {
 				s.Info.Server.UpdateCache()
 			}
 
