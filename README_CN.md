@@ -49,8 +49,15 @@
 ```
 CPU:    Intel(R) Xeon(R) Platinum 8255C CPU @ 2.50GHz
 Memory: 384GB
-Disk:   2*3.5TB NVMe SSD
+Disk:   2*3.5TB SSD
 ```
+
+- Disk(File) IOPS(BW)
+
+|BlockSize| Write | RandWrite | Read | RandRead 
+|---------|----------|----------|------|-----
+| 4KB  | 294K(1150MiB/s)  | 232K(905MiB/s) | 446K(1742MiB/s) | 446K(1743MiB/s) 
+| 8KB | 266K(2080MiB/s) | 244K(1902MiB/s) | 309K(2414MiB/s) | 404K(3159MiB/s)
 
 ### 程序
 
