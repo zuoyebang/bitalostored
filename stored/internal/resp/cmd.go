@@ -15,14 +15,16 @@
 package resp
 
 const (
-	PING     string = "ping"
-	PONG     string = "pong"
-	ECHO     string = "echo"
-	TYPE     string = "type"
-	CONFIG   string = "config"
-	INFO     string = "info"
-	TIME     string = "time"
-	SHUTDOWN string = "shutdown"
+	PING        string = "ping"
+	PONG        string = "pong"
+	ECHO        string = "echo"
+	TYPE        string = "type"
+	CONFIG      string = "config"
+	INFO        string = "info"
+	CLUSTERINFO string = "clusterinfo"
+	SLOTINFO    string = "slotinfo"
+	TIME        string = "time"
+	SHUTDOWN    string = "shutdown"
 
 	DEL         string = "del"
 	TTL         string = "ttl"
@@ -34,7 +36,6 @@ const (
 	PEXPIRE     string = "pexpire"
 	PEXPIREAT   string = "pexpireat"
 	SCAN        string = "scan"
-	SCANSLOTID  string = "scanslotid"
 	SET         string = "set"
 	SETEX       string = "setex"
 	PSETEX      string = "psetex"
@@ -61,10 +62,14 @@ const (
 	SETRANGE string = "setrange"
 	STRLEN   string = "strlen"
 
-	BITCOUNT string = "bitcount"
-	BITPOS   string = "bitpos"
-	GETBIT   string = "getbit"
-	SETBIT   string = "setbit"
+	BITCOUNT   string = "bitcount"
+	BITPOS     string = "bitpos"
+	GETBIT     string = "getbit"
+	SETBIT     string = "setbit"
+	BITCOUNT64 string = "bitcount64"
+	BITPOS64   string = "bitpos64"
+	GETBIT64   string = "getbit64"
+	SETBIT64   string = "setbit64"
 
 	HSET    string = "hset"
 	HMSET   string = "hmset"
@@ -77,7 +82,7 @@ const (
 	HDEL    string = "hdel"
 	HINCRBY string = "hincrby"
 	HGETALL string = "hgetall"
-	HSCAN   string = "hscan"
+	//HSCAN   string = "hscan"
 
 	HCLEAR     string = "hclear"
 	HEXPIRE    string = "hexpire"
@@ -93,7 +98,7 @@ const (
 	SISMEMBER   string = "sismember"
 	SMEMBERS    string = "smembers"
 	SRANDMEMBER string = "srandmember"
-	SSCAN       string = "sscan"
+	//SSCAN       string = "sscan"
 
 	SCLEAR     string = "sclear"
 	SEXPIRE    string = "sexpire"
@@ -118,7 +123,7 @@ const (
 	ZREVRANK         string = "zrevrank"
 	ZREMRANGEBYLEX   string = "zremrangebylex"
 	ZLEXCOUNT        string = "zlexcount"
-	ZSCAN            string = "zscan"
+	//ZSCAN            string = "zscan"
 
 	ZCLEAR      string = "zclear"
 	ZEXPIRE     string = "zexpire"
@@ -128,19 +133,17 @@ const (
 	ZKEYEXISTS  string = "zkeyexists"
 	ZRANGEBYLEX string = "zrangebylex"
 
-	LPUSH   string = "lpush"
-	RPUSH   string = "rpush"
-	LPOP    string = "lpop"
-	RPOP    string = "rpop"
-	LLEN    string = "llen"
-	LINDEX  string = "lindex"
-	LRANGE  string = "lrange"
-	LREM    string = "lrem"
-	LINSERT string = "linsert"
-	LSET    string = "lset"
-	LTRIM   string = "ltrim"
-	LPUSHX  string = "lpushx"
-	RPUSHX  string = "rpushx"
+	LPUSH  string = "lpush"
+	RPUSH  string = "rpush"
+	LPOP   string = "lpop"
+	RPOP   string = "rpop"
+	LLEN   string = "llen"
+	LINDEX string = "lindex"
+	LRANGE string = "lrange"
+	LSET   string = "lset"
+	LTRIM  string = "ltrim"
+	LPUSHX string = "lpushx"
+	RPUSHX string = "rpushx"
 
 	LCLEAR     string = "lclear"
 	LMCLEAR    string = "lmclear"
@@ -149,12 +152,10 @@ const (
 	LTTL       string = "lttl"
 	LPERSIST   string = "lpersist"
 	LKEYEXISTS string = "lkeyexists"
-	LTRIMBACK  string = "ltrim_back"
-	LTRIMFRONT string = "ltrim_front"
 
-	XHSCAN string = "xhscan"
-	XSSCAN string = "xsscan"
-	XZSCAN string = "xzscan"
+	//XHSCAN string = "xhscan"
+	//XSSCAN string = "xsscan"
+	//XZSCAN string = "xzscan"
 
 	GEOADD            string = "geoadd"
 	GEODIST           string = "geodist"
@@ -176,6 +177,21 @@ const (
 	PREPARE string = "prepare"
 	EXEC    string = "exec"
 	DISCARD string = "discard"
+
+	DKCREATE      string = "dk.create"
+	DKCREATESHARD string = "dk.createshard"
+	DKINFO        string = "dk.info"
+	DKINCRBYSIZE  string = "dk.incrbysize"
+	DKHSET        string = "dk.hset"
+	DKHDEL        string = "dk.hdel"
+	DKHGET        string = "dk.hget"
+	DKHMGET       string = "dk.hmget"
+	DKSADD        string = "dk.sadd"
+	DKSPOP        string = "dk.spop"
+	DKSREM        string = "dk.srem"
+
+	DERAFT_TO_OBSERVER string = "derafttoobserver"
+	DERAFT_TO_WITNESS  string = "derafttowitness"
 )
 
 var commandToWrite = map[string]bool{
@@ -184,14 +200,11 @@ var commandToWrite = map[string]bool{
 	ECHO: false,
 	TYPE: false,
 
-	SCAN:       false,
-	SCANSLOTID: false,
-	HSCAN:      false,
-	XHSCAN:     false,
-	XSSCAN:     false,
-	SSCAN:      false,
-	XZSCAN:     false,
-	ZSCAN:      false,
+	//SCAN:   false,
+	//XHSCAN: false,
+	//XSSCAN: false,
+	//XZSCAN: false,
+	//ZSCAN:  false,
 
 	DEL:       true,
 	PERSIST:   true,
@@ -225,28 +238,24 @@ var commandToWrite = map[string]bool{
 	HKEYEXISTS: false,
 	HTTL:       false,
 
-	LREM:    true,
-	LINSERT: true,
-	LPUSHX:  true,
-	RPUSHX:  true,
-	LPOP:    true,
-	LPUSH:   true,
-	RPOP:    true,
-	RPUSH:   true,
-	LSET:    true,
+	LPUSHX: true,
+	RPUSHX: true,
+	LPOP:   true,
+	LPUSH:  true,
+	RPOP:   true,
+	RPUSH:  true,
+	LSET:   true,
 
 	LINDEX: false,
 	LLEN:   false,
 	LRANGE: false,
 
-	LCLEAR:     true,
-	LMCLEAR:    true,
-	LEXPIRE:    true,
-	LEXPIREAT:  true,
-	LPERSIST:   true,
-	LTRIMFRONT: true,
-	LTRIMBACK:  true,
-	LTRIM:      true,
+	LCLEAR:    true,
+	LMCLEAR:   true,
+	LEXPIRE:   true,
+	LEXPIREAT: true,
+	LPERSIST:  true,
+	LTRIM:     true,
 
 	LTTL:       false,
 	LKEYEXISTS: false,
@@ -264,7 +273,6 @@ var commandToWrite = map[string]bool{
 	SETEX:       true,
 	PSETEX:      true,
 	SETRANGE:    true,
-	SETBIT:      true,
 	KDEL:        true,
 	KEXPIRE:     true,
 	KEXPIREAT:   true,
@@ -276,9 +284,15 @@ var commandToWrite = map[string]bool{
 	STRLEN:   false,
 	KEXISTS:  false,
 	GET:      false,
-	BITCOUNT: false,
-	BITPOS:   false,
-	GETBIT:   false,
+
+	SETBIT:     true,
+	BITCOUNT:   false,
+	BITPOS:     false,
+	GETBIT:     false,
+	SETBIT64:   true,
+	BITCOUNT64: false,
+	BITPOS64:   false,
+	GETBIT64:   false,
 
 	SADD:      true,
 	SREM:      true,
@@ -337,6 +351,18 @@ var commandToWrite = map[string]bool{
 	PREPARE: false,
 	EXEC:    false,
 	DISCARD: false,
+
+	DKCREATE:      true,
+	DKCREATESHARD: true,
+	DKINCRBYSIZE:  true,
+	DKINFO:        false,
+	DKHSET:        true,
+	DKHDEL:        true,
+	DKHGET:        false,
+	DKHMGET:       false,
+	DKSADD:        true,
+	DKSPOP:        true,
+	DKSREM:        true,
 }
 
 func IsWriteCmd(cmd string) bool {

@@ -35,11 +35,7 @@ var (
 )
 
 func EncodeWGS84(longitude, latitude float64) (uint64, error) {
-	if hash, err := Encode(
-		WGS84_LONG_RANGE,
-		WGS84_LAT_RANGE,
-		longitude, latitude,
-		WGS84_GEO_STEP); err != nil {
+	if hash, err := Encode(WGS84_LONG_RANGE, WGS84_LAT_RANGE, longitude, latitude, WGS84_GEO_STEP); err != nil {
 		return 0, err
 	} else {
 		return hash.Bits, nil
@@ -47,11 +43,7 @@ func EncodeWGS84(longitude, latitude float64) (uint64, error) {
 }
 
 func DecodeWGS84(bits uint64) *Area {
-	return decode(
-		WGS84_LONG_RANGE,
-		WGS84_LAT_RANGE,
-		HashBits{Bits: bits, Step: WGS84_GEO_STEP},
-	)
+	return decode(WGS84_LONG_RANGE, WGS84_LAT_RANGE, HashBits{Bits: bits, Step: WGS84_GEO_STEP})
 }
 
 func DecodeToLongLatWGS84(bits uint64) (float64, float64) {

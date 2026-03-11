@@ -15,7 +15,7 @@
 package server
 
 import (
-	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/btools"
+	"github.com/zuoyebang/bitalostored/stored/engine/btools"
 	"github.com/zuoyebang/bitalostored/stored/internal/errn"
 	"github.com/zuoyebang/bitalostored/stored/internal/resp"
 	"github.com/zuoyebang/bitalostored/stored/internal/utils"
@@ -64,15 +64,15 @@ func hgetCommand(c *Client) error {
 		return errn.CmdParamsErr(resp.HGET)
 	}
 
-	v, vCloser, err := c.DB.HGet(args[0], c.KeyHash, args[1])
-	defer func() {
-		if vCloser != nil {
-			vCloser()
-		}
-	}()
+	v, closer, err := c.DB.HGet(args[0], c.KeyHash, args[1])
 	if err != nil {
 		return err
 	}
+	defer func() {
+		if closer != nil {
+			closer()
+		}
+	}()
 
 	c.Writer.WriteBulk(v)
 	return nil
@@ -140,19 +140,16 @@ func hincrbyCommand(c *Client) error {
 		return errn.CmdParamsErr(resp.HINCRBY)
 	}
 
-	delta, err := utils.ByteToInt64(args[2])
-
+	increment, err := utils.ByteToInt64(args[2])
 	if err != nil {
 		return errn.ErrValue
 	}
 
 	var n int64
-
-	if n, err = c.DB.HIncrBy(args[0], c.KeyHash, args[1], delta); err != nil {
+	if n, err = c.DB.HIncrBy(args[0], c.KeyHash, args[1], increment); err != nil {
 		return err
-	} else {
-		c.Writer.WriteInteger(n)
 	}
+	c.Writer.WriteInteger(n)
 	return nil
 }
 
@@ -167,21 +164,11 @@ func hmsetCommand(c *Client) error {
 	}
 
 	key := args[0]
-
-	args = args[1:]
-
-	kvs := make([]btools.FVPair, len(args)/2)
-	for i := 0; i < len(kvs); i++ {
-		kvs[i].Field = args[2*i]
-		kvs[i].Value = args[2*i+1]
-	}
-
+	kvs := args[1:]
 	if err := c.DB.HMset(key, c.KeyHash, kvs...); err != nil {
 		return err
-	} else {
-		c.Writer.WriteStatus(resp.ReplyOK)
 	}
-
+	c.Writer.WriteStatus(resp.ReplyOK)
 	return nil
 }
 
@@ -211,21 +198,21 @@ func hgetallCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 1 {
 		return errn.CmdParamsErr(resp.HGETALL)
-	}
-
-	v, closers, err := c.DB.HGetAll(args[0], c.KeyHash)
-	defer func() {
-		if len(closers) > 0 {
-			for _, closer := range closers {
-				closer()
-			}
-		}
-	}()
-	if err != nil {
+	} else if err := btools.CheckKeySize(args[0]); err != nil {
 		return err
 	}
 
-	c.Writer.WriteFVPairArray(v)
+	v, closer, err := c.DB.HGetAll(args[0], c.KeyHash)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if closer != nil {
+			closer()
+		}
+	}()
+
+	c.Writer.WriteSliceArray(v)
 	return nil
 }
 
@@ -233,19 +220,19 @@ func hkeysCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 1 {
 		return errn.CmdParamsErr(resp.HKEYS)
+	} else if err := btools.CheckKeySize(args[0]); err != nil {
+		return err
 	}
 
-	v, closers, err := c.DB.HKeys(args[0], c.KeyHash)
-	defer func() {
-		if len(closers) > 0 {
-			for _, closer := range closers {
-				closer()
-			}
-		}
-	}()
+	v, closer, err := c.DB.HKeys(args[0], c.KeyHash)
 	if err != nil {
 		return err
 	}
+	defer func() {
+		if closer != nil {
+			closer()
+		}
+	}()
 
 	c.Writer.WriteSliceArray(v)
 	return nil
@@ -255,19 +242,19 @@ func hvalsCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 1 {
 		return errn.CmdParamsErr(resp.HVALS)
+	} else if err := btools.CheckKeySize(args[0]); err != nil {
+		return err
 	}
 
-	v, closers, err := c.DB.HValues(args[0], c.KeyHash)
-	defer func() {
-		if len(closers) > 0 {
-			for _, closer := range closers {
-				closer()
-			}
-		}
-	}()
+	v, closer, err := c.DB.HValues(args[0], c.KeyHash)
 	if err != nil {
 		return err
 	}
+	defer func() {
+		if closer != nil {
+			closer()
+		}
+	}()
 
 	c.Writer.WriteSliceArray(v)
 	return nil
@@ -334,7 +321,7 @@ func httlCommand(c *Client) error {
 		return errn.CmdParamsErr(resp.HTTL)
 	}
 
-	if v, err := c.DB.TTl(args[0], c.KeyHash); err != nil {
+	if v, err := c.DB.TTL(args[0], c.KeyHash); err != nil {
 		return err
 	} else {
 		c.Writer.WriteInteger(v)

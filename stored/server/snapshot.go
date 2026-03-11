@@ -18,15 +18,16 @@ import (
 	"errors"
 	"io"
 	"os"
+	"path"
 
 	"github.com/zuoyebang/bitalostored/stored/engine"
-	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/btools"
 	"github.com/zuoyebang/bitalostored/stored/internal/config"
+	"github.com/zuoyebang/bitalostored/stored/internal/errn"
 	"github.com/zuoyebang/bitalostored/stored/internal/log"
+	"github.com/zuoyebang/bitalostored/stored/internal/trycatch"
 )
 
-func (s *Server) PrepareSnapshot() (ls interface{}, err error) {
-	log.Info("start prepareSnapshot")
+func (s *Server) PrepareSnapshot(clusterId uint64, nodePrepare func(string) error) (ls interface{}, err error) {
 	if !s.syncDataDoing.CompareAndSwap(0, 1) {
 		return ls, errors.New("prepare snapshot is running")
 	}
@@ -34,7 +35,7 @@ func (s *Server) PrepareSnapshot() (ls interface{}, err error) {
 	defer func() {
 		s.syncDataDoing.Store(0)
 		if err != nil {
-			log.Errorf("server PrepareSnapshot fail err:%s", err.Error())
+			log.Errorf("server PrepareSnapshot fail err:%s", err)
 			s.Info.Stats.DbSyncErr = err.Error()
 			s.Info.Stats.DbSyncStatus = DB_SYNC_PREPARE_FAIL
 		}
@@ -42,47 +43,65 @@ func (s *Server) PrepareSnapshot() (ls interface{}, err error) {
 
 	m := s.GetDB()
 	if m.IsBitsdbClosed() {
-		return ls, errors.New("bitsdb closed")
+		return ls, errn.ErrBitsdbClosed
 	}
 
 	if !s.dbSyncing.CompareAndSwap(0, 1) {
 		return ls, err
 	}
 
-	m.Flush(btools.FlushTypeCheckpoint, 0)
-
-	m.CheckpointPrepareStart()
 	defer func() {
-		m.CheckpointPrepareEnd()
 		if err != nil {
 			s.dbSyncing.Store(0)
+			if sd, ok := ls.(*engine.SnapshotDetail); ok {
+				sd.Clean()
+			}
 		}
 	}()
 
+	var ckCloser func()
+	snapshotRoot := config.GetBitalosSnapshotPath()
+	ls, ckCloser, err = m.DoSnapshot(snapshotRoot, nodePrepare, clusterId)
+	if err != nil {
+		return nil, err
+	}
+
+	s.snapshotDoneCh = make(chan struct{})
+	wait := make(chan struct{})
+	go func() {
+		close(wait)
+		select {
+		case <-s.snapshotDoneCh:
+			log.Info("snapshot finished")
+			func() {
+				trycatch.Panic("PrepareSnapshot ckCloser", recover())
+				ckCloser()
+			}()
+		}
+		s.dbSyncing.Store(0)
+		m.CleanSnapshot(clusterId)
+	}()
+
+	<-wait
 	s.Info.Stats.DbSyncStatus = DB_SYNC_PREPARE_SUCC
-	defer log.Cost("bitalos PrepareSnapshot DoSnapshot ")()
-	snapshotPath := config.GetBitalosSnapshotPath()
-	ls, err = m.DoSnapshot(snapshotPath)
-	return ls, err
+
+	return ls, nil
 }
 
 func (s *Server) SaveSnapshot(ctx interface{}, w io.Writer, done <-chan struct{}) error {
-	db := s.GetDB()
-
-	defer func() {
-		s.dbSyncing.Store(0)
-		db.CleanSnapshot()
-	}()
-
 	if !s.syncDataDoing.CompareAndSwap(0, 1) {
 		return errors.New("save snapshot is running")
 	}
 
-	defer s.syncDataDoing.Store(0)
+	defer func() {
+		close(s.snapshotDoneCh)
+		s.syncDataDoing.Store(0)
+	}()
+
 	s.Info.Stats.DbSyncRunning.Store(DB_SYNC_RUN_TYPE_SEND)
 	s.Info.Stats.DbSyncErr = ""
 	s.Info.Stats.DbSyncStatus = DB_SYNC_SENDING
-	err := db.SaveSnapshot(ctx, w, done)
+	err := s.GetDB().SaveSnapshot(ctx, w, done)
 	if err != nil {
 		s.Info.Stats.DbSyncErr = err.Error()
 		s.Info.Stats.DbSyncStatus = DB_SYNC_SEND_FAIL
@@ -94,7 +113,7 @@ func (s *Server) SaveSnapshot(ctx interface{}, w io.Writer, done <-chan struct{}
 	return err
 }
 
-func (s *Server) RecoverFromSnapshot(r io.Reader, done <-chan struct{}) error {
+func (s *Server) RecoverFromSnapshot(r io.Reader, done <-chan struct{}, clusterId uint64, reloadMeta func() error) error {
 	s.Info.Stats.DbSyncErr = ""
 	s.Info.Stats.DbSyncStatus = DB_SYNC_RECVING
 	s.Info.Stats.DbSyncRunning.Store(DB_SYNC_RUN_TYPE_RECV)
@@ -131,12 +150,22 @@ func (s *Server) RecoverFromSnapshot(r io.Reader, done <-chan struct{}) error {
 		return err
 	}
 
+	raftMetaFile := config.GetRaftNodeMetaFile(clusterId)
+	syncMetaFile := path.Join(dbsyncPath, raftMetaFile)
+	dstMetaFile := path.Join(config.GetRaftMetaPath(), raftMetaFile)
+	if err = os.Rename(syncMetaFile, dstMetaFile); err != nil {
+		s.Info.Stats.DbSyncErr = err.Error()
+		log.Errorf("recoverFromSnapshot rename %s to %s fail err:%s", syncMetaFile, dstMetaFile, s.Info.Stats.DbSyncErr)
+		s.Info.Stats.DbSyncStatus = DB_SYNC_RECVING_FAIL
+		return err
+	}
 	if err = os.Rename(dbsyncPath, dataPath); err != nil {
 		s.Info.Stats.DbSyncErr = err.Error()
 		log.Errorf("recoverFromSnapshot rename %s to %s fail err:%s", dbsyncPath, dataPath, s.Info.Stats.DbSyncErr)
 		s.Info.Stats.DbSyncStatus = DB_SYNC_RECVING_FAIL
 		return err
 	}
+	reloadMeta()
 	log.Infof("recoverFromSnapshot rename %s to %s success", dbsyncPath, dataPath)
 
 	db, err := engine.NewBitalos(dataPath)

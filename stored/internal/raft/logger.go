@@ -15,9 +15,15 @@
 package raft
 
 import (
-	"github.com/zuoyebang/bitalostored/raft/logger"
+	"github.com/zuoyebang/bitalosraft/logger"
 	"github.com/zuoyebang/bitalostored/stored/internal/log"
 )
+
+func init() {
+	logger.SetLoggerFactory(func(name string) logger.ILogger {
+		return DefaultLogger
+	})
+}
 
 var DefaultLogger = &DLog{}
 

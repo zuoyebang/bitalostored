@@ -20,12 +20,14 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/zuoyebang/bitalostored/butils/extend"
-	"github.com/zuoyebang/bitalostored/butils/unsafe2"
-	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/btools"
+	"github.com/zuoyebang/bitalostored/stored/engine/btools"
 	"github.com/zuoyebang/bitalostored/stored/internal/errn"
 	"github.com/zuoyebang/bitalostored/stored/internal/resp"
 	"github.com/zuoyebang/bitalostored/stored/internal/utils"
+
+	"github.com/zuoyebang/bitalostored/butils/extend"
+	"github.com/zuoyebang/bitalostored/butils/numeric"
+	"github.com/zuoyebang/bitalostored/butils/unsafe2"
 )
 
 func init() {
@@ -60,25 +62,27 @@ func zaddCommand(c *Client) error {
 	args := c.Args
 	if len(args) < 3 {
 		return errn.CmdParamsErr(resp.ZADD)
-	}
-
-	if len(args[1:])&1 != 0 {
+	} else if len(args[1:])&1 != 0 {
 		return errn.CmdParamsErr(resp.ZADD)
+	} else if err := btools.CheckKeySize(args[0]); err != nil {
+		return err
 	}
 
 	key := args[0]
 	args = args[1:]
+	argNum := len(args)
+	params := make([][]byte, 0, argNum)
+	for i := 0; i < argNum; i += 2 {
+		if err := btools.CheckFieldSize(args[i+1]); err != nil {
+			return err
+		}
 
-	params := make([]btools.ScorePair, len(args)>>1)
-	for i := 0; i < len(params); i++ {
-
-		score, err := extend.ParseFloat64(unsafe2.String(args[2*i]))
+		score, err := extend.ParseFloat64(unsafe2.String(args[i]))
 		if err != nil || score < float64(math.MinInt64) || score > float64(math.MaxInt64) {
 			return errn.ErrValue
 		}
 
-		params[i].Score = score
-		params[i].Member = args[2*i+1]
+		params = append(params, numeric.Float64ToByteSort(score, nil), args[i+1])
 	}
 
 	n, err := c.DB.ZAdd(key, c.KeyHash, params...)
@@ -94,19 +98,18 @@ func zincrbyCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 3 {
 		return errn.CmdParamsErr(resp.ZINCRBY)
+	} else if err := btools.CheckKeySize(args[0]); err != nil {
+		return err
 	}
-
-	delta, err := extend.ParseFloat64(unsafe2.String(args[1]))
+	increment, err := extend.ParseFloat64(unsafe2.String(args[1]))
 	if err != nil {
 		return errn.ErrValue
 	}
 
-	key := args[0]
-
-	v, err := c.DB.ZIncrBy(key, c.KeyHash, delta, args[2])
-
+	var n float64
+	n, err = c.DB.ZIncrBy(args[0], c.KeyHash, increment, args[2])
 	if err == nil {
-		c.Writer.WriteBulk(extend.FormatFloat64ToSlice(v))
+		c.Writer.WriteBulk(extend.FormatFloat64ToSlice(n))
 	}
 
 	return err
@@ -116,6 +119,8 @@ func zremCommand(c *Client) error {
 	args := c.Args
 	if len(args) < 2 {
 		return errn.CmdParamsErr(resp.ZREM)
+	} else if err := btools.CheckKeySize(args[0]); err != nil {
+		return err
 	}
 
 	n, err := c.DB.ZRem(args[0], c.KeyHash, args[1:]...)
@@ -131,17 +136,17 @@ func zremrangebyscoreCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 3 {
 		return errn.CmdParamsErr(resp.ZREMRANGEBYSCORE)
+	} else if err := btools.CheckKeySize(args[0]); err != nil {
+		return err
 	}
 
-	min, max, leftClose, rightClose, err := zparseScoreRange(args[1], args[2])
+	minScore, maxScore, leftClose, rightClose, err := zparseScoreRange(args[1], args[2])
 	if err != nil {
 		return err
 	}
 
-	key := args[0]
-
-	n, err := c.DB.ZRemRangeByScore(key, c.KeyHash, min, max, leftClose, rightClose)
-
+	var n int64
+	n, err = c.DB.ZRemRangeByScore(args[0], c.KeyHash, minScore, maxScore, leftClose, rightClose)
 	if err == nil {
 		c.Writer.WriteInteger(n)
 	}
@@ -153,16 +158,16 @@ func zremrangebyrankCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 3 {
 		return errn.CmdParamsErr(resp.ZREMRANGEBYRANK)
+	} else if err := btools.CheckKeySize(args[0]); err != nil {
+		return err
 	}
 
 	start, stop, err := zparseRange(args[1], args[2])
 	if err != nil {
 		return errn.ErrValue
 	}
-
-	key := args[0]
-	n, err := c.DB.ZRemRangeByRank(key, c.KeyHash, start, stop)
-
+	var n int64
+	n, err = c.DB.ZRemRangeByRank(args[0], c.KeyHash, start, stop)
 	if err == nil {
 		c.Writer.WriteInteger(n)
 	}
@@ -174,21 +179,22 @@ func zremrangebylexCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 3 {
 		return errn.CmdParamsErr(resp.ZREMRANGEBYLEX)
+	} else if err := btools.CheckKeySize(args[0]); err != nil {
+		return err
 	}
 
-	min, max, leftClose, rightClose, err := zparseLexMemberRange(args[1], args[2])
+	minScore, maxScore, leftClose, rightClose, err := zparseLexMemberRange(args[1], args[2])
 	if err != nil {
 		return err
 	}
 
-	key := args[0]
-
-	if n, err := c.DB.ZRemRangeByLex(key, c.KeyHash, min, max, leftClose, rightClose); err != nil {
+	var n int64
+	n, err = c.DB.ZRemRangeByLex(args[0], c.KeyHash, minScore, maxScore, leftClose, rightClose)
+	if err != nil {
 		return err
-	} else {
-		c.Writer.WriteInteger(n)
 	}
 
+	c.Writer.WriteInteger(n)
 	return nil
 }
 
@@ -196,11 +202,9 @@ func zparseRange(a1 []byte, a2 []byte) (start int64, stop int64, err error) {
 	if start, err = strconv.ParseInt(unsafe2.String(a1), 10, 64); err != nil {
 		return
 	}
-
 	if stop, err = strconv.ParseInt(unsafe2.String(a2), 10, 64); err != nil {
 		return
 	}
-
 	return
 }
 
@@ -208,18 +212,18 @@ func zrangeGeneric(c *Client, reverse bool, cmd string) error {
 	args := c.Args
 	if len(args) < 3 {
 		return errn.CmdParamsErr(resp.ZRANGE)
+	} else if err := btools.CheckKeySize(args[0]); err != nil {
+		return err
 	}
-
-	key := args[0]
 
 	start, stop, err := zparseRange(args[1], args[2])
 	if err != nil {
 		return errn.ErrValue
 	}
 
+	key := args[0]
 	args = args[3:]
-	var withScores bool = false
-
+	var withScores bool
 	if len(args) > 0 {
 		if len(args) != 1 {
 			return errn.CmdParamsErr(cmd)
@@ -231,11 +235,23 @@ func zrangeGeneric(c *Client, reverse bool, cmd string) error {
 		}
 	}
 
-	if datas, err := c.DB.ZRangeGeneric(key, c.KeyHash, start, stop, reverse); err != nil {
-		return err
+	var res []btools.ScorePair
+	var closer func()
+	if reverse {
+		res, closer, err = c.DB.ZRevRange(key, c.KeyHash, start, stop)
 	} else {
-		c.Writer.WriteScorePairArray(datas, withScores)
+		res, closer, err = c.DB.ZRange(key, c.KeyHash, start, stop)
 	}
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if closer != nil {
+			closer()
+		}
+	}()
+
+	c.Writer.WriteScorePairArray(res, withScores)
 	return nil
 }
 
@@ -251,16 +267,17 @@ func zrangebylexCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 3 && len(args) != 6 {
 		return errn.CmdParamsErr(resp.ZRANGEBYLEX)
+	} else if err := btools.CheckKeySize(args[0]); err != nil {
+		return err
 	}
 
-	min, max, leftClose, rightClose, err := zparseLexMemberRange(args[1], args[2])
+	minScore, maxScore, leftClose, rightClose, err := zparseLexMemberRange(args[1], args[2])
 	if err != nil {
 		return err
 	}
 
-	var offset int = 0
-	var count int = -1
-
+	var offset int
+	count := -1
 	if len(args) == 6 {
 		if strings.ToLower(unsafe2.String(args[3])) != "limit" {
 			return errn.ErrSyntax
@@ -280,13 +297,13 @@ func zrangebylexCommand(c *Client) error {
 		}
 	}
 
-	key := args[0]
-
-	if ay, err := c.DB.ZRangeByLex(key, c.KeyHash, min, max, leftClose, rightClose, offset, count); err != nil {
+	res, closer, err := c.DB.ZRangeByLex(args[0], c.KeyHash, minScore, maxScore, leftClose, rightClose, offset, count)
+	if err != nil {
 		return err
-	} else {
-		c.Writer.WriteSliceArray(ay)
 	}
+	defer closer()
+
+	c.Writer.WriteSliceArray(res)
 
 	return nil
 }
@@ -295,27 +312,26 @@ func zrangebyscoreGeneric(c *Client, reverse bool) error {
 	args := c.Args
 	if len(args) < 3 {
 		return errn.CmdParamsErr(resp.ZRANGEBYSCORE)
+	} else if err := btools.CheckKeySize(args[0]); err != nil {
+		return err
 	}
 
-	key := args[0]
-
 	var minScore, maxScore []byte
-
 	if !reverse {
 		minScore, maxScore = args[1], args[2]
 	} else {
 		minScore, maxScore = args[2], args[1]
 	}
-
 	min, max, leftClose, rightClose, err := zparseScoreRange(minScore, maxScore)
-
 	if err != nil {
 		return err
 	}
 
+	key := args[0]
 	args = args[3:]
 
-	var withScores bool = false
+	var withScores bool
+	var offset, count int
 
 	if len(args) > 0 {
 		if strings.ToLower(unsafe2.String(args[0])) == "withscores" {
@@ -324,9 +340,7 @@ func zrangebyscoreGeneric(c *Client, reverse bool) error {
 		}
 	}
 
-	var offset int = 0
-	var count int = -1
-
+	count = -1
 	if len(args) > 0 {
 		if len(args) < 3 {
 			return errn.CmdParamsErr(resp.ZRANGEBYSCORE)
@@ -338,6 +352,9 @@ func zrangebyscoreGeneric(c *Client, reverse bool) error {
 
 		if offset, err = strconv.Atoi(unsafe2.String(args[1])); err != nil {
 			return errn.ErrValue
+		} else if offset < 0 {
+			c.Writer.WriteArray([]interface{}{})
+			return nil
 		}
 
 		if count, err = strconv.Atoi(unsafe2.String(args[2])); err != nil {
@@ -351,17 +368,23 @@ func zrangebyscoreGeneric(c *Client, reverse bool) error {
 		}
 	}
 
-	if offset < 0 {
-		c.Writer.WriteArray([]interface{}{})
-		return nil
-	}
-
-	if datas, err := c.DB.ZRangeByScoreGeneric(key, c.KeyHash, min, max, leftClose, rightClose, offset, count, reverse); err != nil {
-		return err
+	var res []btools.ScorePair
+	var closer func()
+	if reverse {
+		res, closer, err = c.DB.ZRevRangeByScore(key, c.KeyHash, min, max, leftClose, rightClose, offset, count)
 	} else {
-		c.Writer.WriteScorePairArray(datas, withScores)
+		res, closer, err = c.DB.ZRangeByScore(key, c.KeyHash, min, max, leftClose, rightClose, offset, count)
 	}
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if closer != nil {
+			closer()
+		}
+	}()
 
+	c.Writer.WriteScorePairArray(res, withScores)
 	return nil
 }
 
@@ -378,8 +401,9 @@ func zrankCommand(c *Client) error {
 	if len(args) != 2 {
 		return errn.CmdParamsErr(resp.ZRANK)
 	}
+
 	if n, err := c.DB.ZRank(args[0], c.KeyHash, args[1]); err != nil {
-		if err == errn.ErrZsetMemberNil {
+		if err == btools.ErrZsetMemberNil {
 			c.Writer.WriteBulk(nil)
 		} else {
 			return err
@@ -400,7 +424,7 @@ func zrevrankCommand(c *Client) error {
 	}
 
 	if n, err := c.DB.ZRevRank(args[0], c.KeyHash, args[1]); err != nil {
-		if err == errn.ErrZsetMemberNil {
+		if err == btools.ErrZsetMemberNil {
 			c.Writer.WriteBulk(nil)
 		} else {
 			return err
@@ -421,7 +445,7 @@ func zscoreCommand(c *Client) error {
 	}
 
 	if s, err := c.DB.ZScore(args[0], c.KeyHash, args[1]); err != nil {
-		if err == errn.ErrZsetMemberNil {
+		if err == btools.ErrZsetMemberNil {
 			c.Writer.WriteBulk(nil)
 		} else {
 			return err
@@ -437,21 +461,20 @@ func zlexcountCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 3 {
 		return errn.CmdParamsErr(resp.ZLEXCOUNT)
+	} else if err := btools.CheckKeySize(args[0]); err != nil {
+		return err
 	}
 
-	min, max, leftClose, rightClose, err := zparseLexMemberRange(args[1], args[2])
+	minScore, maxScore, leftClose, rightClose, err := zparseLexMemberRange(args[1], args[2])
 	if err != nil {
 		return err
 	}
 
-	key := args[0]
-
-	if n, err := c.DB.ZLexCount(key, c.KeyHash, min, max, leftClose, rightClose); err != nil {
+	n, err := c.DB.ZLexCount(args[0], c.KeyHash, minScore, maxScore, leftClose, rightClose)
+	if err != nil {
 		return err
-	} else {
-		c.Writer.WriteInteger(n)
 	}
-
+	c.Writer.WriteInteger(n)
 	return nil
 }
 
@@ -459,25 +482,23 @@ func zcountCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 3 {
 		return errn.CmdParamsErr(resp.ZCOUNT)
+	} else if err := btools.CheckKeySize(args[0]); err != nil {
+		return err
 	}
 
-	min, max, leftClose, rightClose, err := zparseScoreRange(args[1], args[2])
-
+	minScore, maxScore, leftClose, rightClose, err := zparseScoreRange(args[1], args[2])
 	if err != nil {
 		return errn.ErrValue
-	}
-
-	if min > max {
+	} else if minScore > maxScore {
 		c.Writer.WriteInteger(0)
 		return nil
 	}
 
-	if n, err := c.DB.ZCount(args[0], c.KeyHash, min, max, leftClose, rightClose); err != nil {
+	n, err := c.DB.ZCount(args[0], c.KeyHash, minScore, maxScore, leftClose, rightClose)
+	if err != nil {
 		return err
-	} else {
-		c.Writer.WriteInteger(n)
 	}
-
+	c.Writer.WriteInteger(n)
 	return nil
 }
 
@@ -571,7 +592,7 @@ func zttlCommand(c *Client) error {
 		return errn.CmdParamsErr(resp.ZTTL)
 	}
 
-	if v, err := c.DB.TTl(args[0], c.KeyHash); err != nil {
+	if v, err := c.DB.TTL(args[0], c.KeyHash); err != nil {
 		return err
 	} else {
 		c.Writer.WriteInteger(v)
@@ -635,7 +656,10 @@ func zparseLexMemberRange(minBuf []byte, maxBuf []byte) (min []byte, max []byte,
 	return
 }
 
-func zparseScoreRange(minBuf []byte, maxBuf []byte) (minFloat64 float64, maxFloat64 float64, leftClose bool, rightClose bool, err error) {
+func zparseScoreRange(minBuf []byte, maxBuf []byte) (
+	minFloat64 float64, maxFloat64 float64,
+	leftClose bool, rightClose bool, err error,
+) {
 	if strings.ToLower(unsafe2.String(minBuf)) == "-inf" {
 		minFloat64 = -math.MaxFloat64
 	} else {

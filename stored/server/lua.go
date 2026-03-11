@@ -15,18 +15,19 @@
 package server
 
 import (
+	"github.com/zuoyebang/bitalostored/stored/internal/log"
 	"bufio"
 	"bytes"
 	"errors"
 	"fmt"
+	"github.com/yuin/gopher-lua/parse"
 	"strings"
 	"sync"
 
-	lua "github.com/yuin/gopher-lua"
-	"github.com/yuin/gopher-lua/parse"
-	"github.com/zuoyebang/bitalostored/stored/internal/log"
 	"github.com/zuoyebang/bitalostored/stored/internal/luajson"
 	"github.com/zuoyebang/bitalostored/stored/internal/utils"
+
+	lua "github.com/yuin/gopher-lua"
 )
 
 var luaClientPool sync.Pool

@@ -16,6 +16,7 @@ package server
 
 import (
 	"fmt"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -160,7 +161,7 @@ func (c *Client) FormatData(reqData [][]byte) {
 	if len(reqData) == 0 {
 		c.Args = reqData[0:0]
 	} else {
-		c.Cmd = unsafe2.String(LowerSlice(reqData[0]))
+		c.Cmd = unsafe2.String(utils.LowerSlice(reqData[0]))
 		c.Args = reqData[1:]
 		if len(c.Args) > 0 {
 			c.Keys = c.Args[0]
@@ -206,7 +207,7 @@ func (c *Client) HandleRequest(reqData [][]byte, isHashTag bool) (err error) {
 			c.Writer.WriteError(err)
 			return err
 		}
-		c.Cmd = c.Cmd + unsafe2.String(LowerSlice(c.Args[0]))
+		c.Cmd = c.Cmd + unsafe2.String(utils.LowerSlice(c.Args[0]))
 	}
 
 	if c.Cmd == "QUIT" {
@@ -214,7 +215,7 @@ func (c *Client) HandleRequest(reqData [][]byte, isHashTag bool) (err error) {
 		return errn.ErrClientQuit
 	}
 
-	if !c.checkCommand() {
+	if !c.checkWitnessCommand() {
 		c.Writer.WriteBulk(nil)
 		return nil
 	}
@@ -227,11 +228,13 @@ func (c *Client) HandleRequest(reqData [][]byte, isHashTag bool) (err error) {
 		c.Writer.WriteError(err)
 		return err
 	}
+
 	if c.server.openDistributedTx && c.txState&TxStateMulti != 0 && execCmd.NotAllowedInTx {
 		err = fmt.Errorf("ERR %s inside MULTI is not allowed", c.Cmd)
 		c.Writer.WriteError(err)
 		return err
 	}
+
 	if c.server.IsWitness {
 		err = c.ApplyDB(0)
 		if err != nil {
@@ -251,23 +254,7 @@ func (c *Client) HandleRequest(reqData [][]byte, isHashTag bool) (err error) {
 		c.KeyHash = utils.GetHashTagFnv(c.Keys)
 	}
 
-	var isRedirect bool
-	var lockFunc func()
-
-	if isRedirect, lockFunc = c.DB.CheckRedirectAndLockFunc(c.Cmd, c.Keys, c.KeyHash); lockFunc != nil {
-		defer lockFunc()
-	}
-
-	if isRedirect {
-		var updateKeyModifyTs func()
-		if c.server.openDistributedTx {
-			updateKeyModifyTs = c.markWatchKeyModified(execCmd)
-		}
-		err = c.DB.Redirect(c.Cmd, c.Keys, reqData, c.Writer)
-		if updateKeyModifyTs != nil {
-			updateKeyModifyTs()
-		}
-	} else if c.server.isOpenRaft && execCmd.Sync && !config.GlobalConfig.CheckIsDegradeSingleNode() {
+	if c.server.isOpenRaft && execCmd.Sync && !config.GlobalConfig.CheckIsDegradeSingleNode() {
 		err = c.RaftSync()
 	} else {
 		err = c.ApplyDB(0)
@@ -308,6 +295,15 @@ func (c *Client) ApplyDB(raftSyncCostNs int64) error {
 		updateKeyModifyTs = c.markWatchKeyModified(execCmd)
 	}
 
+	defer func() {
+		if r := recover(); r != nil {
+			buf := make([]byte, 4096)
+			n := runtime.Stack(buf, false)
+			log.Fatalf("ApplyDB cmd:%s key:%s err:%v stack:%s", c.Cmd, c.Keys, r, unsafe2.String(buf[0:n]))
+			err = errn.ErrPanic
+		}
+	}()
+
 	if err = execCmd.Handler(c); err != nil {
 		if updateKeyModifyTs != nil {
 			updateKeyModifyTs()
@@ -336,19 +332,13 @@ func (c *Client) GetInfo() *SInfo {
 	return c.server.Info
 }
 
-func (c *Client) checkCommand() bool {
+func (c *Client) checkWitnessCommand() bool {
 	if !c.server.IsWitness {
 		return true
 	}
 
 	switch c.Cmd {
-	case resp.INFO:
-		return true
-	case resp.PING:
-		return true
-	case resp.ECHO:
-		return true
-	case resp.SHUTDOWN:
+	case resp.INFO, resp.PING, resp.CLUSTERINFO, resp.ECHO, resp.SHUTDOWN, resp.DERAFT_TO_WITNESS:
 		return true
 	default:
 		return false

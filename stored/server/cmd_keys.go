@@ -15,10 +15,13 @@
 package server
 
 import (
-	"github.com/zuoyebang/bitalostored/butils/unsafe2"
+	"strconv"
+
 	"github.com/zuoyebang/bitalostored/stored/internal/errn"
 	"github.com/zuoyebang/bitalostored/stored/internal/resp"
 	"github.com/zuoyebang/bitalostored/stored/internal/utils"
+
+	"github.com/zuoyebang/bitalostored/butils/unsafe2"
 )
 
 func init() {
@@ -166,7 +169,7 @@ func ttlCommand(c *Client) error {
 		return errn.CmdParamsErr(resp.TTL)
 	}
 
-	if n, err := c.DB.TTl(args[0], c.KeyHash); err != nil {
+	if n, err := c.DB.TTL(args[0], c.KeyHash); err != nil {
 		return err
 	} else {
 		c.Writer.WriteInteger(n)
@@ -180,7 +183,7 @@ func pttlCommand(c *Client) error {
 		return errn.CmdParamsErr(resp.PTTL)
 	}
 
-	if n, err := c.DB.PTTl(args[0], c.KeyHash); err != nil {
+	if n, err := c.DB.PTTL(args[0], c.KeyHash); err != nil {
 		return err
 	} else {
 		c.Writer.WriteInteger(n)
@@ -204,9 +207,11 @@ func persistCommand(c *Client) error {
 
 func infoCommand(c *Client) error {
 	var info []byte
-	sinfo := c.GetInfo()
 	var closer func()
-	if len(c.Args) == 0 {
+
+	sinfo := c.GetInfo()
+	argNum := len(c.Args)
+	if argNum == 0 {
 		info, closer = sinfo.Marshal()
 	} else {
 		switch unsafe2.String(c.Args[0]) {
@@ -215,7 +220,12 @@ func infoCommand(c *Client) error {
 		case "clients":
 			info, closer = sinfo.Client.Marshal()
 		case "clusterinfo":
-			info, closer = sinfo.Cluster.Marshal()
+			if argNum == 2 {
+				n, _ := strconv.Atoi(unsafe2.String(c.Args[1]))
+				info, closer = c.server.GetRaftInfo(uint64(n))
+			} else {
+				info, closer = sinfo.Cluster.Marshal()
+			}
 		case "stats":
 			info, closer = sinfo.Stats.Marshal()
 		case "_leader_address":

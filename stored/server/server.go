@@ -18,48 +18,55 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"runtime"
 	"sync"
 	"sync/atomic"
 
-	"github.com/cockroachdb/errors"
-	"github.com/panjf2000/gnet/v2"
-	"github.com/zuoyebang/bitalostored/butils/unsafe2"
 	"github.com/zuoyebang/bitalostored/stored/engine"
-	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/bitsdb"
-	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb/btools"
+	"github.com/zuoyebang/bitalostored/stored/engine/bitsdb"
+	"github.com/zuoyebang/bitalostored/stored/engine/btools"
+	"github.com/zuoyebang/bitalostored/stored/engine/dbmeta"
 	"github.com/zuoyebang/bitalostored/stored/internal/config"
 	"github.com/zuoyebang/bitalostored/stored/internal/errn"
 	"github.com/zuoyebang/bitalostored/stored/internal/log"
 	"github.com/zuoyebang/bitalostored/stored/internal/resp"
 	"github.com/zuoyebang/bitalostored/stored/internal/slowshield"
+	"github.com/zuoyebang/bitalostored/stored/internal/trycatch"
 	"github.com/zuoyebang/bitalostored/stored/internal/utils"
+
+	"github.com/panjf2000/gnet/v2"
 )
 
 const errorReadEOF = "read: EOF"
 
 type Server struct {
 	*gnet.BuiltinEventEngine
-	eng               gnet.Engine
-	Info              *SInfo
-	IsMaster          func() bool
-	MigrateDelToSlave func(keyHash uint32, data [][]byte) error
-	IsWitness         bool
-	DoRaftSync        func(keyHash uint32, data [][]byte) ([]byte, error)
-	DoRaftStop        func()
-	laddr             string
-	db                *engine.Bitalos
-	closed            atomic.Bool
-	quit              chan struct{}
-	isDebug           bool
-	isOpenRaft        bool
-	slowQuery         *slowshield.SlowShield
-	recoverLock       sync.Mutex
-	syncDataDoing     atomic.Int32
-	dbSyncing         atomic.Int32
+
+	eng  gnet.Engine
+	Info *SInfo
+	meta *dbmeta.Meta
+
+	IsMaster         func() bool
+	IsWitness        bool
+	DoRaftSync       func(keyHash uint32, data [][]byte) ([]byte, error)
+	DoRaftStop       func()
+	GetRaftInfo      func(clusterId uint64) ([]byte, func())
+	SetRaftNodeState func(event string, v bool)
+	SlotSpliting     func() bool
+
+	laddr      string
+	db         *engine.Bitalos
+	closed     atomic.Bool
+	isDebug    bool
+	isOpenRaft bool
+	slowQuery  *slowshield.SlowShield
+
+	recoverLock    sync.Mutex
+	syncDataDoing  atomic.Int32
+	dbSyncing      atomic.Int32
+	snapshotDoneCh chan struct{}
+
 	luaMu             []*sync.Mutex
 	luaScripts        *CompiledLuaScripts
-	expireClosedCh    chan struct{}
 	expireWg          sync.WaitGroup
 	openDistributedTx bool
 	txLocks           *TxShardLocker
@@ -73,12 +80,11 @@ func NewServer() (*Server, error) {
 		laddr:             config.GlobalConfig.Server.Address,
 		isDebug:           config.GlobalConfig.Log.IsDebug,
 		slowQuery:         slowshield.NewSlowShield(),
-		quit:              make(chan struct{}),
 		recoverLock:       sync.Mutex{},
-		expireClosedCh:    make(chan struct{}),
 		openDistributedTx: config.GlobalConfig.Server.OpenDistributedTx,
 		isOpenRaft:        config.GlobalConfig.Plugin.OpenRaft,
 		IsWitness:         config.GlobalConfig.RaftCluster.IsWitness,
+		SlotSpliting:      func() bool { return false },
 	}
 	s.Info = &SInfo{
 		Client:         SinfoClient{cache: make([]byte, 0, 256)},
@@ -97,6 +103,7 @@ func NewServer() (*Server, error) {
 			Compile:       utils.Compile,
 			MaxClient:     config.GlobalConfig.Server.Maxclient,
 			ProcessId:     os.Getpid(),
+			MajorVersion:  MajorVersion,
 		},
 	}
 	s.Info.Server.UpdateCache()
@@ -104,6 +111,11 @@ func NewServer() (*Server, error) {
 	RunCpuAdjuster(s)
 
 	if s.IsWitness {
+		meta, err := engine.NewMeta(config.GetBitalosDbDataPath())
+		if err != nil {
+			return nil, err
+		}
+		s.meta = meta
 		return s, nil
 	}
 
@@ -120,18 +132,52 @@ func NewServer() (*Server, error) {
 	InitLuaPool(s)
 
 	if err := os.MkdirAll(config.GetBitalosSnapshotPath(), 0755); err != nil {
-		return nil, errors.Wrap(err, "mkdir snapshot err")
+		return nil, fmt.Errorf("mkdir snapshot err:%s", err)
 	}
 
 	db, err := engine.NewBitalos(config.GetBitalosDbDataPath())
 	if err != nil {
-		return nil, errors.Wrap(err, "new bitalos err")
+		return nil, fmt.Errorf("new bitalos err:%s", err)
 	}
 
 	s.db = db
-	s.RunDeleteExpireDataTask()
+	s.meta = db.GetMeta()
+
+	s.maybeRemoveSlotData()
 
 	return s, nil
+}
+
+func (s *Server) RemoveSlots(background bool) {
+	removeFunc := func() {
+		slots := s.GetMeta().GetMarkedSlots()
+		if len(slots) > 0 {
+			log.Infof("to be removed slots num:%d slots:%+v", len(slots), slots)
+			s.GetDB().FlushMem()
+			for _, slot := range slots {
+				if err := s.GetDB().RemoveSlot(uint16(slot)); err != nil {
+					log.Errorf("execute to remove failed slot:%d err:%v", slot, err)
+				} else {
+					log.Infof("execute to remove success slot:%d", slot)
+				}
+				s.GetMeta().SetRemoveSlot(slot, btools.SlotRemoveFinished)
+			}
+		}
+	}
+	if background {
+		go func() {
+			removeFunc()
+		}()
+	} else {
+		removeFunc()
+	}
+}
+
+func (s *Server) maybeRemoveSlotData() {
+	if s.IsWitness {
+		return
+	}
+	s.RemoveSlots(false)
 }
 
 func (s *Server) GetDB() *engine.Bitalos {
@@ -141,24 +187,17 @@ func (s *Server) GetDB() *engine.Bitalos {
 	return s.db
 }
 
-func (s *Server) FlushCallback(compactIndex uint64) {
-	db := s.GetDB()
-	if db == nil {
-		return
+func (s *Server) GetMeta() *dbmeta.Meta {
+	if s.IsWitness {
+		return s.meta
 	}
-	if !db.IsOpenRaftRestore() {
-		return
-	}
-	db.Flush(btools.FlushTypeRemoveLog, compactIndex)
+	return s.meta
 }
 
 func (s *Server) Close() {
 	if !s.closed.CompareAndSwap(false, true) {
 		return
 	}
-
-	close(s.quit)
-	close(s.expireClosedCh)
 
 	if s.eng.Validate() == nil {
 		if err := s.eng.Stop(context.TODO()); err != nil {
@@ -167,7 +206,9 @@ func (s *Server) Close() {
 	}
 
 	s.txPrepareWg.Wait()
-	s.DoRaftStop()
+	if s.DoRaftStop != nil {
+		s.DoRaftStop()
+	}
 
 	if !s.IsWitness {
 		s.expireWg.Wait()
@@ -229,10 +270,7 @@ func (s *Server) OnClose(conn gnet.Conn, err error) (action gnet.Action) {
 
 func (s *Server) OnTraffic(conn gnet.Conn) (action gnet.Action) {
 	defer func() {
-		if r := recover(); r != nil {
-			buf := make([]byte, 2048)
-			n := runtime.Stack(buf, false)
-			log.Errorf("conn OnTraffic panic err:%v stack:%s", r, unsafe2.String(buf[0:n]))
+		if trycatch.Panic("conn OnTraffic", recover()) {
 			action = gnet.Close
 		}
 	}()

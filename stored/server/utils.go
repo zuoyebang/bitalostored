@@ -20,8 +20,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/zuoyebang/bitalostored/butils/unsafe2"
 	"github.com/zuoyebang/bitalostored/stored/internal/errn"
+
+	"github.com/zuoyebang/bitalostored/butils/unsafe2"
 )
 
 const (
@@ -34,11 +35,6 @@ const (
 	NX           SetCondition = "NX"
 	XX           SetCondition = "XX"
 	NO_CONDITION SetCondition = ""
-)
-
-var (
-	BEFORE = []byte("before")
-	AFTER  = []byte("after")
 )
 
 type ExpireType string
@@ -87,17 +83,6 @@ func ParseSetArgs(args [][]byte) (e ExpireType, t int64, c SetCondition, err err
 		i++
 	}
 	return
-}
-
-func LowerSlice(buf []byte) []byte {
-	for i, r := range buf {
-		if 'A' <= r && r <= 'Z' {
-			r += 'a' - 'A'
-		}
-
-		buf[i] = r
-	}
-	return buf
 }
 
 func StringSlice(b [][]byte) []string {

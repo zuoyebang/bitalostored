@@ -17,14 +17,17 @@ package trycatch
 import (
 	"runtime"
 
-	"github.com/zuoyebang/bitalostored/butils/unsafe2"
 	"github.com/zuoyebang/bitalostored/stored/internal/log"
+
+	"github.com/zuoyebang/bitalostored/butils/unsafe2"
 )
 
-func Panic(s string, err any) {
+func Panic(s string, err any) bool {
 	if err != nil {
-		buf := make([]byte, 2048)
+		buf := make([]byte, 4096)
 		n := runtime.Stack(buf, false)
-		log.Errorf("%s panic err:%v stack:%s", s, err, unsafe2.String(buf[0:n]))
+		log.Fatalf("%s err:%v stack:%s", s, err, unsafe2.String(buf[0:n]))
+		return true
 	}
+	return false
 }

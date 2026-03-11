@@ -17,11 +17,12 @@ package server
 import (
 	"time"
 
-	"github.com/zuoyebang/bitalostored/butils/hash"
-	"github.com/zuoyebang/bitalostored/butils/unsafe2"
+	"github.com/zuoyebang/bitalostored/stored/engine/btools"
 	"github.com/zuoyebang/bitalostored/stored/internal/errn"
 	"github.com/zuoyebang/bitalostored/stored/internal/resp"
-	"github.com/zuoyebang/bitalostored/stored/internal/utils"
+
+	"github.com/zuoyebang/bitalostored/butils/hash"
+	"github.com/zuoyebang/bitalostored/butils/unsafe2"
 )
 
 func init() {
@@ -87,10 +88,11 @@ func multiCommand(c *Client) error {
 	if c.txState&TxStateMulti != 0 {
 		return errn.ErrMultiNested
 	}
+
 	if !c.server.IsMaster() {
 		return errn.ErrTxNotInMaster
 	}
-	if c.server.txParallelCounter.Load() > utils.TxParallelLimit {
+	if c.server.txParallelCounter.Load() > btools.TxParallelLimit {
 		return errn.ErrTxQpsLimit
 	}
 
@@ -307,12 +309,10 @@ func execCommand(c *Client) (cerr error) {
 	}
 
 	c.disableCommandQueued()
-	c.Writer.SetCached()
 	for _, command := range c.commandQueue {
 		c.HandleRequest(command, false)
 	}
-	c.Writer.UnsetCached()
-	c.Writer.FlushCached()
+	c.Writer.WriteHeader(len(c.commandQueue))
 	return nil
 }
 

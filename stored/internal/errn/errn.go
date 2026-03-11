@@ -20,6 +20,7 @@ import (
 )
 
 var (
+	ErrKvDb                   = errors.New("ERR db error")
 	ErrSyntax                 = errors.New("ERR syntax error")
 	ErrLenArg                 = errors.New("ERR args len is wrong")
 	ErrTxDisable              = errors.New("ERR tx command disable")
@@ -42,11 +43,7 @@ var (
 	ErrFieldSize              = errors.New("invalid field size")
 	ErrExpireValue            = errors.New("invalid expire value")
 	ErrZSetScoreRange         = errors.New("invalid zset score range")
-	ErrZsetMemberNil          = errors.New("zset member is nil")
 	ErrClientQuit             = errors.New("remote client quit")
-	ErrSlotIdNotMatch         = errors.New("migrate slotId not match")
-	ErrMigrateRunning         = errors.New("migrate running")
-	ErrDataType               = errors.New("not support dataType")
 	ErrDbSyncFailRefuse       = errors.New("ERR db syncing/fail, refuse request")
 	ErrNotImplement           = errors.New("command not implement")
 	ErrRangeOffset            = errors.New("ERR offset is out of range")
@@ -60,6 +57,14 @@ var (
 	ErrUnbalancedQuotes       = errors.New("ERR unbalanced quotes in request")
 	ErrInvalidBulkLength      = errors.New("ERR invalid bulk length")
 	ErrInvalidMultiBulkLength = errors.New("ERR invalid multibulk length")
+	ErrIndexOverflow          = errors.New("ERR index overflow ")
+	ErrIndexOutOfRange        = errors.New("ERR index out of range")
+	ErrNoSuchKey              = errors.New("ERR no such key")
+	ErrBitsdbClosed           = errors.New("bitsdb closed")
+	ErrPanic                  = errors.New("panic err")
+	ErrDKType                 = errors.New("ERR invalid distributed key type")
+	ErrDKShardType            = errors.New("ERR invalid distributed shard key type")
+	ErrCmdToken               = errors.New("ERR check cmd token fail")
 )
 
 func CmdEmptyErr(cmd string) error {

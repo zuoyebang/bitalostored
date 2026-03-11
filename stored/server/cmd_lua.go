@@ -20,12 +20,14 @@ import (
 	"strconv"
 	"strings"
 
-	lua "github.com/yuin/gopher-lua"
 	"github.com/zuoyebang/bitalostored/butils/extend"
+
 	"github.com/zuoyebang/bitalostored/stored/internal/errn"
 	"github.com/zuoyebang/bitalostored/stored/internal/log"
 	"github.com/zuoyebang/bitalostored/stored/internal/resp"
 	"github.com/zuoyebang/bitalostored/stored/internal/utils"
+
+	lua "github.com/yuin/gopher-lua"
 )
 
 var LuaShardCount uint32 = 64
@@ -70,12 +72,13 @@ func ErrLuaParseError(err error) string {
 
 func init() {
 	AddCommand(map[string]*Cmd{
-		resp.EVAL:         {Sync: resp.IsWriteCmd(resp.EVAL), Handler: evalCommand, NotAllowedInTx: true},
-		resp.EVALSHA:      {Sync: resp.IsWriteCmd(resp.EVALSHA), Handler: evalShaCommand, NotAllowedInTx: true},
-		resp.SCRIPTLOAD:   {Sync: resp.IsWriteCmd(resp.SCRIPTLOAD), Handler: scriptLoadCmd, NotAllowedInTx: true},
-		resp.SCRIPTFLUSH:  {Sync: resp.IsWriteCmd(resp.SCRIPTFLUSH), Handler: scriptFlushCmd, NotAllowedInTx: true},
-		resp.SCRIPTEXISTS: {Sync: resp.IsWriteCmd(resp.SCRIPTEXISTS), Handler: scriptExistsCmd, NotAllowedInTx: true},
-		resp.SCRIPTLEN:    {Sync: resp.IsWriteCmd(resp.SCRIPTLEN), Handler: scriptLenCmd, NotAllowedInTx: true},
+		resp.EVAL:          {Sync: resp.IsWriteCmd(resp.EVAL), Handler: evalCommand, NotAllowedInTx: true},
+		resp.EVALSHA:       {Sync: resp.IsWriteCmd(resp.EVALSHA), Handler: evalShaCommand, NotAllowedInTx: true},
+		resp.SCRIPTLOAD:    {Sync: resp.IsWriteCmd(resp.SCRIPTLOAD), Handler: scriptLoadCmd, NotAllowedInTx: true},
+		resp.SCRIPTFLUSH:   {Sync: resp.IsWriteCmd(resp.SCRIPTFLUSH), Handler: scriptFlushCmd, NotAllowedInTx: true},
+		resp.SCRIPTEXISTS:  {Sync: resp.IsWriteCmd(resp.SCRIPTEXISTS), Handler: scriptExistsCmd, NotAllowedInTx: true},
+		resp.SCRIPTLEN:     {Sync: resp.IsWriteCmd(resp.SCRIPTLEN), Handler: scriptLenCmd, NotAllowedInTx: true},
+		"migrateluascript": {Sync: false, Name: "migrateluascript host port", Handler: migrateLuaScript},
 	})
 }
 
@@ -153,6 +156,7 @@ func runLuaScript(c *Client, proto *lua.FunctionProto, keys, args []string) erro
 		log.Errorf("ERR Error running script: %s", err.Error())
 		return errors.New(ErrLuaParseError(err))
 	}
+
 	LuaToRedis(luaClient, c, luaClient.Get(1))
 	return nil
 }
@@ -272,5 +276,20 @@ func scriptLenCmd(c *Client) error {
 	}
 
 	c.Writer.WriteArray(ay)
+	return nil
+}
+
+func migrateLuaScript(c *Client) error {
+	if len(c.Args) < 2 {
+		return errn.CmdParamsErr("migrateluascript")
+	}
+
+	dstHost := fmt.Sprintf("%s:%s", string(c.Args[0]), string(c.Args[1]))
+	if err := c.DB.MigrateLuaScript(dstHost); err != nil {
+		log.Errorf("migrate LuaScript fail dstHost:%s err:%s", dstHost, err)
+		return err
+	}
+
+	c.Writer.WriteStatus("OK")
 	return nil
 }

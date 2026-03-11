@@ -15,8 +15,9 @@
 package server
 
 import (
-	"bytes"
+	"math"
 
+	"github.com/zuoyebang/bitalostored/stored/engine/btools"
 	"github.com/zuoyebang/bitalostored/stored/internal/errn"
 	"github.com/zuoyebang/bitalostored/stored/internal/resp"
 	"github.com/zuoyebang/bitalostored/stored/internal/utils"
@@ -24,16 +25,16 @@ import (
 
 func init() {
 	AddCommand(map[string]*Cmd{
-		resp.LPOP:       {Sync: resp.IsWriteCmd(resp.LPOP), Handler: lpopCommand},
-		resp.LPUSH:      {Sync: resp.IsWriteCmd(resp.LPUSH), Handler: lpushCommand},
-		resp.RPOP:       {Sync: resp.IsWriteCmd(resp.RPOP), Handler: rpopCommand},
-		resp.RPUSH:      {Sync: resp.IsWriteCmd(resp.RPUSH), Handler: rpushCommand},
-		resp.LINDEX:     {Sync: resp.IsWriteCmd(resp.LINDEX), Handler: lindexCommand},
-		resp.LLEN:       {Sync: resp.IsWriteCmd(resp.LLEN), Handler: llenCommand},
-		resp.LRANGE:     {Sync: resp.IsWriteCmd(resp.LRANGE), Handler: lrangeCommand},
-		resp.LTRIM:      {Sync: resp.IsWriteCmd(resp.LTRIM), Handler: lTrimCommand},
-		resp.LREM:       {Sync: resp.IsWriteCmd(resp.LREM), Handler: lremCommand},
-		resp.LINSERT:    {Sync: resp.IsWriteCmd(resp.LINSERT), Handler: linsertCommand},
+		resp.LPOP:   {Sync: resp.IsWriteCmd(resp.LPOP), Handler: lpopCommand},
+		resp.LPUSH:  {Sync: resp.IsWriteCmd(resp.LPUSH), Handler: lpushCommand},
+		resp.RPOP:   {Sync: resp.IsWriteCmd(resp.RPOP), Handler: rpopCommand},
+		resp.RPUSH:  {Sync: resp.IsWriteCmd(resp.RPUSH), Handler: rpushCommand},
+		resp.LINDEX: {Sync: resp.IsWriteCmd(resp.LINDEX), Handler: lindexCommand},
+		resp.LLEN:   {Sync: resp.IsWriteCmd(resp.LLEN), Handler: llenCommand},
+		resp.LRANGE: {Sync: resp.IsWriteCmd(resp.LRANGE), Handler: lrangeCommand},
+		resp.LTRIM:  {Sync: resp.IsWriteCmd(resp.LTRIM), Handler: lTrimCommand},
+		//resp.LREM:   {Sync: resp.IsWriteCmd(resp.LREM), Handler: lremCommand},
+		//resp.LINSERT:    {Sync: resp.IsWriteCmd(resp.LINSERT), Handler: linsertCommand},
 		resp.LPUSHX:     {Sync: resp.IsWriteCmd(resp.LPUSHX), Handler: lpushxCommand},
 		resp.RPUSHX:     {Sync: resp.IsWriteCmd(resp.RPUSHX), Handler: rpushxCommand},
 		resp.LSET:       {Sync: resp.IsWriteCmd(resp.LSET), Handler: lsetCommand},
@@ -41,54 +42,53 @@ func init() {
 		resp.LPERSIST:   {Sync: resp.IsWriteCmd(resp.LPERSIST), Handler: lpersistCommand},
 		resp.LEXPIRE:    {Sync: resp.IsWriteCmd(resp.LEXPIRE), Handler: lexpireCommand},
 		resp.LEXPIREAT:  {Sync: resp.IsWriteCmd(resp.LEXPIREAT), Handler: lexpireAtCommand},
-		resp.LTRIMFRONT: {Sync: resp.IsWriteCmd(resp.LTRIMFRONT), Handler: lTrimFrontCommand},
-		resp.LTRIMBACK:  {Sync: resp.IsWriteCmd(resp.LTRIMBACK), Handler: lTrimBackCommand},
 		resp.LTTL:       {Sync: resp.IsWriteCmd(resp.LTTL), Handler: lttlCommand},
 		resp.LKEYEXISTS: {Sync: resp.IsWriteCmd(resp.LKEYEXISTS), Handler: lkeyexistsCommand},
 	})
 }
 
-func lremCommand(c *Client) error {
-	args := c.Args
-	if len(args) != 3 {
-		return errn.CmdParamsErr(resp.LREM)
-	}
-
-	count, err := utils.ByteToInt64(args[1])
-	if err != nil {
-		return errn.ErrValue
-	}
-
-	if n, err := c.DB.LRem(args[0], c.KeyHash, count, args[2]); err != nil {
-		return err
-	} else {
-		c.Writer.WriteInteger(n)
-	}
-
-	return nil
-}
-
-func linsertCommand(c *Client) error {
-	args := c.Args
-	if len(args) != 4 {
-		return errn.CmdParamsErr(resp.LINSERT)
-	}
-	isbefore := false
-	if bytes.Equal(LowerSlice(args[1]), BEFORE) {
-		isbefore = true
-	} else if bytes.Equal(LowerSlice(args[1]), AFTER) {
-		isbefore = false
-	} else {
-		return errn.ErrSyntax
-	}
-
-	if n, err := c.DB.LInsert(args[0], c.KeyHash, isbefore, args[2], args[3]); err != nil {
-		return err
-	} else {
-		c.Writer.WriteInteger(n)
-	}
-	return nil
-}
+//
+//func lremCommand(c *Client) error {
+//	args := c.Args
+//	if len(args) != 3 {
+//		return errn.CmdParamsErr(resp.LREM)
+//	}
+//
+//	count, err := utils.ByteToInt64(args[1])
+//	if err != nil {
+//		return errn.ErrValue
+//	}
+//
+//	if n, err := c.DB.LRem(args[0], c.KeyHash, count, args[2]); err != nil {
+//		return err
+//	} else {
+//		c.Writer.WriteInteger(n)
+//	}
+//
+//	return nil
+//}
+//
+//func linsertCommand(c *Client) error {
+//	args := c.Args
+//	if len(args) != 4 {
+//		return errn.CmdParamsErr(resp.LINSERT)
+//	}
+//	isbefore := false
+//	if bytes.Equal(LowerSlice(args[1]), BEFORE) {
+//		isbefore = true
+//	} else if bytes.Equal(LowerSlice(args[1]), AFTER) {
+//		isbefore = false
+//	} else {
+//		return errn.ErrSyntax
+//	}
+//
+//	if n, err := c.DB.LInsert(args[0], c.KeyHash, isbefore, args[2], args[3]); err != nil {
+//		return err
+//	} else {
+//		c.Writer.WriteInteger(n)
+//	}
+//	return nil
+//}
 
 func lpushCommand(c *Client) error {
 	args := c.Args
@@ -156,14 +156,14 @@ func lpopCommand(c *Client) error {
 	}
 
 	v, vcloser, err := c.DB.LPop(args[0], c.KeyHash)
+	if err != nil {
+		return err
+	}
 	defer func() {
 		if vcloser != nil {
 			vcloser()
 		}
 	}()
-	if err != nil {
-		return err
-	}
 
 	c.Writer.WriteBulk(v)
 	return nil
@@ -176,14 +176,14 @@ func rpopCommand(c *Client) error {
 	}
 
 	v, vcloser, err := c.DB.RPop(args[0], c.KeyHash)
+	if err != nil {
+		return err
+	}
 	defer func() {
 		if vcloser != nil {
 			vcloser()
 		}
 	}()
-	if err != nil {
-		return err
-	}
 
 	c.Writer.WriteBulk(v)
 	return nil
@@ -233,11 +233,17 @@ func lsetCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 3 {
 		return errn.CmdParamsErr(resp.LSET)
+	} else if err := btools.CheckKeySize(args[0]); err != nil {
+		return err
 	}
 
 	index, err := utils.ByteToInt64(args[1])
 	if err != nil {
 		return errn.ErrValue
+	} else if index > int64(math.MaxUint32) {
+		return errn.ErrIndexOverflow
+	} else if err := btools.CheckValueSize(args[2]); err != nil {
+		return err
 	}
 
 	if err := c.DB.LSet(args[0], c.KeyHash, index, args[2]); err != nil {
@@ -253,28 +259,31 @@ func lrangeCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 3 {
 		return errn.CmdParamsErr(resp.LRANGE)
-	}
-
-	var start int64
-	var stop int64
-	var err error
-
-	start, err = utils.ByteToInt64(args[1])
-	if err != nil {
-		return errn.ErrValue
-	}
-
-	stop, err = utils.ByteToInt64(args[2])
-	if err != nil {
-		return errn.ErrValue
-	}
-
-	if v, err := c.DB.LRange(args[0], c.KeyHash, start, stop); err != nil {
+	} else if err := btools.CheckKeySize(args[0]); err != nil {
 		return err
-	} else {
-		c.Writer.WriteSliceArray(v)
 	}
 
+	start, err1 := utils.ByteToInt64(args[1])
+	if err1 != nil {
+		return errn.ErrValue
+	}
+
+	stop, err2 := utils.ByteToInt64(args[2])
+	if err2 != nil {
+		return errn.ErrValue
+	}
+
+	v, closer, err := c.DB.LRange(args[0], c.KeyHash, start, stop)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if closer != nil {
+			closer()
+		}
+	}()
+
+	c.Writer.WriteSliceArray(v)
 	return nil
 }
 
@@ -338,7 +347,7 @@ func lttlCommand(c *Client) error {
 		return errn.CmdParamsErr(resp.LTTL)
 	}
 
-	if v, err := c.DB.TTl(args[0], c.KeyHash); err != nil {
+	if v, err := c.DB.TTL(args[0], c.KeyHash); err != nil {
 		return err
 	} else {
 		c.Writer.WriteInteger(v)
@@ -380,6 +389,8 @@ func lTrimCommand(c *Client) error {
 	args := c.Args
 	if len(args) != 3 {
 		return errn.CmdParamsErr(resp.LTRIM)
+	} else if err := btools.CheckKeySize(args[0]); err != nil {
+		return err
 	}
 
 	var start int64
@@ -399,46 +410,6 @@ func lTrimCommand(c *Client) error {
 		return err
 	} else {
 		c.Writer.WriteStatus(resp.ReplyOK)
-	}
-
-	return nil
-}
-
-func lTrimFrontCommand(c *Client) error {
-	args := c.Args
-	if len(args) != 2 {
-		return errn.CmdParamsErr(resp.LTRIMFRONT)
-	}
-
-	trimSize, err := utils.ByteToInt64(args[1])
-	if err != nil || trimSize < 0 {
-		return errn.ErrValue
-	}
-
-	if n, err := c.DB.LTrimFront(args[0], c.KeyHash, trimSize); err != nil {
-		return err
-	} else {
-		c.Writer.WriteInteger(n)
-	}
-
-	return nil
-}
-
-func lTrimBackCommand(c *Client) error {
-	args := c.Args
-	if len(args) != 2 {
-		return errn.CmdParamsErr(resp.LTRIMBACK)
-	}
-
-	trimSize, err := utils.ByteToInt64(args[1])
-	if err != nil || trimSize < 0 {
-		return errn.ErrValue
-	}
-
-	if n, err := c.DB.LTrimBack(args[0], c.KeyHash, trimSize); err != nil {
-		return err
-	} else {
-		c.Writer.WriteInteger(int64(n))
 	}
 
 	return nil

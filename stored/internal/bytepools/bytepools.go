@@ -15,7 +15,105 @@
 package bytepools
 
 import (
-	"github.com/zuoyebang/bitalostored/butils/bytepools"
+	"sync"
 )
 
-var BytePools = bytepools.NewBytePools()
+const (
+	poolsNum = 12
+)
+
+var GlobalBytePools = NewBytePools()
+
+type BytePools struct {
+	pools [poolsNum]sync.Pool
+}
+
+func NewBytePools() *BytePools {
+	p := new(BytePools)
+	for i := 0; i < poolsNum; i++ {
+		size := 16 * (1 << i)
+		p.pools[i] = sync.Pool{
+			New: func() interface{} {
+				return make([]byte, size, size)
+			},
+		}
+	}
+	return p
+}
+
+func (p *BytePools) getIndex(size int) int {
+	if size <= 128 {
+		switch {
+		case size <= 16:
+			return 0
+		case size <= 32:
+			return 1
+		case size <= 64:
+			return 2
+		default:
+			return 3
+		}
+	} else if size <= 2048 {
+		switch {
+		case size <= 256:
+			return 4
+		case size <= 512:
+			return 5
+		case size <= 1024:
+			return 6
+		default:
+			return 7
+		}
+	} else {
+		switch {
+		case size <= 4096:
+			return 8
+		case size <= 8192:
+			return 9
+		case size <= 16384:
+			return 10
+		case size <= 32768:
+			return 11
+		default:
+			return -1
+		}
+	}
+}
+
+func (p *BytePools) Get(size int) interface{} {
+	index := p.getIndex(size)
+	if index == -1 {
+		return make([]byte, size, size)
+	}
+	return p.pools[index].Get()
+}
+
+func (p *BytePools) Put(x []byte) {
+	index := p.getIndex(len(x))
+	if index >= 0 {
+		p.pools[index].Put(x)
+	}
+}
+
+func (p *BytePools) GetBytePool(size int) ([]byte, func()) {
+	v := p.Get(size).([]byte)
+	return v, func() {
+		p.PutBytePool(v)
+	}
+}
+
+func (p *BytePools) MakeValue(v []byte) ([]byte, func()) {
+	size := len(v)
+	pool := p.Get(size).([]byte)
+	copy(pool[:size], v)
+	return pool[:size], func() {
+		p.PutBytePool(pool)
+	}
+}
+
+func (p *BytePools) PutBytePool(v []byte) {
+	if len(v) > 32768 {
+		return
+	}
+	p.Put(v)
+}
