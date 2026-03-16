@@ -37,18 +37,18 @@
 - 多主架构（企业版支持），基于CRDT，优化数据同步及一致性策略，确保多主写入时能自适应解决冲突，并达成最终一致.
 
 - 高性能数据一致性架构，基于bitalos-raft，深度优化Raft协议，大幅提升写性能，并具备更稳定的选举策略和数据同步流程.
-  - 高性能日志引擎：bitaloslog，基于bitalostree的日志索引，支持高吞吐量的写操作.
+    - 高性能日志引擎：bitaloslog，基于bitalostree的日志索引，支持高吞吐量的写操作.
 
 - 高性能内核，装备自研KV引擎：bitalosdb.
-  - 高性能压缩索引技术：bitalostree，基于超大page的b+ tree，创造性的索引压缩技术，消除b+ tree的写放大，并将读性能发挥到极致.
+    - 高性能压缩索引技术：bitalostree，基于超大page的b+ tree，创造性的索引压缩技术，消除b+ tree的写放大，并将读性能发挥到极致.
 
-  - 高性能KV索引，基于ASM汇编实现向量计算，性能显著提升.
+    - 高性能KV索引，基于ASM汇编实现向量计算，性能显著提升.
 
-  - 高性能K-KV索引，基于bitalostree的多级向量索引，兼顾索引压缩率与检索性能.
+    - 高性能K-KV索引，基于bitalostree的多级向量索引，兼顾索引压缩率与检索性能.
 
-  - 高性能KV分离技术：bithash，基于紧凑型索引结构，具备O(1)检索效率，可独立完成GC。
+    - 高性能KV分离技术：bithash，基于紧凑型索引结构，具备O(1)检索效率，可独立完成GC。
 
-  - 高性能存储结构，压缩redis复合数据类型，大幅降低IO成本，提升系统吞吐.
+    - 高性能存储结构，压缩redis复合数据类型，大幅降低IO成本，提升系统吞吐.
 
 ## 快速部署
 
@@ -98,8 +98,6 @@ Disk:   2*3.5TB NVMe SSD
 
 - 对比维度：命令（SET、GET、INCR、LPUSH、SADD、ZADD、HSET） x 数据大小&条数（1KB & 40,672,000、128B & 335,544,320）
 
-- 对比标准：多核压测QPS换算成单核QPS对比，单核性能更能体现成本优势
-
 ### 配置
 
 - t\*d\* & \*i\*a
@@ -127,7 +125,7 @@ Raftlog：disable
 
 - QPS
 
-![benchmark](./docs/benchmark-qps.png)
+![benchmark](./docs/benchmark-bitalostored-qps.png)
 
 ## 文档
 

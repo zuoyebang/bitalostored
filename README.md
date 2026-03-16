@@ -110,8 +110,6 @@ incr is irrelevant to data size, only needs to be tested once.
 
 - Comparison dimensions： comand（SET、GET、LPUSH、SADD、ZADD、HSET） x value-size&count（1KB & 40,672,000、128B & 335,544,320）, INCR
 
-- Comparison standard: QPS on single-core (multi-core QPS / core number), single-core performance reflects cost advantage better.
-
 ### Config
 
 - t\*d\* & \*i\*a
@@ -139,7 +137,7 @@ Raftlog：disable
 
 - QPS
 
-![benchmark](./docs/benchmark-qps.png)
+![benchmark](./docs/benchmark-bitalostored-qps.png)
 
 ## Document
 
