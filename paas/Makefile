@@ -16,7 +16,7 @@ bitalospaas: bitalos-deps
 	$(GOBUILD) -o bin/bitalospaas ./main.go
 
 bitalosagent: bitalos-deps
-	$(GOBUILD) -o bin/bitalosagent ./agent/main.go
+	$(GOBUILD) -o agent/bin/bitalosagent ./agent/main.go
 
 clean:
 	@rm -rf bin

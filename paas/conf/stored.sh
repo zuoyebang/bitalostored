@@ -12,12 +12,10 @@ case $1 in
 supervisor-start)
     shift
     echo -n $"check supervisor is running"
-    # 校验pid文件
     if [ -f $SUPERVISORD_PIDFILE ]
     then
         PID=`cat ${SUPERVISORD_PIDFILE}`
         RunningPID=`ps aux|grep ${SUPERVISORD_CONF}|grep -v grep| awk '{print $2}'`
-        # 判断是否有目标进程启动
         if [ "$PID" != "" ]
         then
             if [ "$PID" == "$RunningPID" ]

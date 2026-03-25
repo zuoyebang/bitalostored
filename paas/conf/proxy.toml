@@ -32,7 +32,7 @@ proxy_cloudtype = "{{.TaskExt.CloudType}}"
 # Set max number of alive sessions.
 proxy_max_clients = 3600
 
-max_procs = 4 #最大核数限制
+max_procs = 4
 net_event_loop_num = 8
 conn_idle_timeout = "900s"
 

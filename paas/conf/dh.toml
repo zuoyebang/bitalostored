@@ -22,10 +22,10 @@ env = "demo"
 cloud = "{{.TaskExt.CloudType}}"
 
 [database]
-username = "stored_paas_app"
-password = "eiF_4EQv6XVJYd6"
-hostport = "10.98.128.137:3306"
-dbname = "stored_paas"
+username = ""
+password = ""
+hostport = ""
+dbname = ""
 
 [stored]
 txcloud = []

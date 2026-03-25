@@ -19,7 +19,6 @@ BITALOS_CONF_DIR=$BITALOS_ADMIN_DIR/config
 BITALOS_PROXY_BIN=$BITALOS_BIN_DIR/bitalosproxy
 BITALOS_PROXY_PID_FILE=$BITALOS_ADMIN_DIR/bitalosproxy.pid
 
-# NoRolling,MonthlyRolling,DALIY,MinutelyRolling or SecondlyRolling
 BITALOS_PROXY_LOG_ROTATED="HourlyRolling"
 BITALOS_PROXY_LOG_FILE=$BITALOS_LOG_DIR/bitalos-proxy.log
 BITALOS_PROXY_STATSLOG_FILE=$BITALOS_LOG_DIR/bitalos-proxy-stats.log
@@ -101,12 +100,10 @@ stop-forced)
 supervisor-start)
     shift
     echo -n $"check supervisor is running"
-    # 校验pid文件
     if [ -f $SUPERVISORD_PIDFILE ]
     then
         PID=`cat ${SUPERVISORD_PIDFILE}`
         RunningPID=`ps aux|grep ${SUPERVISORD_CONF}|grep -v grep| awk '{print $2}'`
-        # 判断是否有目标进程启动
         if [ "$PID" != "" ]
         then
             if [ "$PID" == "$RunningPID" ]
