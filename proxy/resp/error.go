@@ -34,6 +34,10 @@ var (
 	HashTagErr                = errors.New("ERR hashtag mismatch or missing")
 	TxGroupChangedErr         = errors.New("ERR group changed in tx")
 	TxAbortErr                = errors.New("EXECABORT Transaction discarded because of previous errors.")
+
+	ErrDkKeyDuplicate = errors.New("duplicate dk key")
+	ErrDKkeyNotFound  = errors.New("dk key not found")
+	ErrDkTx           = errors.New("dk unsupported tx")
 )
 
 func CmdParamsErr(cmd string) error {

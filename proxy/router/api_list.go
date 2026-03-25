@@ -44,20 +44,12 @@ func (pc *ProxyClient) RPop(s *resp.Session, key []byte) (interface{}, error) {
 	return pc.do("RPOP", s, key)
 }
 
-func (pc *ProxyClient) LRem(s *resp.Session, key []byte, count int, value interface{}) (interface{}, error) {
-	return pc.do("LREM", s, key, count, value)
-}
-
 func (pc *ProxyClient) LLen(s *resp.Session, key []byte) (interface{}, error) {
 	return pc.do("LLEN", s, key)
 }
 
 func (pc *ProxyClient) LIndex(s *resp.Session, key []byte, index int) (interface{}, error) {
 	return pc.do("LINDEX", s, key, index)
-}
-
-func (pc *ProxyClient) LInsert(s *resp.Session, key []byte, before string, pivot string, value string) (interface{}, error) {
-	return pc.do("LINSERT", s, key, before, pivot, value)
 }
 
 func (pc *ProxyClient) LSet(s *resp.Session, key []byte, index int, value interface{}) (interface{}, error) {
@@ -95,12 +87,4 @@ func (pc *ProxyClient) LKeyExists(s *resp.Session, key []byte) (interface{}, err
 
 func (pc *ProxyClient) LPersist(s *resp.Session, key []byte) (interface{}, error) {
 	return pc.do(resp.LPERSIST, s, key)
-}
-
-func (pc *ProxyClient) LTrimBack(s *resp.Session, key []byte, size int64) (interface{}, error) {
-	return pc.do(resp.LTRIMBACK, s, key, size)
-}
-
-func (pc *ProxyClient) LTrimFront(s *resp.Session, key []byte, size int64) (interface{}, error) {
-	return pc.do(resp.LTRIMFRONT, s, key, size)
 }

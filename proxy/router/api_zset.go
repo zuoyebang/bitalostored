@@ -15,10 +15,7 @@
 package router
 
 import (
-	"github.com/zuoyebang/bitalostored/butils/unsafe2"
 	"github.com/zuoyebang/bitalostored/proxy/resp"
-
-	"github.com/gomodule/redigo/redis"
 )
 
 func (pc *ProxyClient) ZAdd(s *resp.Session, key string, maps map[string]float64) (interface{}, error) {
@@ -113,27 +110,6 @@ func (pc *ProxyClient) ZRemRangeByScore(s *resp.Session, key, min, max string) (
 
 func (pc *ProxyClient) ZRemRangeByLex(s *resp.Session, key, min, max string) (interface{}, error) {
 	return pc.do("ZREMRANGEBYLEX", s, key, min, max)
-}
-
-func (pc *ProxyClient) ZScan(s *resp.Session, key string, cursor []byte, pattern string, count int) ([]byte, [][]byte, error) {
-	args := make([]interface{}, 0, 6)
-	args = append(args, key, unsafe2.String(cursor))
-	if pattern != "" {
-		args = append(args, "MATCH", pattern)
-	}
-	if count > 0 {
-		args = append(args, "COUNT", count)
-	}
-	values, err := redis.Values(pc.do("ZSCAN", s, args...))
-	if err != nil {
-		return resp.NoScanMember, nil, err
-	}
-	var items [][]byte
-	_, err = redis.Scan(values, &cursor, &items)
-	if err != nil {
-		return resp.NoScanMember, nil, err
-	}
-	return cursor, items, nil
 }
 
 func (pc *ProxyClient) ZClear(s *resp.Session, keys ...[]byte) (interface{}, error) {

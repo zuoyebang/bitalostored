@@ -15,10 +15,7 @@
 package router
 
 import (
-	"github.com/zuoyebang/bitalostored/butils/unsafe2"
 	"github.com/zuoyebang/bitalostored/proxy/resp"
-
-	"github.com/gomodule/redigo/redis"
 )
 
 func (pc *ProxyClient) SAdd(s *resp.Session, key []byte, members ...[]byte) (interface{}, error) {
@@ -57,27 +54,6 @@ func (pc *ProxyClient) SPopByCount(s *resp.Session, key []byte, count int64) (in
 
 func (pc *ProxyClient) SCard(s *resp.Session, key []byte) (interface{}, error) {
 	return pc.do("SCARD", s, key)
-}
-
-func (pc *ProxyClient) SScan(s *resp.Session, key string, cursor []byte, pattern string, count int) ([]byte, [][]byte, error) {
-	args := make([]interface{}, 0, 6)
-	args = append(args, key, unsafe2.String(cursor))
-	if pattern != "" {
-		args = append(args, "MATCH", pattern)
-	}
-	if count > 0 {
-		args = append(args, "COUNT", count)
-	}
-	values, err := redis.Values(pc.do("SSCAN", s, args...))
-	if err != nil {
-		return resp.NoScanMember, nil, err
-	}
-	var items [][]byte
-	_, err = redis.Scan(values, &cursor, &items)
-	if err != nil {
-		return resp.NoScanMember, nil, err
-	}
-	return cursor, items, nil
 }
 
 func (pc *ProxyClient) SClear(s *resp.Session, keys ...[]byte) (interface{}, error) {

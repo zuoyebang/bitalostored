@@ -19,24 +19,19 @@ import (
 	"github.com/zuoyebang/bitalostored/proxy/router"
 )
 
-func FillPconfigs(pconfigs []*models.Pconfig) error {
+func FillDks(dks []*models.DkItem) error {
 	proxyClient, _ := router.GetProxyClient()
-	return proxyClient.FillPconfigs(pconfigs)
+	return proxyClient.FillDks(dks)
 }
 
-func Pconfigs() []*models.Pconfig {
+func CreateDk(dk *models.DkItem) error {
 	proxyClient, _ := router.GetProxyClient()
-	return proxyClient.Pconfigs()
+	return proxyClient.CreateDk(dk)
 }
 
-func CheckIsBlackKey(key string) bool {
+func RemoveDk(key string) error {
 	proxyClient, _ := router.GetProxyClient()
-	return proxyClient.CheckIsBlackKey(key)
-}
-
-func CheckIsWhiteKey(key string) bool {
-	proxyClient, _ := router.GetProxyClient()
-	return proxyClient.CheckIsWhiteKey(key)
+	return proxyClient.RemoveDk(key)
 }
 
 func FillSlots(slots []*models.Slot) error {

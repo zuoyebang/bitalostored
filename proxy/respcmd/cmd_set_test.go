@@ -15,8 +15,10 @@
 package respcmd
 
 import (
+	"strings"
 	"testing"
 
+	"github.com/zuoyebang/bitalostored/proxy/internal/errn"
 	"github.com/zuoyebang/bitalostored/proxy/resp"
 
 	"github.com/gomodule/redigo/redis"
@@ -100,4 +102,34 @@ func TestSetErrorParams(t *testing.T) {
 	_, err = c.Do("sdiff")
 	assert.Error(t, err)
 	assert.Equal(t, resp.NotFoundErr.Error(), err.Error())
+}
+
+func TestSetKeyError(t *testing.T) {
+	c := getTestConn()
+	defer c.Close()
+
+	key := strings.Repeat("A", invalieKeySize)
+	v := "value"
+
+	commands := [][]string{
+		{"srandmember", key},
+		{"sadd", key, v},
+		{"scard", key},
+		{"sismember", key, v},
+		{"smembers", key},
+		{"srem", key, v},
+	}
+
+	for _, args := range commands {
+		if len(args) <= 1 {
+			continue
+		}
+		inputs := make([]interface{}, 0, len(args)-1)
+		for _, arg := range args[1:] {
+			inputs = append(inputs, arg)
+		}
+		_, err := c.Do(args[0], inputs...)
+		assert.Error(t, err)
+		assert.Equal(t, errn.ErrKeySize.Error(), err.Error())
+	}
 }

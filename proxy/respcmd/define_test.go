@@ -20,12 +20,20 @@ import (
 	"github.com/gomodule/redigo/redis"
 )
 
+var compareFlag, compareTxFlag, testTxFlag bool
+
+// Set a single server for one group.
+// If more than one server is online for one group, some cases will fail due to latency in data synchronization between the master and slave nodes.
 func init() {
 	addr := "127.0.0.1:8781"
 	initRedisPool(addr, 150)
 
 	baseAddr := "127.0.0.1:8779"
 	initBaseRedisPool(baseAddr, 150)
+
+	compareFlag = false
+	compareTxFlag = false
+	testTxFlag = false
 }
 
 var redisPool, redisBasePool *redis.Pool

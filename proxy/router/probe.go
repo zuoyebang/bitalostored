@@ -21,6 +21,7 @@ import (
 
 	"github.com/zuoyebang/bitalostored/proxy/internal/log"
 	"github.com/zuoyebang/bitalostored/proxy/internal/switcher"
+	"github.com/zuoyebang/bitalostored/proxy/internal/utils"
 
 	"github.com/gomodule/redigo/redis"
 )
@@ -54,7 +55,7 @@ func newProbeTask(r *Router) *probeTask {
 func (p *probeTask) doCheck() {
 	for i := range p.r.slots {
 		p.checkSlotNodeNormal(i)
-		p.checkSlotNodeWitness(i)
+		//p.checkSlotNodeWitness(i)
 	}
 	p.reset()
 }
@@ -71,9 +72,9 @@ func (p *probeTask) checkSlotNodeNormal(id int) {
 		return
 	}
 
+	groupId := m.MasterAddrGroupId
 	isChangeMaster := false
-
-	rgsi := p.getRaftGroupInfo(m.GroupServersCloudMap)
+	rgsi := p.getRaftGroupInfo(m.GroupServersCloudMap, groupId)
 	if len(rgsi.MasterAddr) <= 0 {
 		log.Warnf("groupId:%d slotId:%d not most agree master %s not in GroupServersCloudMap %v",
 			m.MasterAddrGroupId, m.Id, rgsi.MasterAddr, m.GroupServersCloudMap)
@@ -126,12 +127,13 @@ func (p *probeTask) checkSlotNodeNormal(id int) {
 
 func (p *probeTask) checkSlotNodeWitness(id int) {
 	m := p.r.slots[id].Snapshot(false)
+	groupId := m.MasterAddrGroupId
 	for _, addr := range m.WitnessServers {
-		p.getNodeInfo(addr, true)
+		p.getNodeInfo(addr, groupId, true)
 	}
 }
 
-func (p *probeTask) getRaftGroupInfo(addrs map[string]string) *raftGroupInfo {
+func (p *probeTask) getRaftGroupInfo(addrs map[string]string, gid int) *raftGroupInfo {
 	var hasDeraft bool
 	var leaderAddr, deraftAddr string
 	flagNodeList := make(map[string]bool)
@@ -139,7 +141,7 @@ func (p *probeTask) getRaftGroupInfo(addrs map[string]string) *raftGroupInfo {
 	nodeIdToAddress := make(map[string]string, len(addrs))
 
 	for addr := range addrs {
-		node, err := p.getNodeInfo(addr, false)
+		node, err := p.getNodeInfo(addr, gid, false)
 		if err == nil {
 			if node.status {
 				if node.startModel == "normal" {
@@ -185,8 +187,9 @@ func (p *probeTask) getRaftGroupInfo(addrs map[string]string) *raftGroupInfo {
 	return rgsi
 }
 
-func (p *probeTask) getNodeInfo(addr string, isWitness bool) (*nodeInfo, error) {
-	if nf, exist := p.nodeInfoCache[addr]; exist {
+func (p *probeTask) getNodeInfo(addr string, gid int, isWitness bool) (*nodeInfo, error) {
+	lk := utils.ServerGroupKey(addr, gid)
+	if nf, exist := p.nodeInfoCache[lk]; exist {
 		if nf.isDown {
 			return nil, errors.New("node is down")
 		}
@@ -197,7 +200,7 @@ func (p *probeTask) getNodeInfo(addr string, isWitness bool) (*nodeInfo, error) 
 	var err error
 	retry := 2
 	for retry > 0 {
-		addrInfo, err = p.doInfo(addr)
+		addrInfo, err = p.doInfo(addr, gid)
 		if len(addrInfo["status"]) <= 0 {
 			time.Sleep(30 * time.Millisecond)
 			retry--
@@ -214,7 +217,7 @@ func (p *probeTask) getNodeInfo(addr string, isWitness bool) (*nodeInfo, error) 
 	if len(addrInfo["status"]) <= 0 {
 		log.Warnf("GetNodeInfo not alive [isWitness:%v] [isdown:true] [addr:%s] [data:%v]", isWitness, addr, addrInfo)
 		node.isDown = true
-		p.nodeInfoCache[addr] = node
+		p.nodeInfoCache[lk] = node
 		return nil, errors.New("node is down err")
 	}
 
@@ -228,7 +231,7 @@ func (p *probeTask) getNodeInfo(addr string, isWitness bool) (*nodeInfo, error) 
 		log.Warnf("GetNodeInfo not alive [isWitness:%v] [isdown:false] [addr:%s] [data:%v]", isWitness, addr, addrInfo)
 	}
 
-	p.nodeInfoCache[addr] = node
+	p.nodeInfoCache[lk] = node
 	return node, nil
 }
 
@@ -237,7 +240,7 @@ func (p *probeTask) reset() {
 	p.nodeInfoCache = make(map[string]*nodeInfo)
 }
 
-func (p *probeTask) doInfo(addr string) (info map[string]string, err error) {
+func (p *probeTask) doInfo(addr string, gid int) (info map[string]string, err error) {
 	info = make(map[string]string)
 
 	pool, ok := p.r.GetAddrPool(addr)
@@ -250,11 +253,15 @@ func (p *probeTask) doInfo(addr string) (info map[string]string, err error) {
 	defer conn.Close()
 
 	var res string
-	res, err = redis.String(conn.Do("INFO", "clusterinfo"))
+	res, err = redis.String(conn.Do("INFO", "clusterinfo", gid))
 	if err != nil {
 		return
 	}
+	return convertInfoMap(res), nil
+}
 
+func convertInfoMap(res string) map[string]string {
+	info := make(map[string]string)
 	for _, line := range strings.Split(res, "\n") {
 		kv := strings.SplitN(line, ":", 2)
 		if len(kv) != 2 {
@@ -264,7 +271,7 @@ func (p *probeTask) doInfo(addr string) (info map[string]string, err error) {
 			info[key] = strings.TrimSpace(kv[1])
 		}
 	}
-	return info, nil
+	return info
 }
 
 func findAddAndDelAddrs(oldSlice, newSlice []string) ([]string, []string) {

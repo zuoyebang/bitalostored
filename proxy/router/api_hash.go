@@ -15,10 +15,7 @@
 package router
 
 import (
-	"github.com/zuoyebang/bitalostored/butils/unsafe2"
 	"github.com/zuoyebang/bitalostored/proxy/resp"
-
-	"github.com/gomodule/redigo/redis"
 )
 
 func (pc *ProxyClient) HSet(s *resp.Session, key string, field string, val string) (interface{}, error) {
@@ -70,29 +67,6 @@ func (pc *ProxyClient) HExists(s *resp.Session, key []byte, field []byte) (inter
 func (pc *ProxyClient) HDel(s *resp.Session, key []byte, fields ...[]byte) (interface{}, error) {
 	args := resp.InterfaceByteSubKeys(key, fields)
 	return pc.do("HDEL", s, args...)
-}
-
-func (pc *ProxyClient) HScan(s *resp.Session, key []byte, cursor []byte, pattern string, count int) ([]byte, [][]byte, error) {
-	args := make([]interface{}, 0, 6)
-	args = append(args, key, unsafe2.String(cursor))
-	if pattern != "" {
-		args = append(args, "MATCH", pattern)
-	}
-	if count > 0 {
-		args = append(args, "COUNT", count)
-	}
-
-	values, err := redis.Values(pc.do("HSCAN", s, args...))
-	if err != nil {
-		return resp.NoScanMember, nil, err
-	}
-
-	var items [][]byte
-	if _, err = redis.Scan(values, &cursor, &items); err != nil {
-		return resp.NoScanMember, nil, err
-	}
-
-	return cursor, items, nil
 }
 
 func (pc *ProxyClient) HClear(s *resp.Session, keys ...[]byte) (interface{}, error) {

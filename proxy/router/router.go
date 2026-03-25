@@ -27,7 +27,7 @@ import (
 	"github.com/zuoyebang/bitalostored/proxy/internal/config"
 	"github.com/zuoyebang/bitalostored/proxy/internal/dostats"
 	"github.com/zuoyebang/bitalostored/proxy/internal/errn"
-	"github.com/zuoyebang/bitalostored/proxy/internal/gcache"
+	"github.com/zuoyebang/bitalostored/butils/localcache"
 	"github.com/zuoyebang/bitalostored/proxy/internal/log"
 	"github.com/zuoyebang/bitalostored/proxy/internal/models"
 	"github.com/zuoyebang/bitalostored/proxy/internal/switcher"
@@ -38,9 +38,15 @@ import (
 )
 
 const (
-	MaxSlotNum = models.MaxSlotNum
+	MaxSlotNum    = models.MaxSlotNum
+	MaxDkShardNum = 1024
+	AntsPoolSize  = 96
+)
 
-	AntsPoolSize = 96
+var (
+	//md5(bitalos_stored_dk) 1/2
+	DkMainKey    = []byte("77c44df457908f56")
+	DkExpireTime = 15 * time.Minute
 )
 
 const (
@@ -58,6 +64,9 @@ const (
 	PrepareCommandType
 	ExecCommandType
 	DiscardCommandType
+	DKCreateShardCommandType
+	DKMemberWriteCommandType
+	DkHMgetCommandType
 )
 
 type Router struct {
@@ -66,7 +75,7 @@ type Router struct {
 	groupPools    sync.Map
 	antsPools     sync.Map
 	GroupBreaker  *GroupBreaker
-	localCache    *gcache.BucketCache
+	localCache    localcache.Cache
 	config        *config.Config
 	online        bool
 	closed        bool
@@ -80,7 +89,7 @@ func NewRouter(config *config.Config) *Router {
 		slots:         make([]*models.Slot, MaxSlotNum),
 		groupPools:    sync.Map{},
 		antsPools:     sync.Map{},
-		localCache:    gcache.NewBucketCache(DefaultLocalCacheExpireTime, 4*time.Minute, 8),
+		localCache:    localcache.New(0).Build(),
 		online:        true,
 		closed:        false,
 		curPoolActive: config.RedisDefaultConf.MaxActive,
@@ -344,9 +353,8 @@ func (r *Router) newGroupPool(groupId int, addrs []string, poolMaxActive int) {
 	}
 
 	for _, addr := range addrs {
+		r.registerGroupBreaker(groupId, addr)
 		if _, ok := r.groupPools.Load(addr); !ok {
-			r.registerGroupBreaker(groupId, addr)
-
 			poolConf := r.config.RedisDefaultConf
 			poolConf.HostPort = addr
 			poolConf.MaxActive = poolMaxActive
@@ -407,4 +415,13 @@ func checkSlotLocalEmptyAndBackupEmpty(slot *models.Slot) bool {
 		return true
 	}
 	return false
+}
+
+func EncodeDkGroupKey(dkKey []byte, shardNum uint32) string {
+	return fmt.Sprintf("%s_%s_%d", dkKey, DkMainKey, shardNum)
+}
+
+func HashDkKey(member []byte, shardNum uint32) uint32 {
+	index := hash.Fnv32(member) % shardNum
+	return index
 }

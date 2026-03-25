@@ -12,26 +12,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package gcache
+
+package router
 
 import (
-	"runtime"
-	"time"
+	"github.com/zuoyebang/bitalostored/proxy/resp"
 )
 
-type BucketCache struct {
-	*shardedCache
+func (pc *ProxyClient) DkSAdd(shardNum uint32, args ...[]byte) (interface{}, error) {
+	return pc.dkDo(resp.DK_SADD, shardNum, args)
 }
 
-func NewBucketCache(defaultExpiration, cleanupInterval time.Duration, shardnum int) *BucketCache {
-	if defaultExpiration == 0 {
-		defaultExpiration = -1
-	}
-	sc := newShardedCache(shardnum, defaultExpiration)
-	SC := &BucketCache{sc}
-	if cleanupInterval > 0 {
-		runShardedJanitor(sc, cleanupInterval)
-		runtime.SetFinalizer(SC, stopShardedJanitor)
-	}
-	return SC
+func (pc *ProxyClient) DkSIsMember(key string, member []byte) (interface{}, error) {
+	return pc.dkDo(resp.SISMEMBER, key, member)
+}
+
+func (pc *ProxyClient) DkSRem(shardNum uint32, args ...[]byte) (interface{}, error) {
+	return pc.dkDo(resp.DK_SREM, shardNum, args)
+}
+
+func (pc *ProxyClient) DkSPop(key []byte, count int64) (interface{}, error) {
+	return pc.dkDo(resp.DK_SPOP, key, count)
 }

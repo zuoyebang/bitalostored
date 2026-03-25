@@ -17,9 +17,11 @@ package respcmd
 import (
 	"fmt"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/zuoyebang/bitalostored/proxy/internal/errn"
 	"github.com/zuoyebang/bitalostored/proxy/resp"
 
 	"github.com/gomodule/redigo/redis"
@@ -258,9 +260,41 @@ func TestHashErrorParams(t *testing.T) {
 	_, err = c.Do("hvals")
 	assert.Error(t, err)
 	assert.Equal(t, resp.CmdParamsErr("HVALS").Error(), err.Error())
+}
 
-	_, err = c.Do("hscan")
-	assert.Error(t, err)
-	assert.Equal(t, resp.CmdParamsErr("HSCAN").Error(), err.Error())
+func TestHashKeyError(t *testing.T) {
+	c := getTestConn()
+	defer c.Close()
+
+	key := strings.Repeat("H", invalieKeySize)
+	f := "field"
+	v := "value"
+
+	commands := [][]string{
+		{"hset", key, f, v},
+		{"hget", key, f},
+		{"hexists", key, f},
+		{"hdel", key, f},
+		{"hlen", key},
+		{"hincrby", key, f, "1"},
+		{"hmset", key, f, v},
+		{"hmget", key, f},
+		{"hgetall", key},
+		{"hkeys", key},
+		{"hvals", key},
+	}
+
+	for _, args := range commands {
+		if len(args) <= 1 {
+			continue
+		}
+		inputs := make([]interface{}, 0, len(args)-1)
+		for _, arg := range args[1:] {
+			inputs = append(inputs, arg)
+		}
+		_, err := c.Do(args[0], inputs...)
+		assert.Error(t, err)
+		assert.Equal(t, errn.ErrKeySize.Error(), err.Error())
+	}
 
 }

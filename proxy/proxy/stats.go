@@ -55,7 +55,6 @@ func init() {
 		resp.HINCRBY: 1,
 		resp.HVALS:   1,
 		resp.HGETALL: 1,
-		resp.HSCAN:   1,
 
 		resp.SADD:      2,
 		resp.SREM:      2,
@@ -63,7 +62,6 @@ func init() {
 		resp.SISMEMBER: 2,
 		resp.SPOP:      2,
 		resp.SMEMBERS:  2,
-		resp.SSCAN:     2,
 
 		resp.ZADD:             3,
 		resp.ZSCORE:           3,
@@ -81,21 +79,18 @@ func init() {
 		resp.ZREVRANGEBYSCORE: 3,
 		resp.ZREVRANK:         3,
 		resp.ZLEXCOUNT:        3,
-		resp.ZSCAN:            3,
 
-		resp.LPOP:    4,
-		resp.LPUSH:   4,
-		resp.LPUSHX:  4,
-		resp.LTRIM:   4,
-		resp.RPUSH:   4,
-		resp.RPOP:    4,
-		resp.RPUSHX:  4,
-		resp.LLEN:    4,
-		resp.LINDEX:  4,
-		resp.LREM:    4,
-		resp.LRANGE:  4,
-		resp.LINSERT: 4,
-		resp.LSET:    4,
+		resp.LPOP:   4,
+		resp.LPUSH:  4,
+		resp.LPUSHX: 4,
+		resp.LTRIM:  4,
+		resp.RPUSH:  4,
+		resp.RPOP:   4,
+		resp.RPUSHX: 4,
+		resp.LLEN:   4,
+		resp.LINDEX: 4,
+		resp.LRANGE: 4,
+		resp.LSET:   4,
 	}
 }
 

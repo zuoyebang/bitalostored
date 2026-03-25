@@ -205,16 +205,6 @@ func (sc *sessionClient) handleRequest(reqData [][]byte) error {
 		sc.session.Args = reqData[1:]
 	}
 
-	if len(sc.session.Args) >= 1 {
-		key := unsafe2.String(sc.session.Args[0])
-		if CheckIsBlackKey(key) {
-			if !CheckIsWhiteKey(key) {
-				sc.session.RespWriter.WriteError(errors.Errorf("black key: %s", key))
-				return nil
-			}
-		}
-	}
-
 	if sc.session.Cmd == "INFO" {
 		sc.session.RespWriter.WriteBulk(proxyInfo)
 		return nil

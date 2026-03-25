@@ -21,6 +21,7 @@ import (
 
 	"github.com/zuoyebang/bitalostored/butils/extend"
 	"github.com/zuoyebang/bitalostored/butils/unsafe2"
+	"github.com/zuoyebang/bitalostored/proxy/internal/utils"
 	"github.com/zuoyebang/bitalostored/proxy/resp"
 	"github.com/zuoyebang/bitalostored/proxy/router"
 
@@ -57,6 +58,9 @@ func ZaddCommand(s *resp.Session) error {
 	args := s.Args
 	if len(args) < 3 {
 		return resp.CmdParamsErr(resp.ZADD)
+	}
+	if err := utils.CheckKeySize(len(args[0])); err != nil {
+		return err
 	}
 
 	key := unsafe2.String(args[0])
@@ -99,6 +103,9 @@ func ZcardCommand(s *resp.Session) error {
 	if len(args) != 1 {
 		return resp.CmdParamsErr(resp.ZCARD)
 	}
+	if err := utils.CheckKeySize(len(args[0])); err != nil {
+		return err
+	}
 	if proxyClient, err := router.GetProxyClient(); err == nil {
 		res, err := proxyClient.ZCard(s, args[0])
 		if s.TxCommandQueued {
@@ -124,6 +131,9 @@ func ZscoreCommand(s *resp.Session) error {
 	args := s.Args
 	if len(args) != 2 {
 		return resp.CmdParamsErr(resp.ZSCORE)
+	}
+	if err := utils.CheckKeySize(len(args[0])); err != nil {
+		return err
 	}
 	if proxyClient, err := router.GetProxyClient(); err == nil {
 		res, err := proxyClient.ZScore(s, args[0], args[1])
@@ -155,6 +165,9 @@ func ZremCommand(s *resp.Session) error {
 	if len(args) < 2 {
 		return resp.CmdParamsErr(resp.ZREM)
 	}
+	if err := utils.CheckKeySize(len(args[0])); err != nil {
+		return err
+	}
 	if proxyClient, err := router.GetProxyClient(); err == nil {
 		res, err := proxyClient.ZRem(s, args[0], args[1:]...)
 		if s.TxCommandQueued {
@@ -182,6 +195,9 @@ func ZincrbyCommand(s *resp.Session) error {
 	args := s.Args
 	if len(args) != 3 {
 		return resp.CmdParamsErr(resp.ZINCRBY)
+	}
+	if err := utils.CheckKeySize(len(args[0])); err != nil {
+		return err
 	}
 
 	key := args[0]
@@ -258,6 +274,9 @@ func ZcountCommand(s *resp.Session) error {
 	if len(args) != 3 {
 		return resp.CmdParamsErr(resp.ZCOUNT)
 	}
+	if err := utils.CheckKeySize(len(args[0])); err != nil {
+		return err
+	}
 
 	isScoreWrong, err := zparseScoreRange(args[1], args[2])
 	if isScoreWrong {
@@ -292,6 +311,9 @@ func ZrankCommand(s *resp.Session) error {
 	if len(args) != 2 {
 		return resp.CmdParamsErr(resp.ZRANK)
 	}
+	if err := utils.CheckKeySize(len(args[0])); err != nil {
+		return err
+	}
 	if proxyClient, err := router.GetProxyClient(); err == nil {
 		res, err := proxyClient.ZRank(s, args[0], args[1])
 		if s.TxCommandQueued {
@@ -317,6 +339,9 @@ func ZrevrankCommand(s *resp.Session) error {
 	if len(args) != 2 {
 		return resp.CmdParamsErr(resp.ZREVRANK)
 	}
+	if err := utils.CheckKeySize(len(args[0])); err != nil {
+		return err
+	}
 	if proxyClient, err := router.GetProxyClient(); err == nil {
 		res, err := proxyClient.ZRevRank(s, args[0], args[1])
 		if s.TxCommandQueued {
@@ -341,6 +366,9 @@ func ZremrangebyrankCommand(s *resp.Session) error {
 	args := s.Args
 	if len(args) != 3 {
 		return resp.CmdParamsErr(resp.ZREMRANGEBYRANK)
+	}
+	if err := utils.CheckKeySize(len(args[0])); err != nil {
+		return err
 	}
 
 	key := unsafe2.String(args[0])
@@ -372,6 +400,9 @@ func ZremrangebyscoreCommand(s *resp.Session) error {
 	args := s.Args
 	if len(args) != 3 {
 		return resp.CmdParamsErr(resp.ZREMRANGEBYSCORE)
+	}
+	if err := utils.CheckKeySize(len(args[0])); err != nil {
+		return err
 	}
 
 	key := unsafe2.String(args[0])
@@ -422,7 +453,9 @@ func zrangeGeneric(s *resp.Session, reverse bool) error {
 		} else {
 			return resp.CmdParamsErr(resp.ZRANGE)
 		}
-
+	}
+	if err := utils.CheckKeySize(len(args[0])); err != nil {
+		return err
 	}
 
 	key := unsafe2.String(args[0])
@@ -498,6 +531,9 @@ func ZrangebyscoreGeneric(s *resp.Session, reverse bool) error {
 		} else {
 			return resp.CmdParamsErr(resp.ZRANGEBYSCORE)
 		}
+	}
+	if err := utils.CheckKeySize(len(args[0])); err != nil {
+		return err
 	}
 	key := unsafe2.String(args[0])
 
@@ -610,47 +646,6 @@ func ZrevrangebyscoreCommand(s *resp.Session) error {
 	return ZrangebyscoreGeneric(s, true)
 }
 
-/*
-func zunionstoreCommand(c *session) error {
-	args := s.Args
-	if len(args) < 2 {
-		return CmdParamsErr
-	}
-
-	destKey, srcKeys, weights, aggregate, err := zparseZsetoptStore(args)
-	if err != nil {
-		return err
-	}
-
-	n, err := proxyClient.ZUnionStore(destKey, srcKeys, weights, aggregate)
-
-	if err == nil {
-		s.RespWriter.WriteInteger(n)
-	}
-
-	return err
-}*/
-/*
-func zinterstoreCommand(c *session) error {
-	args := s.Args
-	if len(args) < 2 {
-		return CmdParamsErr
-	}
-
-	destKey, srcKeys, weights, aggregate, err := zparseZsetoptStore(args)
-	if err != nil {
-		return err
-	}
-
-	n, err := proxyClient.ZInterStore(destKey, srcKeys, weights, aggregate)
-
-	if err == nil {
-		s.RespWriter.WriteInteger(n)
-	}
-
-	return err
-}*/
-
 func zparseMemberRange(minBuf []byte, maxBuf []byte) (min []byte, max []byte, rangeType uint8, err error) {
 	rangeType = resp.RangeClose
 	if strings.ToLower(unsafe2.String(minBuf)) == "-" {
@@ -693,49 +688,13 @@ func zparseMemberRange(minBuf []byte, maxBuf []byte) (min []byte, max []byte, ra
 	return
 }
 
-/*
-	func zrangebylexCommand(c *session) error {
-		args := s.Args
-		if len(args) != 3 && len(args) != 6 {
-			return CmdParamsErr
-		}
-
-		min, max, rangeType, err := zparseMemberRange(args[1], args[2])
-		if err != nil {
-			return err
-		}
-
-		var offset int = 0
-		var count int = -1
-
-		if len(args) == 6 {
-			if strings.ToLower(unsafe2.String(args[3])) != "limit" {
-				return SyntaxErr
-			}
-
-			if offset, err = strconv.Atoi(unsafe2.String(args[4])); err != nil {
-				return ValueErr
-			}
-
-			if count, err = strconv.Atoi(unsafe2.String(args[5])); err != nil {
-				return ValueErr
-			}
-		}
-
-		key := args[0]
-		if ay, err := proxyClient.ZRangeByLex(key, min, max, rangeType, offset, count); err != nil {
-			return err
-		} else {
-			s.RespWriter.WriteSliceArray(ay)
-		}
-
-		return nil
-	}
-*/
 func ZremrangebylexCommand(s *resp.Session) error {
 	args := s.Args
 	if len(args) != 3 {
 		return resp.CmdParamsErr(resp.ZREMRANGEBYLEX)
+	}
+	if err := utils.CheckKeySize(len(args[0])); err != nil {
+		return err
 	}
 
 	min, max, _, err := zparseMemberRange(args[1], args[2])
@@ -765,6 +724,9 @@ func ZlexcountCommand(s *resp.Session) error {
 	args := s.Args
 	if len(args) != 3 {
 		return resp.CmdParamsErr(resp.ZLEXCOUNT)
+	}
+	if err := utils.CheckKeySize(len(args[0])); err != nil {
+		return err
 	}
 
 	min, max, _, err := zparseMemberRange(args[1], args[2])
@@ -819,6 +781,9 @@ func ZExpireatCommand(s *resp.Session) error {
 	if len(args) != 2 {
 		return resp.CmdParamsErr(resp.ZEXPIREAT)
 	}
+	if err := utils.CheckKeySize(len(args[0])); err != nil {
+		return err
+	}
 	when, err := extend.ParseInt64(unsafe2.String(args[1]))
 	if err != nil {
 		return resp.ValueErr
@@ -845,6 +810,9 @@ func ZPersistCommand(s *resp.Session) error {
 	if len(args) != 1 {
 		return resp.CmdParamsErr(resp.ZPERSIST)
 	}
+	if err := utils.CheckKeySize(len(args[0])); err != nil {
+		return err
+	}
 	if proxyClient, err := router.GetProxyClient(); err == nil {
 		res, err := proxyClient.ZPersist(s, args[0])
 		if s.TxCommandQueued {
@@ -868,6 +836,9 @@ func ZKeyExistsCommand(s *resp.Session) error {
 	if len(args) != 1 {
 		return resp.CmdParamsErr(resp.ZKEYEXISTS)
 	}
+	if err := utils.CheckKeySize(len(args[0])); err != nil {
+		return err
+	}
 
 	if proxyClient, err := router.GetProxyClient(); err == nil {
 		res, err := proxyClient.ZKeyExists(s, args[0])
@@ -889,9 +860,11 @@ func ZKeyExistsCommand(s *resp.Session) error {
 
 func ZTtlCommand(s *resp.Session) error {
 	args := s.Args
-
 	if len(args) != 1 {
 		return resp.CmdParamsErr(resp.ZTTL)
+	}
+	if err := utils.CheckKeySize(len(args[0])); err != nil {
+		return err
 	}
 	if proxyClient, err := router.GetProxyClient(); err == nil {
 		res, err := proxyClient.ZTtl(s, args[0])
@@ -915,6 +888,9 @@ func ZExpireCommand(s *resp.Session) error {
 	args := s.Args
 	if len(args) != 2 {
 		return resp.CmdParamsErr(resp.ZEXPIRE)
+	}
+	if err := utils.CheckKeySize(len(args[0])); err != nil {
+		return err
 	}
 
 	duration, err := extend.ParseInt64(unsafe2.String(args[1]))
@@ -943,6 +919,9 @@ func ZRangeByLexCommand(s *resp.Session) error {
 	args := s.Args
 	if len(args) != 3 && len(args) != 6 {
 		return resp.CmdParamsErr(resp.ZRANGEBYLEX)
+	}
+	if err := utils.CheckKeySize(len(args[0])); err != nil {
+		return err
 	}
 
 	proxyClient, err := router.GetProxyClient()

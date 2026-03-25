@@ -20,6 +20,7 @@ import (
 	"github.com/zuoyebang/bitalostored/butils/extend"
 	"github.com/zuoyebang/bitalostored/butils/unsafe2"
 	"github.com/zuoyebang/bitalostored/proxy/resp"
+	"github.com/zuoyebang/bitalostored/proxy/internal/utils"
 	"github.com/zuoyebang/bitalostored/proxy/router"
 
 	"github.com/gomodule/redigo/redis"
@@ -44,6 +45,9 @@ func init() {
 
 func SRandMemberCommand(s *resp.Session) error {
 	args := s.Args
+	if err := utils.CheckKeySize(len(args[0])); err != nil {
+		return err
+	}
 	proxyClient, err := router.GetProxyClient()
 	if err != nil {
 		return err
@@ -86,6 +90,9 @@ func SaddCommand(s *resp.Session) error {
 	if len(args) < 2 {
 		return resp.CmdParamsErr(resp.SADD)
 	}
+	if err := utils.CheckKeySize(len(args[0])); err != nil {
+		return err
+	}
 	if proxyClient, err := router.GetProxyClient(); err == nil {
 		res, err := proxyClient.SAdd(s, args[0], args[1:]...)
 		if s.TxCommandQueued {
@@ -108,6 +115,9 @@ func ScardCommand(s *resp.Session) error {
 	args := s.Args
 	if len(args) != 1 {
 		return resp.CmdParamsErr(resp.SCARD)
+	}
+	if err := utils.CheckKeySize(len(args[0])); err != nil {
+		return err
 	}
 	if proxyClient, err := router.GetProxyClient(); err == nil {
 		res, err := proxyClient.SCard(s, args[0])
@@ -132,6 +142,9 @@ func SismemberCommand(s *resp.Session) error {
 	if len(args) != 2 {
 		return resp.CmdParamsErr(resp.SISMEMBER)
 	}
+	if err := utils.CheckKeySize(len(args[0])); err != nil {
+		return err
+	}
 	if proxyClient, err := router.GetProxyClient(); err == nil {
 		res, err := proxyClient.SIsMember(s, args[0], args[1])
 		if s.TxCommandQueued {
@@ -154,6 +167,9 @@ func SmembersCommand(s *resp.Session) error {
 	args := s.Args
 	if len(args) != 1 {
 		return resp.CmdParamsErr(resp.SMEMBERS)
+	}
+	if err := utils.CheckKeySize(len(args[0])); err != nil {
+		return err
 	}
 	if proxyClient, err := router.GetProxyClient(); err == nil {
 		res, err := proxyClient.SMembers(s, args[0])
@@ -180,6 +196,9 @@ func SremCommand(s *resp.Session) error {
 	args := s.Args
 	if len(args) < 2 {
 		return resp.CmdParamsErr(resp.SREM)
+	}
+	if err := utils.CheckKeySize(len(args[0])); err != nil {
+		return err
 	}
 	if proxyClient, err := router.GetProxyClient(); err == nil {
 		res, err := proxyClient.SRem(s, args[0], args[1:]...)
@@ -230,6 +249,9 @@ func SExpireatCommand(s *resp.Session) error {
 	if len(args) != 2 {
 		return resp.CmdParamsErr(resp.SEXPIREAT)
 	}
+	if err := utils.CheckKeySize(len(args[0])); err != nil {
+		return err
+	}
 	when, err := extend.ParseInt64(unsafe2.String(args[1]))
 	if err != nil {
 		return resp.ValueErr
@@ -256,6 +278,9 @@ func SPersistCommand(s *resp.Session) error {
 	if len(args) != 1 {
 		return resp.CmdParamsErr(resp.SPERSIST)
 	}
+	if err := utils.CheckKeySize(len(args[0])); err != nil {
+		return err
+	}
 	if proxyClient, err := router.GetProxyClient(); err == nil {
 		res, err := proxyClient.SPersist(s, args[0])
 		if s.TxCommandQueued {
@@ -279,6 +304,9 @@ func SKeyExistsCommand(s *resp.Session) error {
 	if len(args) != 1 {
 		return resp.CmdParamsErr(resp.SKEYEXISTS)
 	}
+	if err := utils.CheckKeySize(len(args[0])); err != nil {
+		return err
+	}
 
 	if proxyClient, err := router.GetProxyClient(); err == nil {
 		res, err := proxyClient.SKeyExists(s, args[0])
@@ -300,9 +328,11 @@ func SKeyExistsCommand(s *resp.Session) error {
 
 func STtlCommand(s *resp.Session) error {
 	args := s.Args
-
 	if len(args) != 1 {
 		return resp.CmdParamsErr(resp.STTL)
+	}
+	if err := utils.CheckKeySize(len(args[0])); err != nil {
+		return err
 	}
 	if proxyClient, err := router.GetProxyClient(); err == nil {
 		res, err := proxyClient.STtl(s, args[0])
@@ -326,6 +356,9 @@ func SExpireCommand(s *resp.Session) error {
 	args := s.Args
 	if len(args) != 2 {
 		return resp.CmdParamsErr(resp.SEXPIRE)
+	}
+	if err := utils.CheckKeySize(len(args[0])); err != nil {
+		return err
 	}
 
 	duration, err := extend.ParseInt64(unsafe2.String(args[1]))
@@ -352,6 +385,9 @@ func SExpireCommand(s *resp.Session) error {
 
 func SpopCommand(s *resp.Session) error {
 	args := s.Args
+	if err := utils.CheckKeySize(len(args[0])); err != nil {
+		return err
+	}
 
 	if proxyClient, err := router.GetProxyClient(); err == nil {
 		if len(args) == 1 {

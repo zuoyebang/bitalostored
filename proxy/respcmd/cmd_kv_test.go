@@ -15,6 +15,9 @@
 package respcmd
 
 import (
+	"github.com/zuoyebang/bitalostored/proxy/internal/errn"
+	"github.com/zuoyebang/bitalostored/proxy/internal/utils"
+	"strings"
 	"testing"
 	"time"
 
@@ -50,6 +53,35 @@ func TestKV(t *testing.T) {
 	res, err := redis.Bool(c.Do("persist", "xx"))
 	assert.NoError(t, err)
 	assert.True(t, res)
+
+	time.Sleep(50 * time.Millisecond)
+	ttl, err = redis.Int64(c.Do("ttl", "xx"))
+	assert.Equal(t, int64(-1), ttl)
+	assert.NoError(t, err)
+
+	when := time.Now().Unix() + 100
+	expireAtKey := "expireAtTestKey"
+	c.Do("set", expireAtKey, "test-value")
+	_, err = redis.Int(c.Do("expireat", expireAtKey, when))
+	assert.NoError(t, err)
+	ts, err := redis.Int(c.Do("ttl", expireAtKey))
+	assert.NoError(t, err)
+	if ts <= 0 || ts > 100 {
+		t.Errorf("ttl error. ts:%d", ts)
+	}
+	c.Do("del", expireAtKey)
+
+	pexpireAtKey := "pexpireAtTestKey"
+	c.Do("set", pexpireAtKey, "test-value")
+	when = time.Now().Unix() + 100
+	_, err = redis.Int(c.Do("pexpireat", pexpireAtKey, when*1000))
+	assert.NoError(t, err)
+	ts, err = redis.Int(c.Do("ttl", pexpireAtKey))
+	assert.NoError(t, err)
+	if ts <= 0 || ts > 100 {
+		t.Errorf("ttl error. ts:%d", ts)
+	}
+	c.Do("del", pexpireAtKey)
 
 	time.Sleep(50 * time.Millisecond)
 	ttl, err = redis.Int64(c.Do("ttl", "xx"))
@@ -124,4 +156,53 @@ func TestKVIncrDecr(t *testing.T) {
 	n, err = redis.Int(c.Do("decrby", "TestKVIncrDecr", 10))
 	assert.NoError(t, err)
 	assert.Equal(t, 1, n)
+}
+
+func TestStringKeyError(t *testing.T) {
+	c := getTestConn()
+	defer c.Close()
+
+	key := strings.Repeat("S", invalieKeySize)
+	v := "value"
+
+	commands := [][]string{
+		{"set", key, v},
+		{"get", key},
+		{"append", key, v},
+		{"getset", key, v},
+		{"setex", key, "10", v},
+		{"setnx", key, v},
+		{"exists", key},
+		{"incr", key},
+		{"decr", key},
+		{"incrby", key, "1"},
+		{"decrby", key, "1"},
+		{"incrbyfloat", key, "1"},
+		{"expire", key, "10"},
+		{"pexpire", key, "10"},
+		{"pexpireat", key, "10"},
+		{"expireat", key, "10"},
+		{"ttl", key},
+		{"pttl", key},
+		{"persist", key},
+		{"setrange", key, "0", "aa"},
+		{"strlen", key},
+		{"getbit", key, "100"},
+		{"setbit", key, "100", "1"},
+		{"bitcount", key, "0", "100"},
+		{"bitpos", key, "100"},
+	}
+
+	for _, args := range commands {
+		if len(args) <= 1 {
+			continue
+		}
+		inputs := make([]interface{}, 0, len(args)-1)
+		for _, arg := range args[1:] {
+			inputs = append(inputs, arg)
+		}
+		_, err := c.Do(args[0], inputs...)
+		assert.Error(t, err)
+		assert.Equal(t, errn.ErrKeySize.Error(), err.Error())
+	}
 }

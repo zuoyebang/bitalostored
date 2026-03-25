@@ -17,9 +17,11 @@ package respcmd
 import (
 	"fmt"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/zuoyebang/bitalostored/proxy/internal/errn"
 	"github.com/zuoyebang/bitalostored/proxy/resp"
 
 	"github.com/gomodule/redigo/redis"
@@ -566,4 +568,46 @@ func TestZSetLex(t *testing.T) {
 		t.Fatal(n)
 	}
 
+}
+
+func TestZsetKeyError(t *testing.T) {
+	c := getTestConn()
+	defer c.Close()
+
+	key := strings.Repeat("Z", invalieKeySize)
+	member := "field"
+	score := "19"
+
+	commands := [][]string{
+		{"zadd", key, score, member},
+		{"zcard", key},
+		{"zscore", key, member},
+		{"zrem", key, member},
+		{"zincrby", key, score, member},
+		{"zcount", key, "-inf", "+inf"},
+		{"zrank", key, member},
+		{"zrevrank", key, member},
+		{"zremrangebyrank", key, "1", "2"},
+		{"zremrangebyscore", key, "1", "2"},
+		{"zrange", key, "1", "2"},
+		{"zrevrange", key, "1", "2"},
+		{"zrangebyscore", key, "1", "2"},
+		{"zrevrangebyscore", key, "1", "2"},
+		{"zremrangebylex", key, "1", "2"},
+		{"zlexcount", key, "1", "2"},
+		{"zrangebylex", key, "1", "2"},
+	}
+
+	for _, args := range commands {
+		if len(args) <= 1 {
+			continue
+		}
+		inputs := make([]interface{}, 0, len(args)-1)
+		for _, arg := range args[1:] {
+			inputs = append(inputs, arg)
+		}
+		_, err := c.Do(args[0], inputs...)
+		assert.Error(t, err)
+		assert.Equal(t, errn.ErrKeySize.Error(), err.Error())
+	}
 }

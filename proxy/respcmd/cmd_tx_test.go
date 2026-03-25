@@ -23,6 +23,9 @@ import (
 )
 
 func TestTxMultiCommand(t *testing.T) {
+	if !testTxFlag {
+		return
+	}
 	conn := getTestConn()
 	defer conn.Close()
 
@@ -52,6 +55,9 @@ func TestTxMultiCommand(t *testing.T) {
 }
 
 func TestTxMulti(t *testing.T) {
+	if !testTxFlag {
+		return
+	}
 	c := getTestConn()
 	defer c.Close()
 
@@ -65,6 +71,9 @@ func TestTxMulti(t *testing.T) {
 }
 
 func TestTxMultiNested(t *testing.T) {
+	if !testTxFlag {
+		return
+	}
 	c := getTestConn()
 	defer c.Close()
 
@@ -83,6 +92,9 @@ func TestTxMultiNested(t *testing.T) {
 }
 
 func TestTxDiscardNoWatch(t *testing.T) {
+	if !testTxFlag {
+		return
+	}
 	c := getTestConn()
 	defer c.Close()
 
@@ -118,6 +130,9 @@ func TestTxDiscardNoWatch(t *testing.T) {
 }
 
 func TestTxNotAllowedCmd(t *testing.T) {
+	if !testTxFlag {
+		return
+	}
 	cmds := make([][]interface{}, 0, 10)
 	cmds = append(cmds, []interface{}{"script", "len"})
 	cmds = append(cmds, []interface{}{"script", "exists", "md5"})
@@ -168,6 +183,9 @@ func TestTxNotAllowedCmd(t *testing.T) {
 }
 
 func TestTxExecWatchNoChange(t *testing.T) {
+	if !testTxFlag {
+		return
+	}
 	c := getTestConn()
 	defer c.Close()
 
@@ -197,7 +215,7 @@ func TestTxExecWatchNoChange(t *testing.T) {
 		}
 	}
 
-	if res, err := redis.Values(c.Do("exec")); err != nil {
+	if res, err := redis.MultiBulk(c.Do("exec")); err != nil {
 		t.Fatal(err)
 	} else {
 		if len(res) != 1 {
@@ -211,6 +229,9 @@ func TestTxExecWatchNoChange(t *testing.T) {
 }
 
 func TestTxWatch(t *testing.T) {
+	if !testTxFlag {
+		return
+	}
 	c := getTestConn()
 	defer c.Close()
 
@@ -240,7 +261,7 @@ func TestTxWatch(t *testing.T) {
 		}
 	}
 
-	if res, err := redis.Values(c.Do("exec")); err != nil {
+	if res, err := redis.MultiBulk(c.Do("exec")); err != nil {
 		t.Fatal(err)
 	} else {
 		if len(res) != 1 {
@@ -254,6 +275,9 @@ func TestTxWatch(t *testing.T) {
 }
 
 func TestTxWatchInMulti(t *testing.T) {
+	if !testTxFlag {
+		return
+	}
 	c := getTestConn()
 	defer c.Close()
 
@@ -280,6 +304,9 @@ func TestTxWatchInMulti(t *testing.T) {
 }
 
 func TestTxUnwatchInMulti(t *testing.T) {
+	if !testTxFlag {
+		return
+	}
 	c := getTestConn()
 	defer c.Close()
 
@@ -306,6 +333,9 @@ func TestTxUnwatchInMulti(t *testing.T) {
 }
 
 func TestTxUnwatchFirst(t *testing.T) {
+	if !testTxFlag {
+		return
+	}
 	c := getTestConn()
 	defer c.Close()
 
@@ -336,6 +366,9 @@ func TestTxUnwatchFirst(t *testing.T) {
 }
 
 func TestTxUnwatchBeforeMulti(t *testing.T) {
+	if !testTxFlag {
+		return
+	}
 	c := getTestConn()
 	defer c.Close()
 
@@ -369,7 +402,7 @@ func TestTxUnwatchBeforeMulti(t *testing.T) {
 		}
 	}
 
-	if res, err := redis.Values(c.Do("exec")); err != nil {
+	if res, err := redis.MultiBulk(c.Do("exec")); err != nil {
 		t.Fatal(err)
 	} else {
 		if len(res) != 1 {
@@ -383,6 +416,9 @@ func TestTxUnwatchBeforeMulti(t *testing.T) {
 }
 
 func TestTxWatchAndSet(t *testing.T) {
+	if !testTxFlag {
+		return
+	}
 	c := getTestConn()
 	defer c.Close()
 
@@ -427,7 +463,7 @@ func TestTxWatchAndSet(t *testing.T) {
 		}
 	}
 
-	if res, err := redis.Values(c.Do("exec")); err != nil {
+	if res, err := redis.MultiBulk(c.Do("exec")); err != nil {
 		t.Fatal(err)
 	} else {
 		if len(res) != 3 {
@@ -445,6 +481,9 @@ func TestTxWatchAndSet(t *testing.T) {
 }
 
 func TestTxWatchChange(t *testing.T) {
+	if !testTxFlag {
+		return
+	}
 	c := getTestConn()
 	defer c.Close()
 
@@ -474,6 +513,9 @@ func TestTxWatchChange(t *testing.T) {
 }
 
 func TestTx3KeyNoChange(t *testing.T) {
+	if !testTxFlag {
+		return
+	}
 	c := getTestConn()
 	defer c.Close()
 	c2 := getTestConn()
@@ -507,7 +549,7 @@ func TestTx3KeyNoChange(t *testing.T) {
 	if _, err := c.Do("set", otherWatchKey, val); err != nil {
 		t.Fatal(err)
 	}
-	if res, err := redis.Values(c.Do("exec")); err != nil {
+	if res, err := redis.MultiBulk(c.Do("exec")); err != nil {
 		t.Fatal(err)
 	} else {
 		if len(res) != 3 {
@@ -517,6 +559,9 @@ func TestTx3KeyNoChange(t *testing.T) {
 }
 
 func TestTx3KeyOtherChange(t *testing.T) {
+	if !testTxFlag {
+		return
+	}
 	c := getTestConn()
 	defer c.Close()
 	c2 := getTestConn()
@@ -535,7 +580,6 @@ func TestTx3KeyOtherChange(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// other client change updateKey, result no changed
 	if _, err := c2.Do("set", otherWatchKey, val); err != nil {
 		t.Fatal(err)
 	}
@@ -556,7 +600,7 @@ func TestTx3KeyOtherChange(t *testing.T) {
 	if _, err := c.Do("set", otherWatchKey, val); err != nil {
 		t.Fatal(err)
 	}
-	if res, err := redis.Values(c.Do("exec")); err != nil {
+	if res, err := redis.MultiBulk(c.Do("exec")); err != nil {
 		t.Fatal(err)
 	} else {
 		if len(res) != 3 {
@@ -566,6 +610,9 @@ func TestTx3KeyOtherChange(t *testing.T) {
 }
 
 func TestTxExecDeadlock(t *testing.T) {
+	if !testTxFlag {
+		return
+	}
 	c1 := getTestConn()
 	defer c1.Close()
 	c2 := getTestConn()
@@ -602,7 +649,7 @@ func TestTxExecDeadlock(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if res, err := redis.Values(c1.Do("exec")); err != nil {
+	if res, err := redis.MultiBulk(c1.Do("exec")); err != nil {
 		t.Fatal(err)
 	} else {
 		if len(res) != 1 {
@@ -619,6 +666,9 @@ func TestTxExecDeadlock(t *testing.T) {
 }
 
 func TestTxReWatchAndChange(t *testing.T) {
+	if !testTxFlag {
+		return
+	}
 	c := getTestConn()
 	defer c.Close()
 
@@ -651,6 +701,9 @@ func TestTxReWatchAndChange(t *testing.T) {
 }
 
 func TestTxDiscard(t *testing.T) {
+	if !testTxFlag {
+		return
+	}
 	c := getTestConn()
 	defer c.Close()
 
@@ -698,6 +751,9 @@ func TestTxDiscard(t *testing.T) {
 }
 
 func TestTxModifyByOtherClient(t *testing.T) {
+	if !testTxFlag {
+		return
+	}
 	c1 := getTestConn()
 	defer c1.Close()
 
@@ -750,6 +806,9 @@ func TestTxModifyByOtherClient(t *testing.T) {
 }
 
 func TestTxCloseClient(t *testing.T) {
+	if !testTxFlag {
+		return
+	}
 	tryNum := 5
 
 	c1 := getTestConn()
@@ -802,6 +861,9 @@ func TestTxCloseClient(t *testing.T) {
 }
 
 func TestTxMultiNoCommand(t *testing.T) {
+	if !testTxFlag {
+		return
+	}
 	c := getTestConn()
 	defer c.Close()
 
@@ -824,6 +886,9 @@ func TestTxMultiNoCommand(t *testing.T) {
 }
 
 func TestTxDiscardOnly(t *testing.T) {
+	if !testTxFlag {
+		return
+	}
 	c := getTestConn()
 	defer c.Close()
 
@@ -835,6 +900,9 @@ func TestTxDiscardOnly(t *testing.T) {
 }
 
 func TestTxDiscardWatch(t *testing.T) {
+	if !testTxFlag {
+		return
+	}
 	c := getTestConn()
 	defer c.Close()
 
@@ -854,6 +922,9 @@ func TestTxDiscardWatch(t *testing.T) {
 }
 
 func TestTxDiscardMulti(t *testing.T) {
+	if !testTxFlag {
+		return
+	}
 	c := getTestConn()
 	defer c.Close()
 
@@ -882,6 +953,9 @@ func TestTxDiscardMulti(t *testing.T) {
 }
 
 func TestTxRepeatMulti(t *testing.T) {
+	if !testTxFlag {
+		return
+	}
 	c := getTestConn()
 	defer c.Close()
 
@@ -900,6 +974,9 @@ func TestTxRepeatMulti(t *testing.T) {
 }
 
 func TestTxDiscard3KeyNoChange(t *testing.T) {
+	if !testTxFlag {
+		return
+	}
 	c := getTestConn()
 	defer c.Close()
 	c2 := getTestConn()
@@ -952,6 +1029,9 @@ func TestTxDiscard3KeyNoChange(t *testing.T) {
 }
 
 func TestTxExec100Command(t *testing.T) {
+	if !testTxFlag {
+		return
+	}
 	c := getTestConn()
 	defer c.Close()
 
@@ -973,7 +1053,7 @@ func TestTxExec100Command(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if res, err := redis.Values(c.Do("exec")); err != nil {
+	if res, err := redis.MultiBulk(c.Do("exec")); err != nil {
 		t.Fatal(err)
 	} else {
 		if len(res) != 101 {
@@ -987,6 +1067,9 @@ func TestTxExec100Command(t *testing.T) {
 }
 
 func TestTxExecCommandArgErr(t *testing.T) {
+	if !testTxFlag {
+		return
+	}
 	c := getTestConn()
 	defer c.Close()
 

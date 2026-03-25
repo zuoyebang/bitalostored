@@ -19,6 +19,7 @@ import (
 	"github.com/zuoyebang/bitalostored/butils/unsafe2"
 	"github.com/zuoyebang/bitalostored/proxy/resp"
 	"github.com/zuoyebang/bitalostored/proxy/router"
+	"github.com/zuoyebang/bitalostored/proxy/internal/utils"
 
 	"github.com/gomodule/redigo/redis"
 )
@@ -49,6 +50,9 @@ func HsetCommand(s *resp.Session) error {
 	if len(args) != 3 {
 		return resp.CmdParamsErr(resp.HSET)
 	}
+	if err := utils.CheckKeySize(len(args[0])); err != nil {
+		return err
+	}
 	if proxyClient, err := router.GetProxyClient(); err == nil {
 		res, err := proxyClient.HSetWithRes(s, args[0], args[1], args[2])
 		if s.TxCommandQueued {
@@ -72,6 +76,9 @@ func HgetCommand(s *resp.Session) error {
 	if len(args) != 2 {
 		return resp.CmdParamsErr(resp.HGET)
 	}
+	if err := utils.CheckKeySize(len(args[0])); err != nil {
+		return err
+	}
 	if proxyClient, err := router.GetProxyClient(); err == nil {
 		res, err := proxyClient.HGet(s, args[0], args[1])
 		if s.TxCommandQueued {
@@ -92,9 +99,11 @@ func HgetCommand(s *resp.Session) error {
 
 func HexistsCommand(s *resp.Session) error {
 	args := s.Args
-
 	if len(args) != 2 {
 		return resp.CmdParamsErr(resp.HEXISTS)
+	}
+	if err := utils.CheckKeySize(len(args[0])); err != nil {
+		return err
 	}
 
 	if proxyClient, err := router.GetProxyClient(); err == nil {
@@ -119,6 +128,9 @@ func HdelCommand(s *resp.Session) error {
 	args := s.Args
 	if len(args) < 2 {
 		return resp.CmdParamsErr(resp.HDEL)
+	}
+	if err := utils.CheckKeySize(len(args[0])); err != nil {
+		return err
 	}
 	if proxyClient, err := router.GetProxyClient(); err == nil {
 		res, err := proxyClient.HDel(s, args[0], args[1:]...)
@@ -146,6 +158,9 @@ func HlenCommand(s *resp.Session) error {
 	if len(args) != 1 {
 		return resp.CmdParamsErr(resp.HLEN)
 	}
+	if err := utils.CheckKeySize(len(args[0])); err != nil {
+		return err
+	}
 	if proxyClient, err := router.GetProxyClient(); err == nil {
 		res, err := proxyClient.HLen(s, args[0])
 		if s.TxCommandQueued {
@@ -168,6 +183,9 @@ func HincrbyCommand(s *resp.Session) error {
 	args := s.Args
 	if len(args) != 3 {
 		return resp.CmdParamsErr(resp.HINCRBY)
+	}
+	if err := utils.CheckKeySize(len(args[0])); err != nil {
+		return err
 	}
 
 	delta, err := extend.ParseInt64(unsafe2.String(args[2]))
@@ -198,6 +216,9 @@ func HmsetCommand(s *resp.Session) error {
 	args := s.Args
 	if len(args) < 3 {
 		return resp.CmdParamsErr(resp.HMSET)
+	}
+	if err := utils.CheckKeySize(len(args[0])); err != nil {
+		return err
 	}
 
 	if len(args[1:])%2 != 0 {
@@ -236,6 +257,9 @@ func HmgetCommand(s *resp.Session) error {
 	if len(args) < 2 {
 		return resp.CmdParamsErr(resp.HMGET)
 	}
+	if err := utils.CheckKeySize(len(args[0])); err != nil {
+		return err
+	}
 	if proxyClient, err := router.GetProxyClient(); err == nil {
 		res, err := proxyClient.HMGet(s, args[0], args[1:]...)
 		if s.TxCommandQueued {
@@ -258,6 +282,9 @@ func HkeysCommand(s *resp.Session) error {
 	args := s.Args
 	if len(args) != 1 {
 		return resp.CmdParamsErr(resp.HKEYS)
+	}
+	if err := utils.CheckKeySize(len(args[0])); err != nil {
+		return err
 	}
 	if proxyClient, err := router.GetProxyClient(); err == nil {
 		res, err := proxyClient.HKeys(s, args[0])
@@ -282,6 +309,9 @@ func HvalsCommand(s *resp.Session) error {
 	if len(args) != 1 {
 		return resp.CmdParamsErr(resp.HVALS)
 	}
+	if err := utils.CheckKeySize(len(args[0])); err != nil {
+		return err
+	}
 	if proxyClient, err := router.GetProxyClient(); err == nil {
 		res, err := proxyClient.HVals(s, args[0])
 		if s.TxCommandQueued {
@@ -304,6 +334,9 @@ func HgetallCommand(s *resp.Session) error {
 	args := s.Args
 	if len(args) != 1 {
 		return resp.CmdParamsErr(resp.HGETALL)
+	}
+	if err := utils.CheckKeySize(len(args[0])); err != nil {
+		return err
 	}
 	if proxyClient, err := router.GetProxyClient(); err == nil {
 		res, err := proxyClient.HGetAll(s, args[0])
@@ -355,6 +388,9 @@ func HExpireatCommand(s *resp.Session) error {
 	if len(args) != 2 {
 		return resp.CmdParamsErr(resp.HEXPIREAT)
 	}
+	if err := utils.CheckKeySize(len(args[0])); err != nil {
+		return err
+	}
 	when, err := extend.ParseInt64(unsafe2.String(args[1]))
 	if err != nil {
 		return resp.ValueErr
@@ -381,6 +417,9 @@ func HPersistCommand(s *resp.Session) error {
 	if len(args) != 1 {
 		return resp.CmdParamsErr(resp.HPERSIST)
 	}
+	if err := utils.CheckKeySize(len(args[0])); err != nil {
+		return err
+	}
 	if proxyClient, err := router.GetProxyClient(); err == nil {
 		res, err := proxyClient.HPersist(s, args[0])
 		if s.TxCommandQueued {
@@ -404,6 +443,9 @@ func HKeyExistsCommand(s *resp.Session) error {
 	if len(args) != 1 {
 		return resp.CmdParamsErr(resp.HKEYEXISTS)
 	}
+	if err := utils.CheckKeySize(len(args[0])); err != nil {
+		return err
+	}
 
 	if proxyClient, err := router.GetProxyClient(); err == nil {
 		res, err := proxyClient.HKeyExists(s, args[0])
@@ -425,9 +467,11 @@ func HKeyExistsCommand(s *resp.Session) error {
 
 func HTtlCommand(s *resp.Session) error {
 	args := s.Args
-
 	if len(args) != 1 {
 		return resp.CmdParamsErr(resp.HTTL)
+	}
+	if err := utils.CheckKeySize(len(args[0])); err != nil {
+		return err
 	}
 	if proxyClient, err := router.GetProxyClient(); err == nil {
 		res, err := proxyClient.HTtl(s, args[0])
@@ -451,6 +495,9 @@ func HExpireCommand(s *resp.Session) error {
 	args := s.Args
 	if len(args) != 2 {
 		return resp.CmdParamsErr(resp.HEXPIRE)
+	}
+	if err := utils.CheckKeySize(len(args[0])); err != nil {
+		return err
 	}
 
 	duration, err := extend.ParseInt64(unsafe2.String(args[1]))

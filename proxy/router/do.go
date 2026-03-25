@@ -20,13 +20,20 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/zuoyebang/bitalostored/butils/extend"
+	"github.com/zuoyebang/bitalostored/butils/unsafe2"
 	"github.com/zuoyebang/bitalostored/proxy/internal/errn"
-	"github.com/zuoyebang/bitalostored/proxy/internal/log"
+	"github.com/zuoyebang/bitalostored/proxy/internal/log"					
 	"github.com/zuoyebang/bitalostored/proxy/resp"
 
 	"github.com/gomodule/redigo/redis"
 	"github.com/sony/gobreaker"
 )
+
+type redisResult struct {
+	reply interface{}
+	err   error
+}
 
 func (pc *ProxyClient) doWithClients(commandName string, s *resp.Session, args ...interface{}) (res interface{}, err error) {
 	recorder := s.Recorder
@@ -93,6 +100,21 @@ func goStoredDoTx(r *ProxyClient, conn *resp.InternalServerConn, commandName str
 	return res, err
 }
 
+func (pc *ProxyClient) dkDo(commandName string, args ...interface{}) (res interface{}, err error) {
+	switch commandName {
+	case resp.DK_CREATESHARD:
+		return execDKCreateShard(pc, args...)
+	case resp.DK_HSET:
+		return execDKHSet(pc, args...)
+	case resp.DK_HMGET:
+		return execDKHMGet(pc, args...)
+	case resp.DK_SADD, resp.DK_HDEL, resp.DK_SREM:
+		return execDKMemberWrite(pc, commandName, args...)
+	default:
+		return directDo(pc, commandName, args...)
+	}
+}
+
 func (pc *ProxyClient) do(commandName string, s *resp.Session, args ...interface{}) (res interface{}, err error) {
 	if s != nil && s.OpenDistributedTx && s.TxCommandQueued {
 		return pc.doWithClients(commandName, s, args...)
@@ -100,10 +122,19 @@ func (pc *ProxyClient) do(commandName string, s *resp.Session, args ...interface
 
 	switch strings.ToUpper(commandName) {
 	case resp.MGET:
+		if len(args) == 1 {
+			return directDo(pc, commandName, args...)
+		}
 		return execStoredMGet(pc, commandName, args...)
 	case resp.DEL:
+		if len(args) == 1 {
+			return directDo(pc, commandName, args...)
+		}
 		return execStoredDel(pc, commandName, args...)
 	case resp.MSET:
+		if len(args) == 2 {
+			return directDo(pc, commandName, args...)
+		}
 		return execStoredMSet(pc, commandName, args...)
 	case resp.EVALSHA, resp.EVAL:
 		var slotId int
@@ -143,26 +174,16 @@ func (pc *ProxyClient) do(commandName string, s *resp.Session, args ...interface
 		default:
 			return nil, resp.CmdParamsErr(resp.SCRIPT)
 		}
-	case resp.LRANGE:
-		slotId := pc.router.Hash(args[0])
-		res, err, _ = goStoredDo(pc, slotId, commandName, nil, args...)
-	case resp.HKEYS, resp.HGETALL:
-		slotId := pc.router.Hash(args[0])
-		res, err, _ = goStoredDo(pc, slotId, commandName, nil, args...)
-	case resp.SMEMBERS:
-		slotId := pc.router.Hash(args[0])
-		res, err, _ = goStoredDo(pc, slotId, commandName, nil, args...)
-	case resp.ZRANGE, resp.ZREVRANGE:
-		slotId := pc.router.Hash(args[0])
-		res, err, _ = goStoredDo(pc, slotId, commandName, nil, args...)
-	case resp.ZRANGEBYSCORE, resp.ZREVRANGEBYSCORE, resp.ZRANK, resp.ZREVRANK:
-		slotId := pc.router.Hash(args[0])
-		res, err, _ = goStoredDo(pc, slotId, commandName, nil, args...)
 	default:
-		slotId := pc.router.Hash(args[0])
-		res, err, _ = goStoredDo(pc, slotId, commandName, nil, args...)
+		return directDo(pc, commandName, args...)
 	}
 	return res, err
+}
+
+func directDo(r *ProxyClient, commandName string, args ...interface{}) (res interface{}, err error) {
+	slotId := r.router.Hash(args[0])
+	res, err, _ = goStoredDo(r, slotId, commandName, nil, args...)
+	return
 }
 
 func goStoredDo(r *ProxyClient, slotId int, commandName string, prevGetConn func() (*InternalPool, bool, uint64, string, error), args ...interface{}) (res interface{}, err error, addrs string) {
@@ -193,6 +214,20 @@ func goStoredDo(r *ProxyClient, slotId int, commandName string, prevGetConn func
 			return nil, err
 		}
 		return res, nil
+	}
+	cbCmdFunc := func() (interface{}, error) {
+		conn := storedAddrPool.GetConn()
+		res, err := conn.Do(commandName, args...)
+		defer conn.Close()
+		if err != nil {
+			log.Warnf("do redis cmd fail addr:%s slotId:%d commandName:%s args:%s err:%v", hystrixName, slotId, commandName, args, err)
+			if strings.Contains(err.Error(), "i/o timeout") {
+				return nil, err
+			} else {
+				return redisResult{reply: res, err: err}, nil
+			}
+		}
+		return redisResult{reply: res, err: err}, nil
 	}
 
 	if !needCircuit {
@@ -235,19 +270,25 @@ func goStoredDo(r *ProxyClient, slotId int, commandName string, prevGetConn func
 		if err != nil {
 			return nil, err, hystrixName
 		}
-		res, err = cb.Execute(doCmdFunc)
+		res, err = cb.Execute(cbCmdFunc)
 	} else {
-		res, err = cb.Execute(doCmdFunc)
+		res, err = cb.Execute(cbCmdFunc)
 		if state == gobreaker.StateHalfOpen && err == gobreaker.ErrTooManyRequests {
 			err = reacquirePoolAndBreaker()
 			if err != nil {
 				return nil, err, hystrixName
 			}
-			res, err = cb.Execute(doCmdFunc)
+			res, err = cb.Execute(cbCmdFunc)
 		}
 	}
-
-	return res, err, hystrixName
+	if res == nil {
+		return nil, err, hystrixName
+	}
+	if r, ok := res.(redisResult); ok {
+		return r.reply, r.err, hystrixName
+	} else {
+		return nil, nil, hystrixName
+	}
 }
 
 func broadcastAllGroup(pc *ProxyClient, command string, args ...interface{}) (interface{}, error) {
@@ -266,22 +307,23 @@ func broadcastAllGroup(pc *ProxyClient, command string, args ...interface{}) (in
 }
 
 type antsCommandParams struct {
-	wg             *sync.WaitGroup
-	r              *ProxyClient
-	prevGetConn    func() (*InternalPool, bool, uint64, string, error)
-	slotId         int
-	commandName    string
-	commandType    int
-	newArgs        []interface{}
-	slotKeysMap    map[int][]interface{}
-	slotIndexesMap map[int][]int
-	result         []interface{}
-	delNum         *int64
-	seq            int
-	isTx           bool
-	txResult       *sync.Map
-	txErr          *sync.Map
-	masterConn     *resp.InternalServerConn
+	wg                *sync.WaitGroup
+	r                 *ProxyClient
+	prevGetConn       func() (*InternalPool, bool, uint64, string, error)
+	slotId            int
+	commandName       string
+	commandType       int
+	newArgs           []interface{}
+	slotKeysMap       map[int][]interface{}
+	slotIndexesMap    map[int][]int
+	slotKeyFieldIndex map[int]map[string][]int
+	result            []interface{}
+	delNum            *int64
+	seq               int
+	isTx              bool
+	txResult          *sync.Map
+	txErr             *sync.Map
+	masterConn        *resp.InternalServerConn
 }
 
 func multiCommandAntsCallback(params interface{}) {
@@ -294,6 +336,12 @@ func multiCommandAntsCallback(params interface{}) {
 	}
 	if !m.isTx {
 		switch m.commandType {
+		case DKCreateShardCommandType:
+			respDkCreateShard(m)
+		case DkHMgetCommandType:
+			resDKHMGet(m)
+		case DKMemberWriteCommandType:
+			respDKMemberWrite(m)
 		case MgetCommandType:
 			res, err, addr := goStoredDo(m.r, m.slotId, m.commandName, m.prevGetConn, m.newArgs...)
 			if err != nil {
@@ -366,7 +414,7 @@ func execStoredMSet(r *ProxyClient, commandName string, args ...interface{}) (in
 		storedAddrPool, needCircuit, curindex, cloudType, err := r.router.GetConn(slotId, commandName)
 		if err != nil {
 			log.Warnf("get stored conn fail slotId:%d commandName:%s err:%s", slotId, commandName, err.Error())
-			return nil, err
+			continue
 		}
 		addr := storedAddrPool.GetHostPort()
 		antsPool, ok := r.router.GetAntsPool(addr)
@@ -398,17 +446,358 @@ func execStoredMSet(r *ProxyClient, commandName string, args ...interface{}) (in
 	return nil, nil
 }
 
+func execDKCreateShard(r *ProxyClient, args ...interface{}) (interface{}, error) {
+	slotMap, slotIndexMap, argsNum := divideDkOnlyKeys(r, args...)
+	result := make([]interface{}, argsNum)
+	if len(slotMap) == 1 {
+		for slotId, newArgs := range slotMap {
+			m := &antsCommandParams{
+				r:              r,
+				slotId:         slotId,
+				prevGetConn:    nil,
+				commandName:    resp.DK_CREATESHARD,
+				commandType:    DKCreateShardCommandType,
+				slotIndexesMap: slotIndexMap,
+				newArgs:        newArgs,
+				result:         result,
+			}
+			respDkCreateShard(m)
+			return m.result, nil
+		}
+	}
+	var wg sync.WaitGroup
+	for slotId, newArgs := range slotMap {
+		storedAddrPool, needCircuit, curindex, cloudType, err := r.router.GetConn(slotId, resp.DK_CREATESHARD)
+		if err != nil {
+			log.Warnf("get stored conn fail slotId:%d commandName:%s err:%s", slotId, resp.DK_CREATESHARD, err.Error())
+			continue
+		}
+		addr := storedAddrPool.GetHostPort()
+		antsPool, ok := r.router.GetAntsPool(addr)
+		if !ok {
+			log.Warnf("antsPools load fail slotId:%d commandName:%s addr:%s", slotId, resp.DK_CREATESHARD, addr)
+			continue
+		}
+
+		m := &antsCommandParams{
+			wg:     &wg,
+			r:      r,
+			slotId: slotId,
+			prevGetConn: func() (*InternalPool, bool, uint64, string, error) {
+				return storedAddrPool, needCircuit, curindex, cloudType, nil
+			},
+			commandName:    resp.DK_CREATESHARD,
+			commandType:    DKCreateShardCommandType,
+			slotIndexesMap: slotIndexMap,
+			newArgs:        newArgs,
+			result:         result,
+		}
+
+		wg.Add(1)
+		err = antsPool.Invoke(m)
+		if err != nil {
+			wg.Done()
+			log.Warnf("antsPools invoke failed command:%s addr:%s antsPoolRunning:%d err:%s", resp.DK_CREATESHARD, addr, antsPool.Running(), err.Error())
+		}
+	}
+	wg.Wait()
+	return result, nil
+}
+
+func respDkCreateShard(m *antsCommandParams) {
+	_, err, _ := goStoredDo(m.r, m.slotId, m.commandName, m.prevGetConn, m.newArgs...)
+	indexMap, _ := m.slotIndexesMap[m.slotId]
+	for _, i := range indexMap {
+		m.result[i] = err
+		break
+	}
+}
+
+func execDKMemberWrite(r *ProxyClient, commandName string, args ...interface{}) (interface{}, error) {
+	slotKeysMap, slotKeyFieldIndex, argsNum := divideDkKeyFields(r, args...)
+	result := make([]interface{}, argsNum)
+	if len(slotKeysMap) == 1 {
+		for slotId, newArgs := range slotKeysMap {
+			m := &antsCommandParams{
+				r:                 r,
+				slotId:            slotId,
+				commandName:       commandName,
+				commandType:       DKMemberWriteCommandType,
+				newArgs:           newArgs,
+				slotKeyFieldIndex: slotKeyFieldIndex,
+				result:            result,
+			}
+			respDKMemberWrite(m)
+			return m.result, nil
+		}
+	}
+
+	var wg sync.WaitGroup
+	for slotId, newArgs := range slotKeysMap {
+		storedAddrPool, needCircuit, curindex, cloudType, err := r.router.GetConn(slotId, commandName)
+		if err != nil {
+			log.Warnf("get stored conn fail slotId:%d commandName:%s err:%s", slotId, commandName, err.Error())
+			continue
+		}
+		addr := storedAddrPool.GetHostPort()
+		antsPool, ok := r.router.GetAntsPool(addr)
+		if !ok {
+			log.Warnf("antsPools load fail slotId:%d commandName:%s addr:%s", slotId, commandName, addr)
+			continue
+		}
+
+		m := &antsCommandParams{
+			wg:     &wg,
+			r:      r,
+			slotId: slotId,
+			prevGetConn: func() (*InternalPool, bool, uint64, string, error) {
+				return storedAddrPool, needCircuit, curindex, cloudType, nil
+			},
+			commandName:       commandName,
+			commandType:       DKMemberWriteCommandType,
+			newArgs:           newArgs,
+			slotKeyFieldIndex: slotKeyFieldIndex,
+			result:            result,
+		}
+
+		wg.Add(1)
+		err = antsPool.Invoke(m)
+		if err != nil {
+			wg.Done()
+			log.Warnf("antsPools invoke failed command:%s addr:%s antsPoolRunning:%d err:%s", commandName, addr, antsPool.Running(), err.Error())
+		}
+	}
+	wg.Wait()
+	return result, nil
+}
+
+func respDKMemberWrite(m *antsCommandParams) {
+	res, err, addr := goStoredDo(m.r, m.slotId, m.commandName, m.prevGetConn, m.newArgs...)
+	keyFieldIndex, _ := m.slotKeyFieldIndex[m.slotId]
+	if err != nil {
+		log.Warnf("dk failed addr:%s command:%s args:%s err:%s", addr, m.commandName, m.newArgs, err.Error())
+		for _, fi := range keyFieldIndex {
+			for _, i := range fi {
+				m.result[i] = err
+				break
+			}
+		}
+		return
+	}
+	resTmp := res.([]interface{})
+	for i := 0; i < len(resTmp)/2; i++ {
+		k, ok := resTmp[2*i].([]byte)
+		if !ok {
+			log.Warnf("dk member write key not a bulk string value")
+			continue
+		}
+		v, ok := resTmp[2*i+1].([]byte)
+		if !ok {
+			log.Warnf("dk member write value not a bulk string value")
+			continue
+		}
+		key := unsafe2.String(k)
+		ki := keyFieldIndex[key][0]
+		n, _ := extend.ParseInt64(unsafe2.String(v))
+		m.result[ki] = n
+	}
+}
+
+func execDKHSet(r *ProxyClient, args ...interface{}) (interface{}, error) {
+	slotNameKVsMap, slotKeyFieldIndex, argsNum := divideDkKeysFieldsValues(r, args...)
+	result := make([]interface{}, argsNum)
+	if len(slotNameKVsMap) == 1 {
+		for slotId, newArgs := range slotNameKVsMap {
+			m := &antsCommandParams{
+				r:                 r,
+				slotId:            slotId,
+				commandName:       resp.DK_HSET,
+				commandType:       DKMemberWriteCommandType,
+				newArgs:           newArgs,
+				slotKeyFieldIndex: slotKeyFieldIndex,
+				result:            result,
+			}
+			respDKMemberWrite(m)
+			return m.result, nil
+		}
+	}
+	var wg sync.WaitGroup
+	for slotId, newArgs := range slotNameKVsMap {
+		storedAddrPool, needCircuit, curindex, cloudType, err := r.router.GetConn(slotId, resp.DK_HSET)
+		if err != nil {
+			log.Warnf("get stored conn fail slotId:%d commandName:%s err:%s", slotId, resp.DK_HSET, err.Error())
+			continue
+		}
+		addr := storedAddrPool.GetHostPort()
+		antsPool, ok := r.router.GetAntsPool(addr)
+		if !ok {
+			log.Warnf("antsPools load fail slotId:%d commandName:%s addr:%s", slotId, resp.DK_HSET, addr)
+			continue
+		}
+
+		m := &antsCommandParams{
+			wg:     &wg,
+			r:      r,
+			slotId: slotId,
+			prevGetConn: func() (*InternalPool, bool, uint64, string, error) {
+				return storedAddrPool, needCircuit, curindex, cloudType, nil
+			},
+			commandName:       resp.DK_HSET,
+			commandType:       DKMemberWriteCommandType,
+			newArgs:           newArgs,
+			slotKeyFieldIndex: slotKeyFieldIndex,
+			result:            result,
+		}
+
+		wg.Add(1)
+		err = antsPool.Invoke(m)
+		if err != nil {
+			wg.Done()
+			log.Warnf("antsPools invoke failed command:%s addr:%s antsPoolRunning:%d err:%s", resp.DK_HSET, addr, antsPool.Running(), err.Error())
+		}
+	}
+	wg.Wait()
+	return result, nil
+}
+
+func execDKHMGet(r *ProxyClient, args ...interface{}) (interface{}, error) {
+	slotKeysMap, slotKeyFieldIndex, argsNum := divideDkKeyFields(r, args...)
+	result := make([]interface{}, argsNum)
+	if len(slotKeysMap) == 1 {
+		for slotId, newArgs := range slotKeysMap {
+			m := &antsCommandParams{
+				r:                 r,
+				slotId:            slotId,
+				commandName:       resp.DK_HMGET,
+				commandType:       DkHMgetCommandType,
+				newArgs:           newArgs,
+				slotKeysMap:       slotKeysMap,
+				slotKeyFieldIndex: slotKeyFieldIndex,
+				result:            result,
+			}
+			resDKHMGet(m)
+			return m.result, nil
+		}
+	}
+
+	wg := sync.WaitGroup{}
+
+	for slotId, newArgs := range slotKeysMap {
+		storedAddrPool, needCircuit, curindex, cloudType, err := r.router.GetConn(slotId, resp.DK_HMGET)
+		if err != nil {
+			log.Warnf("execStoredMGet GetConn failed slotId:%d commandName:%s err:%s", slotId, resp.DK_HMGET, err.Error())
+			continue
+		}
+		addr := storedAddrPool.GetHostPort()
+		antsPool, ok := r.router.GetAntsPool(addr)
+		if !ok {
+			storedAddrPool, needCircuit, curindex, cloudType, err = r.router.GetConn(slotId, resp.DK_HMGET)
+			addr = storedAddrPool.GetHostPort()
+			antsPool, ok = r.router.GetAntsPool(addr)
+			if !ok {
+				log.Warnf("execStoredMGet GetAntsPool failed slotId:%d commandName:%s addr:%s", slotId, resp.DK_HMGET, addr)
+				continue
+			}
+		}
+
+		var cgb *Breaker
+		hystrixName := storedAddrPool.GetHostPort()
+		groupId, _ := r.router.GetGroupId(slotId)
+
+		m := &antsCommandParams{
+			wg:     &wg,
+			r:      r,
+			slotId: slotId,
+			prevGetConn: func() (*InternalPool, bool, uint64, string, error) {
+				return storedAddrPool, needCircuit, curindex, cloudType, err
+			},
+			commandName:       resp.DK_HMGET,
+			commandType:       DkHMgetCommandType,
+			newArgs:           newArgs,
+			slotKeysMap:       slotKeysMap,
+			slotKeyFieldIndex: slotKeyFieldIndex,
+			result:            result,
+		}
+		doFunc := func() (interface{}, error) {
+			wg.Add(1)
+			err := antsPool.Invoke(m)
+			if err != nil {
+				wg.Done()
+				log.Warnf("execStoredMGet antsPools invoke failed addr:%s antsPoolRunning:%d err:%s", addr, antsPool.Running(), err.Error())
+			}
+			return nil, err
+		}
+
+		cgb, err = r.router.GroupBreaker.GetCircuitBreakerByGid(groupId)
+		if cgb != nil {
+			cb := cgb.GetCircuitBreaker(hystrixName)
+			if cb != nil {
+				if cb.State() == gobreaker.StateOpen {
+					storedAddrPool, _, err = r.router.GetAnotherConnByCircuit(slotId, resp.DK_HMGET, curindex, cloudType)
+					if err != nil {
+						log.Warnf("execStoredMGet get another break failed addr:%s err:%s", hystrixName, err.Error())
+						continue
+					}
+
+					hystrixName = storedAddrPool.GetHostPort()
+					cb = cgb.GetCircuitBreaker(hystrixName)
+					if cb == nil {
+						log.Warnf("first circuit open get another failed addr:%s", hystrixName)
+						continue
+					}
+				}
+			}
+		} else {
+			log.Warnf("[panic] get group circuit breaker fail groupId:%d err:%v", groupId, err)
+		}
+
+		doFunc()
+	}
+	wg.Wait()
+	return result, nil
+}
+
+func resDKHMGet(m *antsCommandParams) {
+	res, err, addr := goStoredDo(m.r, m.slotId, m.commandName, m.prevGetConn, m.newArgs...)
+	if err != nil {
+		return
+	}
+	resTmp, errTmp := redis.ByteSlices(res, err)
+	if errTmp != nil {
+		log.Warnf("dk.hmget failed addr:%s slotId:%d params:%v err:%v resLen:%d", addr, m.slotId, m.newArgs, errTmp, len(resTmp))
+		return
+	}
+	keyFieldIndex, _ := m.slotKeyFieldIndex[m.slotId]
+
+	pos := 0
+	for pos+3 <= len(resTmp) {
+		k := unsafe2.String(resTmp[pos])
+		fieldNum, _ := extend.ParseInt(unsafe2.String(resTmp[pos+1]))
+		start := pos + 2
+		end := start + fieldNum
+		if fi, ok := keyFieldIndex[k]; ok {
+			l := 0
+			for i := start; i < end; i++ {
+				in := fi[l]
+				m.result[in] = resTmp[i]
+				l++
+			}
+		}
+		pos = end
+	}
+}
+
 func execStoredMGet(r *ProxyClient, commandName string, args ...interface{}) (interface{}, error) {
 	slotKeysMap, slotIndexesMap := divideStoredOnlyKeys(r, args...)
 
-	result := make([]interface{}, len(args), len(args))
+	result := make([]interface{}, len(args))
 	wg := sync.WaitGroup{}
 
 	for slotId, newArgs := range slotKeysMap {
 		storedAddrPool, needCircuit, curindex, cloudType, err := r.router.GetConn(slotId, commandName)
 		if err != nil {
 			log.Warnf("execStoredMGet GetConn failed slotId:%d commandName:%s err:%s", slotId, commandName, err.Error())
-			return nil, err
+			continue
 		}
 		addr := storedAddrPool.GetHostPort()
 		antsPool, ok := r.router.GetAntsPool(addr)
@@ -425,7 +814,7 @@ func execStoredMGet(r *ProxyClient, commandName string, args ...interface{}) (in
 		var cgb *Breaker
 		hystrixName := storedAddrPool.GetHostPort()
 		groupId, _ := r.router.GetGroupId(slotId)
-		cgb, err = r.router.GroupBreaker.GetCircuitBreakerByGid(groupId)
+
 		m := &antsCommandParams{
 			wg:     &wg,
 			r:      r,
@@ -450,22 +839,27 @@ func execStoredMGet(r *ProxyClient, commandName string, args ...interface{}) (in
 			return nil, err
 		}
 
-		cb := cgb.GetCircuitBreaker(hystrixName)
-		if cb != nil {
-			if cb.State() == gobreaker.StateOpen {
-				storedAddrPool, _, err = r.router.GetAnotherConnByCircuit(slotId, commandName, curindex, cloudType)
-				if err != nil {
-					log.Warnf("execStoredMGet get another break failed addr:%s err:%s", hystrixName, err.Error())
-					continue
-				}
+		cgb, err = r.router.GroupBreaker.GetCircuitBreakerByGid(groupId)
+		if cgb != nil {
+			cb := cgb.GetCircuitBreaker(hystrixName)
+			if cb != nil {
+				if cb.State() == gobreaker.StateOpen {
+					storedAddrPool, _, err = r.router.GetAnotherConnByCircuit(slotId, commandName, curindex, cloudType)
+					if err != nil {
+						log.Warnf("execStoredMGet get another break failed addr:%s err:%s", hystrixName, err.Error())
+						continue
+					}
 
-				hystrixName = storedAddrPool.GetHostPort()
-				cb = cgb.GetCircuitBreaker(hystrixName)
-				if cb == nil {
-					log.Warnf("first circuit open get another failed addr:%s", hystrixName)
-					continue
+					hystrixName = storedAddrPool.GetHostPort()
+					cb = cgb.GetCircuitBreaker(hystrixName)
+					if cb == nil {
+						log.Warnf("first circuit open get another failed addr:%s", hystrixName)
+						continue
+					}
 				}
 			}
+		} else {
+			log.Warnf("[panic] get group circuit breaker fail groupId:%d err:%v", groupId, err)
 		}
 
 		doFunc()
@@ -1111,4 +1505,123 @@ func divideGroupKeysValues(r *ProxyClient, recorder *resp.TxRecorder, args ...in
 		}
 	}
 	return slotMap, nil
+}
+
+func divideDkKeysFieldsValues(r *ProxyClient, args ...interface{}) (map[int][]interface{}, map[int]map[string][]int, int) {
+	slotMap := make(map[int][]interface{}, len(args))
+	groupHeadSlot := make(map[int]int)
+	slotKeyFieldIndex := make(map[int]map[string][]int, len(args))
+	kfvMap := make(map[string]map[string]interface{})
+	dkKey := args[0].([]byte)
+	shardNum := args[1].(uint32)
+	newArgs := args[2].([][]byte) //fv fv fv
+	kindexMap := make(map[string]int)
+	for i := 0; i < len(newArgs)/2; i++ {
+		index := HashDkKey(newArgs[2*i], shardNum)
+		gk := EncodeDkGroupKey(dkKey, index)
+		f := unsafe2.String(newArgs[2*i])
+		//value := unsafe2.String(args[2*i+1])
+		if _, ok := kfvMap[gk]; !ok {
+			kfvMap[gk] = make(map[string]interface{})
+		}
+		kfvMap[gk][f] = newArgs[2*i+1]
+		kindexMap[f] = 2 * i
+	}
+	for k, fv := range kfvMap {
+		slotId := r.router.Hash(k)
+		slot := r.router.GetSlot(slotId)
+		if headSlotId, ok := groupHeadSlot[slot.MasterAddrGroupId]; ok {
+			slotId = headSlotId
+		} else {
+			groupHeadSlot[slot.MasterAddrGroupId] = slotId
+			slotKeyFieldIndex[slotId] = make(map[string][]int, len(args))
+			slotKeyFieldIndex[slotId][k] = make([]int, 0, len(args))
+		}
+		if _, ok := slotMap[slotId]; !ok {
+			slotMap[slotId] = make([]interface{}, 0, len(args))
+		}
+		slotMap[slotId] = append(slotMap[slotId], k, len(fv))
+		for f, v := range fv {
+			slotKeyFieldIndex[slotId][k] = append(slotKeyFieldIndex[slotId][k], kindexMap[f])
+			slotMap[slotId] = append(slotMap[slotId], f, v)
+		}
+	}
+	return slotMap, slotKeyFieldIndex, len(newArgs)
+}
+
+func divideDkKeyFields(r *ProxyClient, args ...interface{}) (map[int][]interface{}, map[int]map[string][]int, int) {
+	slotMap := make(map[int][]interface{}, len(args))
+	groupHeadSlot := make(map[int]int)
+	slotKeyFieldIndex := make(map[int]map[string][]int, len(args))
+	kfMap := make(map[string][][]byte)
+	shardNum := args[0].(uint32)
+	newArgs := args[1].([][]byte) //f1 f2 f3
+	dkKey := newArgs[0]
+	newArgs = newArgs[1:]
+	kindexMap := make(map[string]int)
+	for i := 0; i < len(newArgs); i++ {
+		index := HashDkKey(newArgs[i], shardNum)
+		gk := EncodeDkGroupKey(dkKey, index)
+		field := unsafe2.String(newArgs[i])
+		if _, ok := kfMap[gk]; !ok {
+			kfMap[gk] = make([][]byte, 0, len(args))
+		}
+		kfMap[gk] = append(kfMap[gk], newArgs[i])
+		kindexMap[field] = i
+	}
+	for k, f := range kfMap {
+		slotId := r.router.Hash(k)
+		slot := r.router.GetSlot(slotId)
+		if headSlotId, ok := groupHeadSlot[slot.MasterAddrGroupId]; ok {
+			slotId = headSlotId
+		} else {
+			groupHeadSlot[slot.MasterAddrGroupId] = slotId
+			slotKeyFieldIndex[slotId] = make(map[string][]int, len(args))
+			slotKeyFieldIndex[slotId][k] = make([]int, 0, len(args))
+		}
+		if _, ok := slotMap[slotId]; !ok {
+			slotMap[slotId] = make([]interface{}, 0, len(args)+1)
+		}
+		slotMap[slotId] = append(slotMap[slotId], k, len(f))
+		for i := 0; i < len(f); i++ {
+			strF := unsafe2.String(f[i])
+			slotKeyFieldIndex[slotId][k] = append(slotKeyFieldIndex[slotId][k], kindexMap[strF])
+			slotMap[slotId] = append(slotMap[slotId], f[i])
+		}
+	}
+	return slotMap, slotKeyFieldIndex, len(newArgs)
+}
+
+func divideDkOnlyKeys(r *ProxyClient, args ...interface{}) (map[int][]interface{}, map[int][]int, int) {
+	dt := args[0].(string)
+	newArgs := args[1].([]interface{})
+	slotMap := make(map[int][]interface{}, len(newArgs))
+	slotIndexMap := make(map[int][]int, len(newArgs))
+	groupHeadSlot := make(map[int]int)
+	var slotId int
+
+	for i := 0; i < len(newArgs); i++ {
+		slotId = r.router.Hash(newArgs[i])
+		if slotId < 0 {
+			continue
+		}
+
+		slot := r.router.GetSlot(slotId)
+
+		if headSlotId, ok := groupHeadSlot[slot.MasterAddrGroupId]; ok {
+			slotId = headSlotId
+		} else {
+			groupHeadSlot[slot.MasterAddrGroupId] = slotId
+		}
+		if _, ok := slotMap[slotId]; ok {
+			slotMap[slotId] = append(slotMap[slotId], newArgs[i])
+			slotIndexMap[slotId] = append(slotIndexMap[slotId], i)
+		} else {
+			slotMap[slotId] = make([]interface{}, 0, len(newArgs)+1)
+			slotMap[slotId] = append(slotMap[slotId], dt, newArgs[i])
+			slotIndexMap[slotId] = make([]int, 0, len(newArgs))
+			slotIndexMap[slotId] = append(slotIndexMap[slotId], i)
+		}
+	}
+	return slotMap, slotIndexMap, len(newArgs)
 }

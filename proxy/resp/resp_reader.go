@@ -176,7 +176,6 @@ func parseLen(p []byte) (int, error) {
 	}
 
 	if p[0] == '-' && len(p) == 2 && p[1] == '1' {
-		// handle $-1 and $-1 null replies.
 		return -1, nil
 	}
 
