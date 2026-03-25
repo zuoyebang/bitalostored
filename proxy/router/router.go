@@ -22,12 +22,12 @@ import (
 	"time"
 
 	"github.com/zuoyebang/bitalostored/butils/hash"
+	"github.com/zuoyebang/bitalostored/butils/localcache"
 	"github.com/zuoyebang/bitalostored/butils/math2"
 	"github.com/zuoyebang/bitalostored/butils/unsafe2"
 	"github.com/zuoyebang/bitalostored/proxy/internal/config"
 	"github.com/zuoyebang/bitalostored/proxy/internal/dostats"
 	"github.com/zuoyebang/bitalostored/proxy/internal/errn"
-	"github.com/zuoyebang/bitalostored/butils/localcache"
 	"github.com/zuoyebang/bitalostored/proxy/internal/log"
 	"github.com/zuoyebang/bitalostored/proxy/internal/models"
 	"github.com/zuoyebang/bitalostored/proxy/internal/switcher"

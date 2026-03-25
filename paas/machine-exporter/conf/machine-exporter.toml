@@ -1,0 +1,9 @@
+[env]
+metric_path = "/metrics"
+address = ":9839"
+
+[database]
+username = "stored_paas_app"
+password = "dbPaas"
+hostport = "127.0.0.1:3306"
+database = "stored_paas"

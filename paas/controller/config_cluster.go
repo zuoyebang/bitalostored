@@ -1,0 +1,56 @@
+// Copyright 2019-2024 Xu Ruibo (hustxurb@163.com) and Contributors
+//
+// Licensed under the Apache License, Version 2.0 (the \"License\");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//	http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an \"AS IS\" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package controller
+
+import (
+	"github.com/zuoyebang/bitalostored/paas/service/srv_config"
+
+	"github.com/gin-gonic/gin"
+)
+
+func ConfigList(ctx *gin.Context) {
+	in := srv_config.ConfigListInput{}
+	processGet(ctx, &in)
+}
+
+func ConfigPackList(ctx *gin.Context) {
+	in := srv_config.ConfigPacksInput{}
+	processGet(ctx, &in)
+}
+
+func ConfigUpdate(ctx *gin.Context) {
+	in := srv_config.UpdateConfigInput{}
+	process(ctx, &in)
+}
+
+func ConfigBind(ctx *gin.Context) {
+	in := srv_config.BindConfigInput{}
+	process(ctx, &in)
+}
+
+func ConfigRemove(ctx *gin.Context) {
+	in := srv_config.RemoveConfigInput{}
+	process(ctx, &in)
+}
+
+func ConfigCopy(ctx *gin.Context) {
+	in := srv_config.CopyConfigInput{}
+	process(ctx, &in)
+}
+
+func ReplaceConf(ctx *gin.Context) {
+	in := srv_config.ReplaceConfInput{}
+	process(ctx, &in)
+}

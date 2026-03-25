@@ -1,0 +1,39 @@
+[paas_server]
+listen_port = 8989
+paas_env = "production"
+paas_area = "china"
+dh_username = "{{.paas_server.dhusername}}"
+dh_password = "{{.paas_server.dhpassword}}"
+grafana_url = ""
+
+[database]
+username = "{{.database.username}}"
+password = "{{.database.password}}"
+hostport = "{{.database.hostpot}}"
+database = "{{.database.databse}}"
+
+[robot]
+op_ding = ""
+raft_ding = ""
+
+[cos]
+supervisor = ""
+
+[deploy]
+deploy_path = "/home/homework/bitalos-paas/bitalos-data"
+
+[fe]
+assets = "./fe/dist"
+
+[build_server]
+address = "http://127.0.0.1/builder/stored"
+local_dir = "/home/homework/builder"
+
+[[redis_auths]]
+admin_auth = "admin"
+cluster_id = 1
+cluster_name = "a"
+
+[domain]
+dashboard_domain = "http://127.0.0.1"
+dashboard = "127.0.0.1"

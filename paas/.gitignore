@@ -1,0 +1,6 @@
+*.swp
+bin/
+log/
+var/
+.idea
+agent/internal/utils/version.go

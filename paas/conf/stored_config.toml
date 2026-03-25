@@ -1,0 +1,96 @@
+##################################################
+#                                                #
+#                  Bitalos Config                 #
+#                                                #
+##################################################
+[log]
+is_debug = false
+rotation_time = "Daily"
+
+[server]
+product_name = "{{.TaskExt.ClusterName}}"
+name = "bitalos-node{{.TaskExt.NodeIndex}}"        #运行服务名
+address = ":{{.TaskExt.ServicePort}}"        #运行地址
+max_client = 15000        #最大连接数
+keep_alive = "1800s"      #连接超时
+net_event_loop_num = 16
+db_path = "bitalosdb"   #服务DB储存路径：raft log，raft node，raft dbsync，bitalos db，bitalos snapshot
+slow_time = "30ms"        #慢查阈值
+slow_key_window_time = "2000ms" #单个key窗口内累计慢查时间阈值，累计慢查时间大于此值才会慢查屏蔽
+slow_shield = false        #慢查流量屏蔽开关
+slow_ttl  = "1s"          #慢查计算单位周期
+slow_maxexec = 100        #最大可并行执行慢查协程数
+slow_topn = 100           #屏蔽top n的流量
+token = "{{.TaskExt.DeraftToken}}" #危险操作验证
+open_distributed_tx = false
+
+[plugin]
+open_raft = true
+open_panic = true
+open_pprof = false
+pprof_addr = ":26770"
+open_signal = true
+
+[bitalos]
+write_buffer_size = "1gb"
+enable_wal = false
+compact_start_time = 1
+compact_end_time = 8
+bithash_gc_threshold = 0.4
+enable_expired_deletion = true
+expired_deletion_interval = 60
+expired_deletion_qps_threshold = 20000
+enable_clock_cache = true
+vector_table_hash_size = 1000000
+compression_type = 1
+
+[raft_log]
+raft_log_level = "error"
+rsm_log_level = "warning"
+transhport_log_level = "warning"
+grpc_log_level = "warning"
+dragonboat_log_level = "warning"
+
+[raft_queue]
+workers = 32             #协程数量
+length = 10000            #队列长度
+
+[raft_cluster]
+cluster_id = {{.GroupId}}                   #集群ID
+election_rtt = 35                           #选举超时周期
+heartbeat_rtt = 1                           #心跳周期
+check_quorm = true                          #检测投票
+snapshot_entries = 20000000    #满足该数据，进行一次logEntry的清理，数据备份 6000000
+compaction_overhead = 10000000               #snapshot时，往前保留的logentry数量
+snapshot_compression_type = 1               #snapshot压缩方式
+entry_compression_type = 1                  #logentry广播的压缩方式
+disable_auto_compactions = false            #是否允许自动compact
+timeout = "2s"                              #超时时间
+retry_times = 1                             #重试次数
+async_propose = true                       #异步处理
+is_observer = {{.TaskExt.IsObserver}}       #观察者模式
+is_witness = {{.TaskExt.IsWitness}}         #证人模式
+# is_observer 与 is_witness 不能同时为 true
+
+[raft_nodehost]
+host_name = "{{.TaskExt.HostName}}"
+node_id = {{.TaskExt.NodeIndex}}                              #节点ID，集群唯一
+raft_address = "{{.TaskExt.NodeListVal}}"       #raft通信地址
+init_raft_addrlist = {{.TaskExt.NodeListStr}} #初始化通信地址
+init_raft_nodelist = {{.TaskExt.NodeIdList}} #初始化对应的nodeId
+join = false                             # 以从节点的方式启动时为true，paas暂不支持以从节点的方式启动
+snapshot_timeout = "10s"                 #打快照超时时间
+rtt = 200                                #心跳单位/ms，默认200ms
+deployment_id = 0                        #环境ID
+max_send_queue_size = 0                  #最大发送队列， 0：无限制
+max_receive_queue_size = 0               #最大接收队列，0：无限制
+max_snapshot_send_bytes_persecod = "200mb" #最大发送速率，0：无限制
+max_snapshot_recv_bytes_persecod = "200mb"    #最大接收速率，0：无限制
+
+[raft_state]
+interval = "3s"                                #定时刷新时间
+allow_max_offset = 100000                      #主从允许最大延迟差值
+
+[dynamic_deadline]
+client_ratio_threshold = [0,20,50,80,90]
+deadline_threshold = ["1800s","600s","180s","60s","10s"]
