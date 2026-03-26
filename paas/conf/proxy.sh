@@ -19,9 +19,7 @@ BITALOS_CONF_DIR=$BITALOS_ADMIN_DIR/config
 BITALOS_PROXY_BIN=$BITALOS_BIN_DIR/bitalosproxy
 BITALOS_PROXY_PID_FILE=$BITALOS_ADMIN_DIR/bitalosproxy.pid
 
-BITALOS_PROXY_LOG_ROTATED="HourlyRolling"
 BITALOS_PROXY_LOG_FILE=$BITALOS_LOG_DIR/bitalos-proxy.log
-BITALOS_PROXY_STATSLOG_FILE=$BITALOS_LOG_DIR/bitalos-proxy-stats.log
 BITALOS_PROXY_DAEMON_FILE=$BITALOS_LOG_DIR/bitalos-proxy.out
 
 BITALOS_DASHBOARD_ADDR={{.TaskExt.DashboardAddress}}
@@ -50,14 +48,10 @@ start)
       fi
     fi
     nohup "$BITALOS_PROXY_BIN" "--config=${BITALOS_PROXY_CONF_FILE}" "--dashboard=${BITALOS_DASHBOARD_ADDR}" \
-    "--log=$BITALOS_PROXY_LOG_FILE" "--log-level=INFO" "--log-stats=$BITALOS_PROXY_STATSLOG_FILE" "--log-rotated=$BITALOS_PROXY_LOG_ROTATED" \
-    "--ncpu=4" "--max-ncpu=6" \
     "--pidfile=$BITALOS_PROXY_PID_FILE" >> "$BITALOS_PROXY_DAEMON_FILE" 2>&1 < /dev/null &
     ;;
 start-foreground)
     $BITALOS_PROXY_BIN "--config=${BITALOS_PROXY_CONF_FILE}" "--dashboard=${BITALOS_DASHBOARD_ADDR}" \
-    "--log=$BITALOS_PROXY_LOG_FILE" "--log-level=INFO" "--log-stats=$BITALOS_PROXY_STATSLOG_FILE" "--log-rotated=$BITALOS_PROXY_LOG_ROTATED" \
-    "--ncpu=4" "--max-ncpu=6" \
     "--pidfile=$BITALOS_PROXY_PID_FILE" >> "$BITALOS_PROXY_DAEMON_FILE" 2>&1 < /dev/null
     ;;
 stop)

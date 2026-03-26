@@ -7,7 +7,7 @@ import (
 )
 
 func Http(engine *gin.Engine) {
-	router := engine.Group("storedagent")
+	router := engine.Group("bitalosagent")
 	router.Use(middleware.Recover)
 
 	router.OPTIONS("/logquery", http.LogQuery)

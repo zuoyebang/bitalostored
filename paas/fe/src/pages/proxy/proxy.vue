@@ -295,7 +295,7 @@
         <el-button
           style="margin-left: 10px"
           type="primary"
-          @click="createClusterSubmit('clusterForm')"
+          @click="createCluster('clusterForm')"
           >Confirm</el-button
         >
       </div>
@@ -395,7 +395,7 @@
         <el-button
           style="margin-left: 10px"
           type="primary"
-          @click="submitLocalFile"
+          @click="addLocalFile('localFileRules')"
           >Confirm</el-button
         >
       </div>
@@ -409,7 +409,7 @@ import {
   getFileList,
   exportInfo,
   getRegionList,
-  addLocalFile,
+  addLocalFile as postAddLocalFile,
 } from "@/api/matrix";
 import {
   getServiceList,
@@ -422,7 +422,7 @@ import {
   bindConfig,
 } from "@/api/";
 import { getClusterNames } from "@/api/resource";
-import { createCluster, checkPort } from "@/api/proxy";
+import { createCluster as postCreateCluster, checkPort } from "@/api/proxy";
 import { mapGetters } from "vuex";
 import packageList from "@/components/package-list.vue";
 import newPackage from "@/components/new-package.vue";
@@ -756,7 +756,7 @@ export default {
         if (valid) {
           const { serviceId } = this.$route.meta || "";
           this.clusterForm.serviceId = serviceId;
-          createCluster(this.clusterForm)
+          postCreateCluster(this.clusterForm)
             .then(() => {
               this.dialogCluster = false;
               this.getRegionList();
@@ -1006,7 +1006,7 @@ export default {
             fileName: this.localFileForm.fileName,
             version: this.localFileForm.version,
           };
-          addLocalFile(params)
+          postAddLocalFile(params)
             .then(() => {
               this.$message.success("success");
               this.dialogLocalFile = false;
