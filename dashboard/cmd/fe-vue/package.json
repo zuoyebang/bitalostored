@@ -2,6 +2,17 @@
   "name": "fe-vue",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=18"
+  },
+  "resolutions": {
+    "@achrinza/node-ipc": "9.2.10",
+    "vue-template-compiler": "2.6.14"
+  },
+  "overrides": {
+    "@achrinza/node-ipc": "9.2.10",
+    "vue-template-compiler": "2.6.14"
+  },
   "scripts": {
     "serve": "vue-cli-service serve",
     "build": "vue-cli-service build",
@@ -25,7 +36,7 @@
     "vue-property-decorator": "^8.4.2",
     "vue-router": "3.2.0",
     "vue-rx": "^6.2.0",
-    "vue-template-compiler": "^2.6.14",
+    "vue-template-compiler": "2.6.14",
     "vuetify": "2.6.10",
     "vuex": "^3.4.0",
     "vuex-class": "^0.3.2"

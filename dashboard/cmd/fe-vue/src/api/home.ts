@@ -7,7 +7,6 @@ import {
   HomeDataResponse,
   MigrateRange,
   MigrateSome,
-  PcConfigItem,
   ProxyModels,
   Enable,
   DkItem
