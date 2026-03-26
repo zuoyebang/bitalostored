@@ -7,6 +7,7 @@ import {ADD_ITEM, SET_OPEN} from '@/store/types'
 export * from './home'
 
 export const ajax = axios.create({
+  baseURL: process.env.BASE_URL
   // transformResponse: [(data, headers) => {
   //   console.log(data, headers)
   //   return data
@@ -17,14 +18,21 @@ export const ajax = axios.create({
   // }],
 })
 ajax.interceptors.request.use((config) => {
-  if (!getUToken()) {
+  if (!getUToken() ) {
     location.assign('/#/login')
     return
   }
   return config
 })
 ajax.interceptors.response.use(
-  (resp) => resp,
+  (resp) => {
+    const responseData = resp.data as { status: number; data: string, errmsg?: { cause: string } };
+    if (responseData.data && responseData.status === 30003) {
+      location.assign(responseData.data)
+      return
+    }
+    return resp
+  },
   (err) => {
     store.dispatch('server/' + ADD_ITEM, {
       data: err.response ? err.response.data : '403',

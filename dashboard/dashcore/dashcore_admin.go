@@ -31,6 +31,7 @@ func (s *DashCore) GetLoginAdmin(session sessions.Session) (*models.Admin, error
 		admin := models.Admin{}
 
 		if err := models.JsonDecode(&admin, adminByte); err != nil {
+			log.Warnf("need login json decode err:%v", err)
 			return nil, NeedLoginErr
 		}
 
@@ -46,8 +47,10 @@ func (s *DashCore) GetLoginAdmin(session sessions.Session) (*models.Admin, error
 				return storeAdmin.Snapshot(), nil
 			}
 		}
+		log.Warn("need login username password error")
 		return nil, NeedLoginErr
 	}
+	log.Warn("need login session error")
 	return nil, NeedLoginErr
 }
 

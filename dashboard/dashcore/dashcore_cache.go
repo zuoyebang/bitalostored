@@ -44,10 +44,10 @@ func (s *DashCore) dirtyMigrateCache(gid int) {
 	})
 }
 
-func (s *DashCore) dirtyPconfigCache(name string) {
+func (s *DashCore) dirtyDkCache(key string) {
 	s.cache.hooks.PushBack(func() {
-		if s.cache.pconfig != nil {
-			s.cache.pconfig[name] = nil
+		if s.cache.dk != nil {
+			s.cache.dk[key] = nil
 		}
 	})
 }
@@ -99,11 +99,11 @@ func (s *DashCore) refillCache() error {
 	} else {
 		s.cache.migrate = migrate
 	}
-	if pconfig, err := s.refillCachePconfig(s.cache.pconfig); err != nil {
-		log.ErrorErrorf(err, "store: load pconfig failed")
-		return errors.Errorf("store: load pconfig failed")
+	if dk, err := s.refillCacheDk(s.cache.dk); err != nil {
+		log.ErrorErrorf(err, "store: load dk failed")
+		return errors.Errorf("store: load dk failed")
 	} else {
-		s.cache.pconfig = pconfig
+		s.cache.dk = dk
 	}
 	return nil
 }
@@ -192,28 +192,29 @@ func (s *DashCore) refillCacheProxy(proxy map[string]*models.Proxy) (map[string]
 	return proxy, nil
 }
 
-func (s *DashCore) refillCachePconfig(pconfig map[string]*models.Pconfig) (map[string]*models.Pconfig, error) {
-	if pconfig == nil {
-		return s.store.ListPconfig()
+func (s *DashCore) refillCacheDk(dk map[string]*models.DkItem) (map[string]*models.DkItem, error) {
+	if dk == nil {
+		return s.store.ListDk()
 	}
-	for t, _ := range pconfig {
-		if pconfig[t] != nil {
+	for t, _ := range dk {
+		if dk[t] != nil {
 			continue
 		}
-		p, err := s.store.LoadPconfig(t)
+		p, err := s.store.LoadDk(t)
 		if err != nil {
 			return nil, err
 		}
 		if p != nil {
-			pconfig[t] = p
+			dk[t] = p
 		} else {
-			delete(pconfig, t)
+			delete(dk, t)
 		}
 	}
-	return pconfig, nil
+	return dk, nil
 }
 
 func (s *DashCore) storeUpdateSlotMapping(m *models.SlotMapping) error {
+	//log.Warnf("update slot-[%d]: %s", m.Id, m.Encode())
 	if err := s.store.UpdateSlotMapping(m); err != nil {
 		log.ErrorErrorf(err, "store: update slot-[%d] failed", m.Id)
 		return errors.Errorf("store: update slot-[%d] failed", m.Id)
@@ -231,6 +232,7 @@ func (s *DashCore) storeCreateGroup(g *models.Group) error {
 }
 
 func (s *DashCore) storeUpdateGroup(g *models.Group) error {
+	//log.Warnf("update group-[%d]: %s", g.Id, g.Encode())
 	if err := s.store.UpdateGroup(g); err != nil {
 		log.ErrorErrorf(err, "store: update group-[%d] failed", g.Id)
 		return errors.Errorf("store: update group-[%d] failed", g.Id)
@@ -292,30 +294,20 @@ func (s *DashCore) storeRemoveProxy(p *models.Proxy) error {
 	return nil
 }
 
-func (s *DashCore) storeCreatePconfig(pconfig *models.Pconfig) error {
-	log.Warnf("create pconfig-[%s]: %s", pconfig.Name, string(pconfig.Encode()))
-	if err := s.store.UpdatePconfig(pconfig); err != nil {
-		log.ErrorErrorf(err, "store: create pconfig-[%s] failed", pconfig.Name)
-		return errors.Errorf("store: create pconfig-[%s] failed", pconfig.Name)
+func (s *DashCore) storeCreateDk(dk *models.DkItem) error {
+	log.Warnf("create dk-[%s]: %d", dk.Key, dk.ShardNum)
+	if err := s.store.UpdateDk(dk); err != nil {
+		log.ErrorErrorf(err, "store: create dk-[%s] failed", dk.Key)
+		return errors.Errorf("store: create dk-[%s] failed", dk.Key)
 	}
 	return nil
 }
 
-func (s *DashCore) storeUpdatePconfig(pconfig *models.Pconfig) error {
-	log.Warnf("update pconfig-[%s]: %s", pconfig.Name, pconfig.Encode())
-	if err := s.store.UpdatePconfig(pconfig); err != nil {
-		log.ErrorErrorf(err, "store: update pconfig-[%s] failed", pconfig.Name)
-		return errors.Errorf("store: update pconfig-[%s] failed", pconfig.Name)
-	}
-	return nil
-}
-
-func (s *DashCore) storeRemovePconfig(pconfig *models.Pconfig) error {
-	log.Warnf("remove pconfig-[%s]: %s", pconfig.Name, pconfig.Encode())
-
-	if err := s.store.DeletePconfig(pconfig.Name); err != nil {
-		log.ErrorErrorf(err, "store: remove pconfig-[%s] failed", pconfig.Name)
-		return errors.Errorf("store: remove pconfig-[%s] failed", pconfig.Name)
+func (s *DashCore) storeRemoveDk(key string) error {
+	log.Warnf("remove dk: %s", key)
+	if err := s.store.DeleteDk(key); err != nil {
+		log.ErrorErrorf(err, "store: remove dk-[%s] failed", key)
+		return errors.Errorf("store: remove dk-[%s] failed", key)
 	}
 	return nil
 }
@@ -331,8 +323,8 @@ func (s *DashCore) storeGetAdmin(username string) (*models.Admin, error) {
 func (s *DashCore) storeCreateAdmin(admin *models.Admin) error {
 	log.Warnf("create admin-[%s]: %s", admin.Username, admin.Encode())
 	if err := s.store.UpdateAdmin(admin); err != nil {
-		log.ErrorErrorf(err, "store: create pconfig-[%s] failed", admin.Username)
-		return errors.Errorf("store: create pconfig-[%s] failed", admin.Username)
+		log.ErrorErrorf(err, "store: create admin-[%s] failed", admin.Username)
+		return errors.Errorf("store: create admin-[%s] failed", admin.Username)
 	}
 	return nil
 }
@@ -340,8 +332,8 @@ func (s *DashCore) storeCreateAdmin(admin *models.Admin) error {
 func (s *DashCore) storeUpdateAdmin(admin *models.Admin) error {
 	log.Warnf("update admin-[%s]: %s", admin.Username, admin.Encode())
 	if err := s.store.UpdateAdmin(admin); err != nil {
-		log.ErrorErrorf(err, "store: update pconfig-[%s] failed", admin.Username)
-		return errors.Errorf("store: update pconfig-[%s] failed", admin.Username)
+		log.ErrorErrorf(err, "store: update admin-[%s] failed", admin.Username)
+		return errors.Errorf("store: update admin-[%s] failed", admin.Username)
 	}
 	return nil
 }
@@ -350,8 +342,8 @@ func (s *DashCore) storeRemoveAdmin(admin *models.Admin) error {
 	log.Warnf("remove admin-[%s]: %s", admin.Username, admin.Encode())
 
 	if err := s.store.DeleteAdmin(admin.Username); err != nil {
-		log.ErrorErrorf(err, "store: remove pconfig-[%s] failed", admin.Username)
-		return errors.Errorf("store: remove pconfig-[%s] failed", admin.Username)
+		log.ErrorErrorf(err, "store: remove admin-[%s] failed", admin.Username)
+		return errors.Errorf("store: remove admin-[%s] failed", admin.Username)
 	}
 	return nil
 }

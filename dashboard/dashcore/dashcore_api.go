@@ -16,25 +16,29 @@ package dashcore
 
 import (
 	"fmt"
+	"github.com/zuoyebang/bitalostored/dashboard/internal/consts"
+	"github.com/zuoyebang/bitalostored/dashboard/internal/utils"
 	"net/http"
-	_ "net/http/pprof"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/zuoyebang/bitalostored/butils/hash"
 	"github.com/zuoyebang/bitalostored/butils/unsafe2"
-	"github.com/zuoyebang/bitalostored/dashboard/internal/errors"
-	"github.com/zuoyebang/bitalostored/dashboard/internal/log"
-	"github.com/zuoyebang/bitalostored/dashboard/internal/rpc"
-	"github.com/zuoyebang/bitalostored/dashboard/internal/uredis"
-	"github.com/zuoyebang/bitalostored/dashboard/models"
+
+	_ "net/http/pprof"
 
 	"github.com/go-martini/martini"
 	"github.com/martini-contrib/binding"
 	"github.com/martini-contrib/gzip"
 	"github.com/martini-contrib/render"
 	"github.com/martini-contrib/sessions"
+
+	"github.com/zuoyebang/bitalostored/dashboard/internal/errors"
+	"github.com/zuoyebang/bitalostored/dashboard/internal/log"
+	"github.com/zuoyebang/bitalostored/dashboard/internal/rpc"
+	"github.com/zuoyebang/bitalostored/dashboard/internal/uredis"
+	"github.com/zuoyebang/bitalostored/dashboard/models"
 )
 
 type apiServer struct {
@@ -59,7 +63,12 @@ func newApiServer(d *DashCore) http.Handler {
 					break
 				}
 			}
-			log.Warnf("[%p] API call %s from %s [%s]", path, remoteAddr, headerAddr)
+			unameCookie, err := req.Cookie("uname")
+			uname := "unknown"
+			if err == nil {
+				uname = unameCookie.Value
+			}
+			log.Warnf("[%s] API call %s from %s [%s]", path, remoteAddr, headerAddr, uname)
 		}
 		c.Next()
 	})
@@ -115,9 +124,11 @@ func newApiServer(d *DashCore) http.Handler {
 			r.Put("/del/:xauth/:gid/:addr/:nodeid", api.GroupDelServer)
 			r.Put("/mount/:xauth/:gid/:addr/:raftaddr/:nodeid/:model", api.GroupMountOrOfflineRaftNode)
 			r.Put("/replica-groups/:xauth/:gid/:addr/:value", api.EnableReplicaGroups)
-			r.Put("/replica-groups-all/:xauth/:value", api.EnableReplicaGroupsAll)
+			r.Put("/replica-groups-all/:xauth/:value/:token", api.EnableReplicaGroupsAll)
+			r.Put("/auto-compact-all/:xauth/:value", api.EnableAutoCompactAll)
 			r.Put("/deraftcluster/:xauth/:cloudtype/:token", api.DeRaftAllGroup)
 			r.Put("/deraft/:xauth/:gid/:addr/:token", api.DeRaft)
+			//r.Put("/reraft/:xauth/:gid/:addr/:token/:port", api.ReRaft)
 			r.Put("/changerole/:xauth/:gid/:addr/:server_role", api.ChangeRole)
 
 			r.Get("/getclustermembership/:xauth/:gid/:addr", api.GetClusterMembership)
@@ -130,8 +141,10 @@ func newApiServer(d *DashCore) http.Handler {
 				r.Put("/remove/:xauth/:addr", api.SyncRemoveAction)
 			})
 			r.Get("/info/:addr", api.InfoServer)
+			r.Get("/infov7/:addr/:gid", api.InfoServerV7)
 			r.Get("/debuginfo/:addr", api.DebugInfoServer)
 			r.Put("/compact/:xauth/:addr/:dbtype", api.Compact)
+			r.Put("/auto-compact/:xauth/:addr/:acswitch", api.AutoCompact)
 		})
 		r.Group("/slots", func(r martini.Router) {
 			r.Group("/action", func(r martini.Router) {
@@ -141,6 +154,9 @@ func newApiServer(d *DashCore) http.Handler {
 				r.Put("/create-range/:xauth/:beg/:end/:gid/:not_migrate", api.SlotCreateActionRange)
 				r.Put("/remove/:xauth/:sid", api.SlotRemoveAction)
 				r.Put("/disabled/:xauth/:value", api.SetSlotActionDisabled)
+				r.Put("/transfer/:xauth/:sid/:eid/:togid", api.TransferSlotAction)    // v7 slot migrate
+				r.Put("/removedata/:xauth/:sid/:eid/:gid/:token", api.RemoveSlotData) // v7 remove slot
+				r.Get("/history", api.SlotActionHistory)                              // v7 slot action
 			})
 			r.Put("/assign/:xauth", binding.Json([]*models.SlotMapping{}), api.SlotsAssignGroup)
 			r.Put("/assign/:xauth/offline", binding.Json([]*models.SlotMapping{}), api.SlotsAssignOffline)
@@ -148,12 +164,10 @@ func newApiServer(d *DashCore) http.Handler {
 		r.Group("/tools", func(r martini.Router) {
 			r.Get("/whichgroupkey/:key", api.FindKeyGroup)
 		})
-		r.Group("/pconfig", func(r martini.Router) {
-			r.Put("/update/:xauth", binding.Json(models.Pconfig{}), api.UpdatePconfig)
-			r.Put("/resync-all/:xauth", api.ResyncAllPconfig)
-			r.Put("/resync/:name/:xauth", api.ResyncOnePconfig)
-			r.Get("/list/:xauth", api.ListPconfig)
-			r.Get("/detail/:name", api.DetailPconfig)
+		r.Group("/dk", func(r martini.Router) {
+			r.Get("/list/:xauth", api.ListDk)
+			r.Put("/create/:xauth", binding.Json(models.DkItem{}), api.CreateDk)
+			r.Put("/remove/:key/:xauth", api.RemoveDk)
 		})
 		r.Group("/admin", func(r martini.Router) {
 			r.Get("/list", api.ListAdmin)
@@ -276,7 +290,6 @@ func (s *apiServer) UpdateDepartment(session sessions.Session, req *http.Request
 	if err := s.dashCore.UpdateDepartment(v); err != nil {
 		return rpc.ApiResponseError(err)
 	} else {
-		// 更新完刷新一下
 		return s.Reload(session, req, params)
 	}
 }
@@ -325,14 +338,6 @@ func (s *apiServer) parseRaftAddr(params martini.Params) (string, error) {
 		return "", errors.New("missing addr")
 	}
 	return addr, nil
-}
-
-func (s *apiServer) parsePconfigName(params martini.Params) (string, error) {
-	name := params["name"]
-	if name == "" {
-		return "", errors.New("missing pconfig name")
-	}
-	return name, nil
 }
 
 func (s *apiServer) parseAdminName(params martini.Params) (string, error) {
@@ -522,6 +527,8 @@ func (s *apiServer) LogCompactGroup(session sessions.Session, req *http.Request,
 	if err := s.dashCore.LogCompactGroup(gid); err != nil {
 		return rpc.ApiResponseError(err)
 	} else {
+		msg := fmt.Sprintf("shard [%d]", gid)
+		s.sendOpDing(req, msg, "log compact")
 		return rpc.ApiResponseJson("OK")
 	}
 }
@@ -606,6 +613,8 @@ func (s *apiServer) GroupDelServer(session sessions.Session, req *http.Request, 
 	if err := s.dashCore.GroupDelServer(gid, addr, nodeId); err != nil {
 		return rpc.ApiResponseError(err)
 	} else {
+		msg := fmt.Sprintf("shard [%d] node [%s]", gid, addr)
+		s.sendOpDing(req, msg, "remove node")
 		return rpc.ApiResponseJson("OK")
 	}
 }
@@ -625,6 +634,10 @@ func (s *apiServer) GroupMountOrOfflineRaftNode(session sessions.Session, req *h
 	if err != nil {
 		return rpc.ApiResponseError(err)
 	}
+	model, err := s.parseInteger(params, "model")
+	if err != nil {
+		return rpc.ApiResponseError(err)
+	}
 	raftaddr, err := s.parseRaftAddr(params)
 	if err != nil {
 		return rpc.ApiResponseError(err)
@@ -633,13 +646,13 @@ func (s *apiServer) GroupMountOrOfflineRaftNode(session sessions.Session, req *h
 	if err != nil {
 		return rpc.ApiResponseError(err)
 	}
-	model, err := s.parseInteger(params, "model")
-	if err != nil {
-		return rpc.ApiResponseError(err)
-	}
 	if err := s.dashCore.GroupMountOrOfflineNode(model, gid, addr, raftaddr, nodeId); err != nil {
 		return rpc.ApiResponseError(err)
 	} else {
+		if model == ModelRemoveNode {
+			msg := fmt.Sprintf("shard [%d] node [%s]", gid, addr)
+			s.sendOpDing(req, msg, "remove from raft")
+		}
 		return rpc.ApiResponseJson("OK")
 	}
 }
@@ -662,6 +675,8 @@ func (s *apiServer) GroupPromoteServer(session sessions.Session, req *http.Reque
 	if err := s.dashCore.GroupPromoteServer(gid, addr); err != nil {
 		return rpc.ApiResponseError(err)
 	} else {
+		msg := fmt.Sprintf("shard [%d] node [%s]", gid, addr)
+		s.sendOpDing(req, msg, "failover")
 		return rpc.ApiResponseJson("OK")
 	}
 }
@@ -738,9 +753,15 @@ func (s *apiServer) EnableReplicaGroups(session sessions.Session, req *http.Requ
 	if err != nil {
 		return rpc.ApiResponseError(err)
 	}
+	req.Referer()
 	if err := s.dashCore.EnableReplicaGroups(gid, addr, n != 0); err != nil {
 		return rpc.ApiResponseError(err)
 	} else {
+		//ding
+		if n <= 0 {
+			msg := fmt.Sprintf("shard [%d] node [%s]", gid, addr)
+			s.sendOpDing(req, msg, "drain traffic")
+		}
 		return rpc.ApiResponseJson("OK")
 	}
 }
@@ -756,8 +777,34 @@ func (s *apiServer) EnableReplicaGroupsAll(session sessions.Session, req *http.R
 	if err != nil {
 		return rpc.ApiResponseError(err)
 	}
-	if err := s.dashCore.EnableReplicaGroupsAll(n != 0); err != nil {
+	token, err := s.parseToken(params)
+	if err != nil {
 		return rpc.ApiResponseError(err)
+	}
+	if err := s.dashCore.EnableReplicaGroupsAll(n != 0, token); err != nil {
+		return rpc.ApiResponseError(err)
+	} else {
+		if n <= 0 {
+			s.sendOpDing(req, "", "drain all shards")
+		}
+		return rpc.ApiResponseJson("OK")
+	}
+}
+
+func (s *apiServer) EnableAutoCompactAll(session sessions.Session, req *http.Request, params martini.Params) (int, string) {
+	if err := s.verifyXAuth(params); err != nil {
+		return rpc.ApiResponseError(err)
+	}
+	if err := s.verifyLogin(session, req); err != nil {
+		return rpc.ApiResponseError(err)
+	}
+	n, err := s.parseInteger(params, "value")
+	if err != nil {
+		return rpc.ApiResponseError(err)
+	}
+	if errs := s.dashCore.EnableAutoCompactAll(n); len(errs) > 0 {
+		log.Warnf("enable auto compact all failed, errors: %v", errs)
+		return rpc.ApiResponseError(errs[0])
 	} else {
 		return rpc.ApiResponseJson("OK")
 	}
@@ -806,10 +853,12 @@ func (s *apiServer) DeRaft(session sessions.Session, req *http.Request, params m
 	if err := s.dashCore.DeRaftGroup(gid, addr, token); err != nil {
 		return rpc.ApiResponseError(err)
 	}
-	// 摘分片下其他节点的流量
 	if err := s.dashCore.InverseReplicaGroupsAll(gid, addr); err != nil {
 		return rpc.ApiResponseError(err)
 	}
+
+	msg := fmt.Sprintf("shard [%d] node [%s]", gid, addr)
+	s.sendOpDing(req, msg, "deraft")
 	return rpc.ApiResponseJson("OK")
 }
 
@@ -899,6 +948,27 @@ func (s *apiServer) Compact(session sessions.Session, req *http.Request, params 
 	return rpc.ApiResponseJson("OK")
 }
 
+func (s *apiServer) AutoCompact(session sessions.Session, req *http.Request, params martini.Params) (int, string) {
+	if err := s.verifyXAuth(params); err != nil {
+		return rpc.ApiResponseError(err)
+	}
+	if err := s.verifyLogin(session, req); err != nil {
+		return rpc.ApiResponseError(err)
+	}
+	addr, err := s.parseAddr(params)
+	if err != nil {
+		return rpc.ApiResponseError(err)
+	}
+	acSwitch, err := s.parseInteger(params, "acswitch")
+	if err != nil {
+		return rpc.ApiResponseError(err)
+	}
+	if err := s.dashCore.AutoCompact(addr, acSwitch); err != nil {
+		return rpc.ApiResponseError(err)
+	}
+	return rpc.ApiResponseJson("OK")
+}
+
 func (s *apiServer) InfoServer(params martini.Params) (int, string) {
 	addr, err := s.parseAddr(params)
 	if err != nil {
@@ -910,7 +980,29 @@ func (s *apiServer) InfoServer(params martini.Params) (int, string) {
 		return rpc.ApiResponseError(err)
 	}
 	defer c.Close()
-	if info, err := c.InfoFull(); err != nil {
+	if info, err := c.InfoWithRaft(0); err != nil {
+		return rpc.ApiResponseError(err)
+	} else {
+		return rpc.ApiResponseJson(info)
+	}
+}
+
+func (s *apiServer) InfoServerV7(params martini.Params) (int, string) {
+	addr, err := s.parseAddr(params)
+	if err != nil {
+		return rpc.ApiResponseError(err)
+	}
+	gid, err := s.parseInteger(params, "gid")
+	if err != nil {
+		return rpc.ApiResponseError(err)
+	}
+	c, err := uredis.NewClient(addr, s.dashCore.Config().ProductAuth, 10*time.Second)
+	if err != nil {
+		log.WarnErrorf(err, "create redis client to %s failed", addr)
+		return rpc.ApiResponseError(err)
+	}
+	defer c.Close()
+	if info, err := c.InfoV7WithRaft(gid); err != nil {
 		return rpc.ApiResponseError(err)
 	} else {
 		return rpc.ApiResponseJson(info)
@@ -1130,6 +1222,71 @@ func (s *apiServer) SetSlotActionDisabled(session sessions.Session, req *http.Re
 	}
 }
 
+func (s *apiServer) TransferSlotAction(session sessions.Session, req *http.Request, params martini.Params) (int, string) {
+	if err := s.verifyXAuth(params); err != nil {
+		return rpc.ApiResponseError(err)
+	}
+	if err := s.verifyLogin(session, req); err != nil {
+		return rpc.ApiResponseError(err)
+	}
+	sid, err := s.parseInteger(params, "sid")
+	if err != nil {
+		return rpc.ApiResponseError(err)
+	}
+	eid, err := s.parseInteger(params, "eid")
+	if err != nil {
+		return rpc.ApiResponseError(err)
+	}
+	toGid, err := s.parseInteger(params, "togid")
+	if err != nil {
+		return rpc.ApiResponseError(err)
+	}
+
+	log.Infof("sid:%d eid:%d gid:%d", sid, eid, toGid)
+	err = s.dashCore.TransferSlots(sid, eid, toGid)
+	if err != nil {
+		return rpc.ApiResponseError(err)
+	}
+	return rpc.ApiResponseJson("OK")
+}
+
+func (s *apiServer) RemoveSlotData(session sessions.Session, req *http.Request, params martini.Params) (int, string) {
+	if err := s.verifyXAuth(params); err != nil {
+		return rpc.ApiResponseError(err)
+	}
+	if err := s.verifyLogin(session, req); err != nil {
+		return rpc.ApiResponseError(err)
+	}
+	sid, err := s.parseInteger(params, "sid")
+	if err != nil {
+		return rpc.ApiResponseError(err)
+	}
+	eid, err := s.parseInteger(params, "eid")
+	if err != nil {
+		return rpc.ApiResponseError(err)
+	}
+	gid, err := s.parseInteger(params, "gid")
+	if err != nil {
+		return rpc.ApiResponseError(err)
+	}
+	token, err := s.parseToken(params)
+	if err != nil {
+		return rpc.ApiResponseError(err)
+	}
+
+	log.Infof("sid:%d eid:%d gid:%d token:%s", sid, eid, gid, token)
+	err = s.dashCore.RemoveSlotData(sid, eid, gid, token)
+	if err != nil {
+		return rpc.ApiResponseError(err)
+	}
+	return rpc.ApiResponseJson("OK")
+}
+
+func (s *apiServer) SlotActionHistory(session sessions.Session, req *http.Request, params martini.Params) (int, string) {
+	res, _ := s.dashCore.GetSlotActionHistory()
+	return rpc.ApiResponseJson(res)
+}
+
 func (s *apiServer) SlotsAssignGroup(session sessions.Session, req *http.Request, slots []*models.SlotMapping, params martini.Params) (int, string) {
 	if err := s.verifyXAuth(params); err != nil {
 		return rpc.ApiResponseError(err)
@@ -1218,119 +1375,53 @@ func (s *apiServer) DelAdmin(session sessions.Session, req *http.Request, params
 	return rpc.ApiResponseJson("OK")
 }
 
-func (s *apiServer) AddPconfig(session sessions.Session, req *http.Request, pconfig models.Pconfig, params martini.Params) (int, string) {
+func (s *apiServer) CreateDk(session sessions.Session, req *http.Request, dk models.DkItem, params martini.Params) (int, string) {
 	if err := s.verifyXAuth(params); err != nil {
 		return rpc.ApiResponseError(err)
 	}
 	if err := s.verifyLogin(session, req); err != nil {
 		return rpc.ApiResponseError(err)
 	}
-	log.Info("pconfig:", pconfig)
-	if len(pconfig.Name) <= 0 {
-		return rpc.ApiResponseError(errors.Errorf("params err, pconfig : %v", pconfig))
+	if len(dk.Key) <= 0 || dk.ShardNum <= 0 || len(dk.DataType) <= 0 {
+		return rpc.ApiResponseError(errors.New("params err"))
 	}
 
-	if err := s.dashCore.CreatePConfig(&pconfig); err != nil {
+	if err := s.dashCore.CreateDk(&dk); err != nil {
 		return rpc.ApiResponseError(err)
 	}
 	return rpc.ApiResponseJson("OK")
 }
 
-func (s *apiServer) UpdatePconfig(session sessions.Session, req *http.Request, pconfig models.Pconfig, params martini.Params) (int, string) {
+func (s *apiServer) RemoveDk(session sessions.Session, req *http.Request, params martini.Params) (int, string) {
 	if err := s.verifyXAuth(params); err != nil {
 		return rpc.ApiResponseError(err)
 	}
 	if err := s.verifyLogin(session, req); err != nil {
 		return rpc.ApiResponseError(err)
 	}
-	log.Info("pconfig:", pconfig)
-	if err := s.dashCore.UpdatePConfig(&pconfig); err != nil {
+	if len(params["key"]) <= 0 {
+		return rpc.ApiResponseError(errors.New("param empty"))
+	}
+
+	if err := s.dashCore.RemoveDk(params["key"]); err != nil {
 		return rpc.ApiResponseError(err)
 	}
 	return rpc.ApiResponseJson("OK")
 }
 
-func (s *apiServer) DelPconfig(session sessions.Session, req *http.Request, params martini.Params) (int, string) {
-	if err := s.verifyXAuth(params); err != nil {
-		return rpc.ApiResponseError(err)
-	}
-	if err := s.verifyLogin(session, req); err != nil {
-		return rpc.ApiResponseError(err)
-	}
-	name, err := s.parsePconfigName(params)
-
-	if err != nil {
-		return rpc.ApiResponseError(err)
-	}
-
-	if err := s.dashCore.RemovePConfig(name); err != nil {
-		return rpc.ApiResponseError(err)
-	}
-	return rpc.ApiResponseJson("OK")
-}
-
-func (s *apiServer) ResyncAllPconfig(session sessions.Session, req *http.Request, params martini.Params) (int, string) {
-	if err := s.verifyXAuth(params); err != nil {
-		return rpc.ApiResponseError(err)
-	}
-	if err := s.verifyLogin(session, req); err != nil {
-		return rpc.ApiResponseError(err)
-	}
-	if err := s.dashCore.ResyncAllPconfig(); err != nil {
-		return rpc.ApiResponseError(err)
-	}
-	return rpc.ApiResponseJson("OK")
-}
-
-func (s *apiServer) ResyncOnePconfig(session sessions.Session, req *http.Request, params martini.Params) (int, string) {
-	if err := s.verifyXAuth(params); err != nil {
-		return rpc.ApiResponseError(err)
-	}
-	if err := s.verifyLogin(session, req); err != nil {
-		return rpc.ApiResponseError(err)
-	}
-	name, err := s.parsePconfigName(params)
-
-	if err != nil {
-		return rpc.ApiResponseError(err)
-	}
-
-	if err := s.dashCore.ResyncOnePconfig(name); err != nil {
-		return rpc.ApiResponseError(err)
-	}
-	return rpc.ApiResponseJson("OK")
-}
-
-func (s *apiServer) ListPconfig(params martini.Params) (int, string) {
+func (s *apiServer) ListDk(params martini.Params) (int, string) {
 	if err := s.verifyXAuth(params); err != nil {
 		return rpc.ApiResponseError(err)
 	}
 
-	if data, err := s.dashCore.GetPConfigList(); err != nil {
+	if data, err := s.dashCore.GetDKList(); err != nil {
 		return rpc.ApiResponseError(err)
 	} else {
-		res := make([]*models.Pconfig, 0, len(data))
+		res := make([]*models.DkItem, 0, len(data))
 		for _, val := range data {
 			res = append(res, val)
 		}
 		return rpc.ApiResponseJson(res)
-	}
-}
-
-func (s *apiServer) DetailPconfig(params martini.Params) (int, string) {
-	if err := s.verifyXAuth(params); err != nil {
-		return rpc.ApiResponseError(err)
-	}
-	name, err := s.parsePconfigName(params)
-
-	if err != nil {
-		return rpc.ApiResponseError(err)
-	}
-
-	if data, err := s.dashCore.GetPConfig(name); err != nil {
-		return rpc.ApiResponseError(err)
-	} else {
-		return rpc.ApiResponseJson(data)
 	}
 }
 
@@ -1348,4 +1439,51 @@ func (s *apiServer) LogOut(session sessions.Session, req *http.Request, params m
 		MaxAge: -1,
 	})
 	return rpc.ApiResponseJson("OK")
+}
+
+func (s *apiServer) sendOpDing(req *http.Request, nodeMsg, opAction string) {
+	if req.Referer() != s.dashCore.config.DhRefer {
+		return
+	}
+	if s.dashCore.config.Env == consts.EnvDev || s.dashCore.config.Env == consts.EnvDemo {
+		return
+	}
+	unameCookie, err := req.Cookie("uname")
+	var uname string
+	if err != nil {
+		uname = "unknown"
+	} else {
+		uname = unameCookie.Value
+	}
+	var b strings.Builder
+	b.WriteString("**DH operations**<br/>")
+	date := time.Now().Format("2006-01-02 15:04:05")
+	b.WriteString("**Action:**<font size=2>")
+	b.WriteString(opAction)
+	b.WriteString("</font><br/>")
+	b.WriteString("**Time:**<font size=2>")
+	b.WriteString(date)
+	b.WriteString("</font><br/>")
+	b.WriteString("**Operator:**<font size=2>")
+	b.WriteString(uname)
+	b.WriteString("</font><br/>")
+	if s.dashCore.config.Area == "md" {
+		b.WriteString("**Overseas cluster:**<font size=2>")
+		b.WriteString(s.dashCore.config.ProductName)
+		b.WriteString("</font><br/>")
+	} else {
+		b.WriteString("**Cluster:**<font size=2>")
+		b.WriteString(s.dashCore.config.ProductName)
+		b.WriteString("</font><br/>")
+	}
+	if len(nodeMsg) > 0 {
+		b.WriteString("**Node:**<font size=2>")
+		b.WriteString(nodeMsg)
+		b.WriteString("</font><br/>")
+	}
+	e := utils.SendDingding(opAction, b.String())
+	if e != nil {
+		log.Errorf("sendding failed err:%v", e)
+	}
+	log.Infof("op log: %s", b.String())
 }

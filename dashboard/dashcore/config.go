@@ -26,30 +26,26 @@ import (
 const DefaultConfig = `
 ##################################################
 #                                                #
-#                  Bitalos-Dashboard             #
+#                  Bitalos-Dashboard               #
 #                                                #
 ##################################################
 
-# Set Coordinator, only accept "sqlite" & "db".
+# Set Coordinator, only accept "sqlite" & "database".
 # for sqlite, coorinator_auth accept "user:password" 
 # Quick Start
-coordinator_name = "sqlite"
-coordinator_addr = "dh.db"
+coordinator_name = ""
+coordinator_addr = ""
+coordinator_auth = ""
 
 # Set Stored Product Name/Auth.
-product_name = "demo"
+product_name = ""
 product_auth = ""
 
 # Set bind address for admin(rpc), tcp only.
 admin_addr = "0.0.0.0:18080"
 # Set Stored raft
 admin_model  = "raft"
-
-[database]
-username = "demo"
-password = "demo"
-hostport = "127.0.0.1:13306"
-dbname = "demo"`
+`
 
 type Config struct {
 	CoordinatorName string `toml:"coordinator_name" json:"coordinator_name"`
@@ -60,12 +56,31 @@ type Config struct {
 	AdminModel string `toml:"admin_model" json:"admin_model"`
 
 	HostAdmin string `toml:"-" json:"-"`
+	PaasHost  string `toml:"paas_host" json:"paas_host"`
+	DhRefer   string `toml:"dh_refer" json:"dh_refer"`
+	Area      string `toml:"area" json:"area"`
+	Env       string `toml:"env" json:"env"`
 
 	ReadCrossCloud int `toml:"read_cross_cloud" json:"read_cross_cloud"`
 
-	ProductName string   `toml:"product_name" json:"product_name"`
-	ProductAuth string   `toml:"product_auth" json:"product_auth"`
-	Database    DBConfig `toml:"database"`
+	ProductName string       `toml:"product_name" json:"product_name"`
+	ProductAuth string       `toml:"product_auth" json:"product_auth"`
+	Cloud       string       `toml:"cloud" json:"cloud"`
+	Database    DBConfig     `toml:"database"`
+	Stored      StoredConfig `toml:"stored"`
+}
+
+type StoredConfig struct {
+	Txcloud []string `toml:"txcloud" json:"txcloud"`
+	Ali     []string `toml:"ali" json:"ali"`
+	Baidu   []string `toml:"baidu" json:"baidu"`
+}
+
+type DBConfig struct {
+	Username string `toml:"username"`
+	Password string `toml:"password"`
+	HostPort string `toml:"hostport"`
+	DBName   string `toml:"dbname"`
 }
 
 func NewDefaultConfig() *Config {
@@ -73,9 +88,9 @@ func NewDefaultConfig() *Config {
 	if _, err := toml.Decode(DefaultConfig, c); err != nil {
 		log.PanicErrorf(err, "decode toml failed")
 	}
-	if err := c.Validate(); err != nil {
-		log.PanicErrorf(err, "validate config failed")
-	}
+	// if err := c.Validate(); err != nil {
+	// 	log.PanicErrorf(err, "validate config failed")
+	// }
 	return c
 }
 
@@ -112,11 +127,4 @@ func (c *Config) Validate() error {
 		return errors.New("invalid admin model raft")
 	}
 	return nil
-}
-
-type DBConfig struct {
-	Username string `toml:"username"`
-	Password string `toml:"password"`
-	HostPort string `toml:"hostport"`
-	DBName   string `toml:"dbname"`
 }

@@ -16,11 +16,10 @@ package models
 
 import (
 	"fmt"
-	"path/filepath"
-	"regexp"
-
 	"github.com/zuoyebang/bitalostored/dashboard/internal/errors"
 	"github.com/zuoyebang/bitalostored/dashboard/internal/log"
+	"path/filepath"
+	"regexp"
 )
 
 func init() {
@@ -63,8 +62,8 @@ func ProxyDir(product string) string {
 	return filepath.Join(StoredDir, product, "proxy")
 }
 
-func PconfigDir(product string) string {
-	return filepath.Join(StoredDir, product, "pconfig")
+func DkDir(product string) string {
+	return filepath.Join(StoredDir, product, "dk")
 }
 
 func AdminDir() string {
@@ -87,12 +86,12 @@ func ProxyPath(product string, token string) string {
 	return filepath.Join(StoredDir, product, "proxy", fmt.Sprintf("proxy-%s", token))
 }
 
-func PconfigPath(product string, name string) string {
-	return filepath.Join(StoredDir, product, "pconfig", fmt.Sprintf("%s", name))
+func DkPath(product, key string) string {
+	return filepath.Join(StoredDir, product, "dk", key)
 }
 
 func AdminPath(name string) string {
-	return filepath.Join(StoredDir, "admin", fmt.Sprintf("%s", name))
+	return filepath.Join(StoredDir, "admin", name)
 }
 
 func LoadDashCore(client Client, product string) (*DashCore, error) {
@@ -176,8 +175,8 @@ func (s *Store) ProxyDir() string {
 	return ProxyDir(s.product)
 }
 
-func (s *Store) PconfigDir() string {
-	return PconfigDir(s.product)
+func (s *Store) DkDir() string {
+	return DkDir(s.product)
 }
 
 func (s *Store) AdminDir() string {
@@ -196,8 +195,8 @@ func (s *Store) ProxyPath(token string) string {
 	return ProxyPath(s.product, token)
 }
 
-func (s *Store) PconfigPath(name string) string {
-	return PconfigPath(s.product, name)
+func (s *Store) DkPath(key string) string {
+	return DkPath(s.product, key)
 }
 
 func (s *Store) AdminPath(username string) string {
@@ -249,11 +248,11 @@ func (s *Store) SlotMappings() ([]*SlotMapping, error) {
 }
 
 func (s *Store) UpdateDashCore(t *DashCore) error {
-	return s.client.Update(s.LockPath(), t.Encode())
+	return s.client.Update(s.LockPath(), t.Encode(), true)
 }
 
 func (s *Store) UpdateDepartment(departmentName, productName string) error {
-	return s.client.Update(s.DepartmentPath(), jsonEncode(Department{Name: departmentName}))
+	return s.client.Update(s.DepartmentPath(), jsonEncode(Department{Name: departmentName}), false)
 }
 
 func (s *Store) LoadSlotMapping(sid int) (*SlotMapping, error) {
@@ -269,7 +268,7 @@ func (s *Store) LoadSlotMapping(sid int) (*SlotMapping, error) {
 }
 
 func (s *Store) UpdateSlotMapping(m *SlotMapping) error {
-	return s.client.Update(s.SlotPath(m.Id), m.Encode())
+	return s.client.Update(s.SlotPath(m.Id), m.Encode(), false)
 }
 
 func (s *Store) ListGroup() (map[int]*Group, error) {
@@ -305,7 +304,7 @@ func (s *Store) LoadGroup(gid int) (*Group, error) {
 }
 
 func (s *Store) UpdateGroup(g *Group) error {
-	return s.client.Update(s.GroupPath(g.Id), g.Encode())
+	return s.client.Update(s.GroupPath(g.Id), g.Encode(), false)
 }
 
 func (s *Store) DeleteGroup(gid int) error {
@@ -349,31 +348,31 @@ func (s *Store) LoadMigrate(sid int) (*Migrate, error) {
 }
 
 func (s *Store) UpdateMigrate(g *Migrate) error {
-	return s.client.Update(s.MigratePath(g.SID), g.Encode())
+	return s.client.Update(s.MigratePath(g.SID), g.Encode(), false)
 }
 
 func (s *Store) DeleteMigrate(sid int) error {
 	return s.client.Delete(s.MigratePath(sid))
 }
 
-func (s *Store) ListPconfig() (map[string]*Pconfig, error) {
-	paths, err := s.client.List(s.PconfigDir())
+func (s *Store) ListDk() (map[string]*DkItem, error) {
+	paths, err := s.client.List(s.DkDir())
 	if err != nil {
 		return nil, err
 	}
-	pconfig := make(map[string]*Pconfig)
+	dk := make(map[string]*DkItem, len(paths))
 	for _, path := range paths {
 		b, err := s.client.Read(path)
 		if err != nil {
 			return nil, err
 		}
-		p := &Pconfig{}
-		if err := JsonDecode(p, b); err != nil {
+		dkItem := &DkItem{}
+		if err := JsonDecode(dkItem, b); err != nil {
 			return nil, err
 		}
-		pconfig[p.Name] = p
+		dk[dkItem.Key] = dkItem
 	}
-	return pconfig, nil
+	return dk, nil
 }
 
 func (s *Store) ListAdmin() (map[string]*Admin, error) {
@@ -423,25 +422,20 @@ func (s *Store) ListStored() ([]string, error) {
 		return paths, nil
 	}
 }
-
-func (s *Store) LoadPconfig(name string) (*Pconfig, error) {
-	b, err := s.client.Read(s.PconfigPath(name))
+func (s *Store) LoadDk(key string) (*DkItem, error) {
+	b, err := s.client.Read(s.DkPath(key))
 	if err != nil || b == nil {
 		return nil, err
 	}
-	p := &Pconfig{}
-	if err := JsonDecode(p, b); err != nil {
+	d := &DkItem{}
+	if err := JsonDecode(d, b); err != nil {
 		return nil, err
 	}
-	return p, nil
+	return d, nil
 }
 
-func (s *Store) UpdatePconfig(p *Pconfig) error {
-	return s.client.Update(s.PconfigPath(p.Name), p.Encode())
-}
-
-func (s *Store) DeletePconfig(name string) error {
-	return s.client.Delete(s.PconfigPath(name))
+func (s *Store) UpdateDk(dk *DkItem) error {
+	return s.client.Update(s.DkPath(dk.Key), dk.Encode(), false)
 }
 
 func (s *Store) LoadAdmin(name string) (*Admin, error) {
@@ -457,7 +451,7 @@ func (s *Store) LoadAdmin(name string) (*Admin, error) {
 }
 
 func (s *Store) UpdateAdmin(a *Admin) error {
-	return s.client.Update(s.AdminPath(a.Username), a.Encode())
+	return s.client.Update(s.AdminPath(a.Username), a.Encode(), false)
 }
 
 func (s *Store) DeleteAdmin(username string) error {
@@ -477,11 +471,15 @@ func (s *Store) LoadProxy(token string) (*Proxy, error) {
 }
 
 func (s *Store) UpdateProxy(p *Proxy) error {
-	return s.client.Update(s.ProxyPath(p.Token), p.Encode())
+	return s.client.Update(s.ProxyPath(p.Token), p.Encode(), false)
 }
 
 func (s *Store) DeleteProxy(token string) error {
 	return s.client.Delete(s.ProxyPath(token))
+}
+
+func (s *Store) DeleteDk(key string) error {
+	return s.client.Delete(s.DkPath(key))
 }
 
 func ValidateProduct(name string) error {

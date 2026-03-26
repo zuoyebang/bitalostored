@@ -15,9 +15,10 @@
 package dashcore
 
 import (
-	"time"
-
 	"github.com/zuoyebang/bitalostored/dashboard/models"
+	dbclient "github.com/zuoyebang/bitalostored/dashboard/models/db"
+	"strconv"
+	"time"
 
 	"github.com/zuoyebang/bitalostored/dashboard/internal/log"
 	"github.com/zuoyebang/bitalostored/dashboard/internal/uredis"
@@ -26,9 +27,11 @@ import (
 func (s *DashCore) crontabCheckMasterByRaft() {
 	go func() {
 		for {
-			s.mu.Lock()
-			s.checkMastersByRaft()
-			s.mu.Unlock()
+			if dbclient.IsAllowUpdate() {
+				s.mu.Lock()
+				s.checkMastersByRaft()
+				s.mu.Unlock()
+			}
 			time.Sleep(time.Second)
 		}
 	}()
@@ -44,7 +47,6 @@ func (s *DashCore) checkMastersByRaft() {
 		log.Warnf("raft check master err : ctx.group is empty")
 		return
 	}
-	masterGroupMap := make(map[int]string)
 	cache := uredis.NewInfoCache(s.config.ProductAuth, time.Second, s.stats.redisp)
 	for _, m := range ctx.group {
 		addrs := make(map[string]string, len(m.Servers))
@@ -56,29 +58,37 @@ func (s *DashCore) checkMastersByRaft() {
 				deraftAddr = groupServer.Addr
 				break
 			}
-			if len(groupServer.ServerRole) == 0 || groupServer.ServerRole == models.ServerMasterSlaveNode {
-				addrs[groupServer.Addr] = groupServer.Addr
-			}
+			// if len(groupServer.ServerRole) == 0 || groupServer.ServerRole == models.ServerMasterSlaveNode {
+			addrs[groupServer.Addr] = groupServer.Addr
+			// }
 		}
 		if skipDeRaft {
 			if err := s.trySwitchGroupMaster(m.Id, deraftAddr, cache); err != nil {
 				log.WarnErrorf(err, "start check raft switch group master single failed")
-			} else {
-				masterGroupMap[m.Id] = deraftAddr
 			}
 			continue
 		}
 		if len(addrs) > 0 {
-			if master, err := cache.GetRaftGroupMaster(m.Id, addrs); err != nil {
+			var nodeList map[string]*uredis.NodeInfo
+			var master string
+			var err error
+			if master, nodeList, err = cache.GetRaftGroupInfo(m.Id, addrs); err != nil {
 				log.Warnf("checkMastersByRaft GetRaftGroupMaster err : %s", err.Error())
 			} else {
 				if err := s.trySwitchGroupMaster(m.Id, master, cache); err != nil {
 					log.WarnErrorf(err, "start check raft switch group master failed")
-				} else {
-					masterGroupMap[m.Id] = master
+				}
+			}
+			for _, groupServer := range m.Servers {
+				if v, ok := nodeList[groupServer.Addr]; ok && v != nil {
+					if groupServer.NodeId == 0 && len(v.CurrentNodeId) > 0 {
+						nodeId, _ := strconv.Atoi(v.CurrentNodeId)
+						if nodeId > 0 {
+							groupServer.NodeId = uint64(nodeId)
+						}
+					}
 				}
 			}
 		}
 	}
-	s.ha.masters = masterGroupMap
 }

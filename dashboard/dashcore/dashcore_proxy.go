@@ -16,7 +16,6 @@ package dashcore
 
 import (
 	"fmt"
-
 	"github.com/zuoyebang/bitalostored/dashboard/internal/errors"
 	"github.com/zuoyebang/bitalostored/dashboard/internal/log"
 	"github.com/zuoyebang/bitalostored/dashboard/internal/proxy"
@@ -152,9 +151,13 @@ func (s *DashCore) reinitProxy(ctx *context, p *models.Proxy, c *proxy.ApiClient
 		log.ErrorErrorf(err, "proxy-[%s] fillslots failed", p.Token)
 		return errors.Errorf("proxy-[%s] fillslots failed", p.Token)
 	}
-	if err := c.FillPconfigs(ctx.toPconfigSlice(ctx.pconfig)); err != nil {
-		log.ErrorErrorf(err, "proxy-[%s] fillslots failed", p.Token)
-		return errors.Errorf("proxy-[%s] fillslots failed", p.Token)
+	if err := c.FillDk(ctx.toDkSlice(ctx.dk)); err != nil {
+		//tmp todo
+		tmpNotFound := err.Error()
+		if len(tmpNotFound) < 5 || tmpNotFound[0:5] != "[404]" {
+			log.ErrorErrorf(err, "proxy-[%s] fill dks failed", p.Token)
+			return errors.Errorf("proxy-[%s] fill dks failed", p.Token)
+		}
 	}
 	if err := c.Start(); err != nil {
 		log.ErrorErrorf(err, "proxy-[%s] start failed", p.Token)

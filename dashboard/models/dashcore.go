@@ -23,7 +23,8 @@ type DashCore struct {
 	BackupAddr     string `json:"backup_addr"`
 	BackupHostPort string `json:"backup_hostport"`
 
-	ProductName string `json:"product_name"`
+	AddrCloud   map[string]string `json:"addr_cloud"`
+	ProductName string            `json:"product_name"`
 
 	ReadCrossCloud bool `json:"read_cross_cloud"`
 

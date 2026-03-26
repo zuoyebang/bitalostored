@@ -40,6 +40,10 @@ func (r *Record) String() string {
 
 type Stack []*Record
 
+func Trace() Stack {
+	return TraceN(1, 32)
+}
+
 func (s Stack) String() string {
 	return s.StringWithIndent(0)
 }

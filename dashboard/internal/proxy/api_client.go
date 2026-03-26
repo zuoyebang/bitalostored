@@ -79,7 +79,17 @@ func (c *ApiClient) FillSlots(slots ...*models.Slot) error {
 	return rpc.ApiPutJson(url, slots, nil)
 }
 
-func (c *ApiClient) FillPconfigs(pconfig []*models.Pconfig) error {
-	url := c.encodeURL("/api/proxy/fillpconfigs/%s", c.xauth)
-	return rpc.ApiPutJson(url, pconfig, nil)
+func (c *ApiClient) FillDk(dks []*models.DkItem) error {
+	url := c.encodeURL("/api/proxy/filldks/%s", c.xauth)
+	return rpc.ApiPutJson(url, dks, nil)
+}
+
+func (c *ApiClient) CreateDk(dk *models.DkItem) error {
+	url := c.encodeURL("/api/proxy/createdk/%s", c.xauth)
+	return rpc.ApiPutJson(url, dk, nil)
+}
+
+func (c *ApiClient) RemoveDk(key string) error {
+	url := c.encodeURL("/api/proxy/removedk/%s/%s", key, c.xauth)
+	return rpc.ApiPutJson(url, nil, nil)
 }

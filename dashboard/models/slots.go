@@ -17,15 +17,18 @@ package models
 const MaxSlotNum = 1024
 
 type Slot struct {
-	Id                   int               `json:"id"`
-	Locked               bool              `json:"locked"`
-	Switched             bool              `json:"switched"`
-	MasterAddr           string            `json:"master_addr"`
-	MasterAddrGroupId    int               `json:"master_addr_group_id"`
-	RoundRobinNum        uint64            `json:"round_robin_num"`
-	LocalCloudServers    []string          `json:"local_servers"`
-	BackupCloudServers   []string          `json:"backup_servers"`
-	WitnessServers       []string          `json:"witness_servers"`
+	Id     int  `json:"id"`
+	Locked bool `json:"locked"`
+
+	Switched          bool   `json:"switched"`
+	MasterAddr        string `json:"master_addr"`
+	MasterAddrGroupId int    `json:"master_addr_group_id"`
+
+	RoundRobinNum      uint64   `json:"round_robin_num"`
+	LocalCloudServers  []string `json:"local_servers"`
+	BackupCloudServers []string `json:"backup_servers"`
+	WitnessServers     []string `json:"witness_servers"`
+
 	GroupServersCloudMap map[string]string `json:"group_servers_cloudmap"`
 	GroupServersStats    map[string]bool   `json:"group_servers_stats"`
 }

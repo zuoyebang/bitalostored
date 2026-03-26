@@ -17,29 +17,34 @@ package models
 const MaxGroupId = 9999
 
 type Group struct {
-	Id          int            `json:"id"`
-	Servers     []*GroupServer `json:"servers"`
-	MasterAddr  string         `json:"master_addr,omitempty"`
-	OutOfSync   bool           `json:"out_of_sync,omitempty"`
-	IsExpanding bool           `json:"is_expanding"`
+	Id         int            `json:"id"`
+	Servers    []*GroupServer `json:"servers"`
+	MasterAddr string         `json:"master_addr,omitempty"`
 
 	Promoting struct {
 		Index int    `json:"index,omitempty"`
 		State string `json:"state,omitempty"`
 	} `json:"promoting"`
+
+	OutOfSync   bool `json:"out_of_sync,omitempty"`
+	SyncFailed  bool `json:"sync_failed,omitempty"`
+	IsExpanding bool `json:"is_expanding"`
 }
 
 type GroupServer struct {
-	Addr         string `json:"server"`
-	DataCenter   string `json:"datacenter"`
-	CloudType    string `json:"cloudtype"`
-	ServerRole   string `json:"server_role"`
-	ReplicaGroup bool   `json:"replica_group"`
+	Addr string `json:"server"`
+
+	DataCenter string `json:"datacenter"`
+	CloudType  string `json:"cloudtype"`
+	ServerRole string `json:"server_role"`
+	NodeId     uint64 `json:"node_id"`
 
 	Action struct {
 		Index int    `json:"index,omitempty"`
 		State string `json:"state,omitempty"`
 	} `json:"action"`
+
+	ReplicaGroup bool `json:"replica_group"`
 }
 
 const (

@@ -16,6 +16,7 @@ package dbclient
 
 import (
 	"fmt"
+	"github.com/zuoyebang/bitalostored/dashboard/internal/consts"
 	"testing"
 
 	"gorm.io/driver/mysql"
@@ -30,6 +31,42 @@ func TestDBClient(t *testing.T) {
 		return
 	}
 	fmt.Println(data)
+}
+
+type DashCore struct {
+	Token     string `json:"token"`
+	StartTime string `json:"start_time"`
+	AdminAddr string `json:"admin_addr"`
+	HostPort  string `json:"hostport"`
+
+	BackupAddr     string `json:"backup_addr"`
+	BackupHostPort string `json:"backup_hostport"`
+
+	ProductName string `json:"product_name"`
+
+	ReadCrossCloud bool `json:"read_cross_cloud"`
+
+	Pid int    `json:"pid"`
+	Pwd string `json:"pwd"`
+	Sys string `json:"sys"`
+}
+
+func TestTransaction(t *testing.T) {
+	setDB()
+	data, err := readTransaction("/stored/bitalos1/topom-backup")
+	if err != nil {
+		t.Fail()
+		return
+	}
+	d := &DashCore{}
+	if data == nil {
+		fmt.Println("data is nil")
+		return
+	}
+	if err := JsonDecode(d, data); err != nil {
+		fmt.Println(err)
+	}
+	fmt.Println(string(data))
 }
 
 func listGroup() (interface{}, error) {
@@ -52,8 +89,48 @@ func listGroup() (interface{}, error) {
 	return group, nil
 }
 
+func curd(t *testing.T) {
+	err := create("/stored/matrix-live/group/group-1.jj", []byte(`{"haha":"1","age":1}`))
+	if err != nil {
+		t.Fail()
+		return
+	}
+	data, err := read("/stored/matrix-live/group/group-1.jj")
+	if err != nil {
+		t.Fail()
+		return
+	}
+	fmt.Println("ashaha", string(data), "hahahaha")
+	err = update("/stored/matrix-live/group/group-1.jj", []byte(`{"haha":"guagua","age":2}`))
+	if err != nil {
+		t.Fail()
+	}
+	data, err = read("/stored/matrix-live/group/group-1.jj")
+	if err != nil {
+		t.Fail()
+	}
+	fmt.Println(string(data))
+	err = deleteData("/stored/matrix-live/group/")
+	if err != nil {
+		t.Fail()
+	}
+}
+
+func TestSlotActionList(t *testing.T) {
+	setDB()
+	fmt.Println(SlotActionGetList("lu6"))
+}
+
+func TestAddSlotAction(t *testing.T) {
+	setDB()
+	for i := 0; i < 20; i++ {
+		AddSlotAction("lu6", consts.SlotActionTransfer, 1, 2, 1, 2)
+		AddSlotAction("lu6", consts.SlotActionRemove, 3, 4, 100, 200)
+	}
+}
+
 func setDB() {
-	dsn := "mysql:mysql@tcp(127.0.0.1:13306)/stored_dashboard?charset=utf8mb4&parseTime=True&loc=Local"
+	dsn := "test:test@tcp(127.0.0.1:8306)/paas_share?charset=utf8mb4&parseTime=True&loc=Local"
 	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
 	if err != nil {
 		panic(err)

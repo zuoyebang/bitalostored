@@ -1,5 +1,11 @@
 <template>
   <v-container fluid>
+    <GlobalSearch
+      :isOpen="isSearchOpen"
+      @update:isOpen="isSearchOpen = $event"
+      @focus="focusSearch" 
+      @blur="blurSearch"
+    />
     <v-tabs class="tabs" v-model="tab" align-with-title>
       <v-tabs-slider color="yellow"></v-tabs-slider>
       <v-tab v-for="item in items" :key="item">{{ item }}</v-tab>
@@ -26,11 +32,75 @@
             <td>{{ homeData.config.product_name }}</td>
           </tr>
           <tr>
+            <td>[Resource Pool]</td>
+            <td><div v-html="homeData.cgroup"></div></td>
+          </tr>
+          <tr>
             <td>Dashboard</td>
             <td>
-              <a :href="'//' + homeData.model.hostport" target="_blank">{{
-                homeData.model.admin_addr
+              Primary: <a :href="'//' + host + baseUrl + 'topomdirect?ha='+(homeData.master || homeData.model.hostport)" target="_blank">{{
+                homeData.master || homeData.model.hostport
               }}</a>
+              Standby: <template v-if="homeData.backup && homeData.backup.length">
+                <template v-for="(backupAddr, index) in homeData.backup">
+                  <a
+                    :key="index"
+                    :href="'//' +  host + baseUrl + 'topomdirect?ha='+ backupAddr"
+                    target="_blank"
+                    >{{ backupAddr }}</a
+                  >
+                  <span v-if="index < homeData.backup.length - 1"> | </span>
+                </template>
+              </template>
+              <template v-else-if="homeData.model && homeData.model.backup_addr">
+                <a
+                  :href="'//' +  host + baseUrl + 'topomdirect?ha='+ homeData.model.backup_addr"
+                  target="_blank"
+                  >{{ homeData.model.backup_addr }}</a
+                >
+              </template>
+              <span v-else>-</span>
+            </td>
+          </tr>
+          <tr>
+            <td>Config</td>
+            <td>
+              <a
+                :href="'//'+homeData.config.paas_host+ baseUrl +'bitalospaas/static/#/config?clusterName=' + homeData.config.product_name+ '&serviceId=6&type=update config'"
+                target="_blank"
+                >bitalos-config
+                </a>
+                >|<
+              <a
+                :href="'//'+homeData.config.paas_host+ baseUrl +'bitalospaas/static/#/config?clusterName=' + homeData.config.product_name+ '&serviceId=2&type=update config'"
+                target="_blank"
+                >proxy-config
+                </a>
+            </td>
+          </tr>
+          <tr>
+            <td>Proxy Monitor</td>
+            <td v-if="homeData.monitorLink">
+              <a v-if="homeData.monitorLink.tx"
+                :href="homeData.monitorLink.tx"
+                target="_blank"
+              >TX
+              </a>
+              <span v-else>-</span>
+              |
+              <a v-if="homeData.monitorLink.ali"
+                :href="homeData.monitorLink.ali"
+                target="_blank"
+              >ALI
+              </a>
+              <span v-else>-</span>
+              |
+              <a v-if="homeData.monitorLink.bd"
+                :href="homeData.monitorLink.bd"
+                target="_blank"
+              >BD
+              </a>
+              <span v-else></span>
             </td>
           </tr>
         </tbody>
@@ -78,6 +148,11 @@
         :list="migrateTableList"
       />
     </v-card>
+    <v-card class="mt-2">
+      <V8SlotHistoryRender
+      :list="v8SlotHistoryData"
+      />
+    </v-card>
     </template>
 
     <template v-if="tab === 1">
@@ -103,10 +178,12 @@
         :host="homeData.model.hostport"
         :models="state.group.models"
         :stats="state.group.stats"
+        :server_stats="state.group.server_stats"
         v-if="state && state.group && homeData"
       />
+     
     </v-card>
-    <PcConfig />
+    <Dk/>
     </template>
   </v-container>
 </template>
@@ -126,31 +203,38 @@ import {
   getMigrateTable$,
   initSlots,
   searchSlot,
+  V8SlotHistoryApi,
 } from "@/api";
+import V8SlotHistoryRender from "@/views/home/v8-slots";
 import { interval } from "rxjs";
 import LineChart from "./home/line-chart";
 import Proxy from "./home/proxy";
 import SlotsView from "./home/slots-view";
 import SlotsControl from "./home/slots-control";
+import V8SlotHistory from "./home/v8-slots";
 import moment from "moment";
 import AppMenu from "@/components/app-menu";
 import AppModal from "@/components/app-modal";
 import GroupView from "@/views/home/group-view";
 import GroupControl from "@/views/home/group-control";
-import PcConfig from "@/views/home/pc-config";
+import Dk from "@/views/home/dk";
 import MigrateTable from "@/views/home/migrate-table";
 import Department from "@/views/home/department";
+import GlobalSearch from "@/components/Search.vue";
+
 
 export default {
   components: {
+    V8SlotHistoryRender,
     MigrateTable,
+    GlobalSearch,
     GroupControl,
     GroupView,
     Proxy,
     LineChart,
     SlotsView,
     SlotsControl,
-    PcConfig,
+    Dk,
     AppModal,
     AppMenu,
     Department,
@@ -158,6 +242,8 @@ export default {
   name: "Home",
   data() {
     return {
+      isSearchFocused: false,
+      isSearchOpen: false,
       tab: 0,
       items: [
         'Overview', 'Proxy', 'Group',
@@ -169,9 +255,36 @@ export default {
       timer: "",
       slots: "",
       searchRes: "",
+      host: window.location.host,
+      baseUrl: process.env.BASE_URL || '/',
+      v8SlotHistoryData: [],
     };
   },
+  mounted() {
+    document.addEventListener('keydown', this.handleKeyPress);
+  },
+  beforeDestroy() {
+    document.removeEventListener('keydown', this.handleKeyPress);
+  },
   methods: {
+    focusSearch() {
+      this.isSearchFocused = true; // search overlay focused
+    },
+    blurSearch() {
+      this.isSearchFocused = false;
+    },
+    handleKeyPress(event) {
+      const isInputFocused = document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA';
+      if (!this.isSearchFocused && !isInputFocused) {
+        if (event.key.toLowerCase() === 's') {
+          event.preventDefault();
+          this.isSearchOpen = true;
+        }
+      }
+      if (event.key === 'Escape') {
+        this.isSearchOpen = false;
+      }
+    },
     async initSlot() {
       const data = await initSlots();
     },
@@ -190,9 +303,11 @@ export default {
   },
   domStreams: ["inputIntervalTime$", "update$"],
   subscriptions() {
+    // refresh data
     this.update$
       .pipe(mergeMapTo(getHomeStats$()), pluck("data"))
       .subscribe((d) => (this.state = d));
+    // poll by interval
     let interval$;
     this.$watchAsObservable("intervalTime")
       .pipe(
@@ -201,7 +316,7 @@ export default {
         tap(
           () => interval$ && interval$.unsubscribe && interval$.unsubscribe()
         ),
-        tap((t) => console.log(`数据刷新间隔: ${t}s`))
+        tap((t) => console.log(`Refresh interval: ${t}s`))
       )
       .subscribe((t: number) => {
         interval$ = interval(t * 1000)
@@ -211,10 +326,14 @@ export default {
             map((d) => (this.state = d)),
             mergeMapTo(getMigrateTable$()),
             pluck("data"),
-            map((d) => (this.migrateTableList = d))
+            map((d) => (this.migrateTableList = d)),
+            mergeMapTo(V8SlotHistoryApi()),
+            pluck("data"),
+            map((d) => (this.v8SlotHistoryData = d)),
           )
           .subscribe();
       });
+    // line chart
     this.$watchAsObservable("state")
       .pipe(
         pluck("newValue", "proxy", "stats"),
@@ -245,6 +364,7 @@ export default {
           })
       );
     return {
+      v8SlotHistoryData: V8SlotHistoryApi().pipe(pluck("data")),
       migrateTableList: getMigrateTable$().pipe(pluck("data")),
       state: getHomeStats$().pipe(
         pluck("data")
@@ -255,6 +375,7 @@ export default {
         pluck("data")
         // tap(console.log),
       ),
+      
     };
   },
   computed: {},

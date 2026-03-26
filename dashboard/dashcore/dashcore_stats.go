@@ -15,10 +15,10 @@
 package dashcore
 
 import (
+	"github.com/zuoyebang/bitalostored/dashboard/internal/proxy"
+	"github.com/zuoyebang/bitalostored/dashboard/internal/utils"
 	"strings"
 	"time"
-
-	"github.com/zuoyebang/bitalostored/dashboard/internal/proxy"
 
 	"github.com/zuoyebang/bitalostored/dashboard/internal/log"
 	"github.com/zuoyebang/bitalostored/dashboard/internal/rpc"
@@ -37,13 +37,13 @@ type RedisStats struct {
 	ReadCrossCloud bool `json:"read_cross_cloud"`
 }
 
-func (s *DashCore) newRedisStats(addr string, timeout time.Duration, do func(addr string) (*RedisStats, error)) *RedisStats {
+func (s *DashCore) newRedisStats(addr string, gid int, timeout time.Duration, do func(string, int) (*RedisStats, error)) *RedisStats {
 	var ch = make(chan struct{})
 	stats := &RedisStats{}
 
 	go func() {
 		defer close(ch)
-		p, err := do(addr)
+		p, err := do(addr, gid)
 		if err != nil {
 			stats.Error = rpc.NewRemoteError(err)
 		} else {
@@ -67,24 +67,32 @@ func (s *DashCore) newRedisStats(addr string, timeout time.Duration, do func(add
 
 func (s *DashCore) RefreshRedisStats(timeout time.Duration) (*sync2.Future, error) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	ctx, err := s.newContext()
 	if err != nil {
+		s.mu.Unlock()
 		return nil, err
 	}
+
+	groups := make([]*models.Group, 0, len(ctx.group))
+	for _, g := range ctx.group {
+		groups = append(groups, g)
+	}
+	s.mu.Unlock()
+
 	var fut sync2.Future
-	goStats := func(addr string, do func(addr string) (*RedisStats, error)) {
+	goStats := func(addr string, gid int, do func(addr string, gid int) (*RedisStats, error)) {
 		fut.Add()
 		go func() {
-			stats := s.newRedisStats(addr, timeout, do)
+			stats := s.newRedisStats(addr, gid, timeout, do)
 			stats.UnixTime = time.Now().Unix()
-			fut.Done(addr, stats)
+			fut.Done(utils.ServerGroupKey(addr, gid), stats)
 		}()
 	}
-	for _, g := range ctx.group {
+
+	for _, g := range groups {
 		for _, x := range g.Servers {
-			goStats(x.Addr, func(addr string) (*RedisStats, error) {
-				m, err := s.stats.redisp.InfoFull(addr)
+			goStats(x.Addr, g.Id, func(addr string, gid int) (*RedisStats, error) {
+				m, err := s.stats.redisp.InfoFull(addr, gid)
 				if err != nil {
 					return nil, err
 				}
@@ -92,6 +100,7 @@ func (s *DashCore) RefreshRedisStats(timeout time.Duration) (*sync2.Future, erro
 			})
 		}
 	}
+
 	go func() {
 		stats := make(map[string]*RedisStats)
 		for k, v := range fut.Wait() {
@@ -101,6 +110,7 @@ func (s *DashCore) RefreshRedisStats(timeout time.Duration) (*sync2.Future, erro
 		defer s.mu.Unlock()
 		s.stats.servers = stats
 	}()
+
 	return &fut, nil
 }
 
@@ -136,13 +146,20 @@ func (s *DashCore) newProxyStats(p *models.Proxy, timeout time.Duration) *ProxyS
 
 func (s *DashCore) RefreshProxyStats(timeout time.Duration) (*sync2.Future, error) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	ctx, err := s.newContext()
 	if err != nil {
+		s.mu.Unlock()
 		return nil, err
 	}
-	var fut sync2.Future
+
+	proxies := make([]*models.Proxy, 0, len(ctx.proxy))
 	for _, p := range ctx.proxy {
+		proxies = append(proxies, p)
+	}
+	s.mu.Unlock()
+
+	var fut sync2.Future
+	for _, p := range proxies {
 		fut.Add()
 		go func(p *models.Proxy) {
 			stats := s.newProxyStats(p, timeout)
@@ -160,6 +177,7 @@ func (s *DashCore) RefreshProxyStats(timeout time.Duration) (*sync2.Future, erro
 			}
 		}(p)
 	}
+
 	go func() {
 		stats := make(map[string]*ProxyStats)
 		for k, v := range fut.Wait() {
@@ -169,5 +187,6 @@ func (s *DashCore) RefreshProxyStats(timeout time.Duration) (*sync2.Future, erro
 		defer s.mu.Unlock()
 		s.stats.proxies = stats
 	}()
+
 	return &fut, nil
 }

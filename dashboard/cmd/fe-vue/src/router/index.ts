@@ -1,6 +1,6 @@
 import Vue from 'vue'
-import VueRouter, { RouteConfig } from 'vue-router'
-import { bitalosproxyGuard, loginGuard } from '@/router/guards'
+import VueRouter, {RouteConfig} from 'vue-router'
+import {bitalosproxyGuard, loginGuard} from '@/router/guards'
 
 
 Vue.use(VueRouter)
@@ -10,6 +10,16 @@ const routes: Array<RouteConfig> = [
     path: '/login',
     name: 'Login',
     component: () => import(/* webpackChunkName: "login" */ '../views/Login'),
+  },
+  {
+    path: '/dashboard',
+    name: 'Dashboard',
+    component: () => import(/* webpackChunkName: "dashboard" */ '../views/dashboard.vue'),
+  },
+  {
+    path: '/member',
+    name: 'Member',
+    component: () => import(/* webpackChunkName: "member" */ '../views/Member'),
   },
   {
     path: '/index',

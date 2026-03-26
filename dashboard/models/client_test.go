@@ -16,10 +16,8 @@ package models
 
 import (
 	"fmt"
+	"github.com/stretchr/testify/assert"
 	"testing"
-
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
 )
 
 var client Client
@@ -32,35 +30,44 @@ func init() {
 	}
 }
 
-func TestCreateTable(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open("dh.db"), &gorm.Config{})
-	if err != nil {
-		t.Errorf("open sqlite err:%v", err)
-	}
-	sql := "CREATE TABLE `tblDashboard` (\n  `id` INTEGER PRIMARY KEY AUTOINCREMENT,\n  `product_name` varchar(512) NOT NULL DEFAULT '',\n  `sub_path` varchar(512) NOT NULL DEFAULT '',\n  `full_path` varchar(512) NOT NULL DEFAULT '',\n  `value` text,\n  `create_time` int unsigned NOT NULL DEFAULT '0',\n  `update_time` int unsigned NOT NULL DEFAULT '0'\n);"
-	db = db.Exec(sql)
-	t.Logf("db err=%v", db.Error)
+func TestCreateAndGetAnd(t *testing.T) {
+	path := "TestCreateAndGet"
+	val := []byte("TestCreateAndGet")
+	err := client.Delete(path)
+	assert.NoError(t, err)
+	client.Create(path, val)
+	data, err := client.Read(path)
+	assert.NoError(t, err)
+	assert.Equal(t, val, data)
 }
 
-func TestInsert(t *testing.T) {
-	err := client.Create("s", []byte("sss"))
-	if err != nil {
-		t.Errorf("create error:%v", err)
-		return
-	}
-	r, err := client.Read("s")
-	if err != nil {
-		t.Errorf("list error:%v", err)
-		return
-	}
-	t.Logf("list %v", r)
+func TestCreateListAndList(t *testing.T) {
+	path := "TestCreateListAndList"
+	path1 := "TestCreateListAndList/one"
+	path2 := "TestCreateListAndList/two"
+	val1 := []byte("TestCreateListAndList-1")
+	val2 := []byte("TestCreateListAndList-2")
+	err := client.Delete(path1)
+	assert.NoError(t, err)
+	err = client.Delete(path2)
+	assert.NoError(t, err)
+	client.Create(path1, val1)
+	client.Create(path2, val2)
+	data, err := client.List(path)
+	assert.Equal(t, val1, []byte(data[0]))
+	assert.Equal(t, val2, []byte(data[1]))
 }
 
-func TestRead(t *testing.T) {
-	r, err := client.Read("s")
-	if err != nil {
-		t.Errorf("read error:%v", err)
-		return
-	}
-	t.Logf("read %s", string(r))
+func TestCreateAndUpdate(t *testing.T) {
+	path := "TestCreateAndUpdate"
+	val := []byte("TestCreateAndUpdate")
+	err := client.Delete(path)
+	assert.NoError(t, err)
+	client.Create(path, val)
+	data, err := client.Read(path)
+	assert.NoError(t, err)
+	assert.Equal(t, val, data)
+	newval := []byte("TestCreateAndUpdate-new")
+	err = client.Update(path, newval, false)
+	assert.NoError(t, err)
 }

@@ -11,6 +11,10 @@ interface SlotItem {
   fromGroupId?: number;
 }
 
+/**
+ * Build ordered indices by group: if gid differs from current slot, bump index and init;
+ * if same, extend range; otherwise initialize.
+ */
 const formatList = (list) => list.reduce((d, i) => {
   if (d.data[d.current]) {
     if (d.data[d.current].groupId !== i.group_id) {

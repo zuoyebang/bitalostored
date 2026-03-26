@@ -1,10 +1,10 @@
-import { Component, Emit, Prop, Vue } from 'vue-property-decorator'
-import { addGroup, addServerToGroup, disableAll, enableAll, getCloudType, syncAll } from '@/api'
-import { AddServerToGroupParams } from '@/interfaces/home'
-import { SERVER_ROLE } from '@/constant'
+import {Component, Emit, Prop, Vue} from 'vue-property-decorator'
+import {addGroup, addServerToGroup, disableAll, enableAll, enableAcAll, disableAcAll, getCloudType, syncAll, deraft} from '@/api'
+import {AddServerToGroupParams} from '@/interfaces/home'
+import {SERVER_ROLE} from '@/constant'
 import AppMenu from '@/components/app-menu'
 
-@Component({ components: { AppMenu } })
+@Component({components: {AppMenu}})
 export default class GroupControl extends Vue {
   newGroupId = ''
   CLOUD_TYPE_LIST = []
@@ -15,12 +15,12 @@ export default class GroupControl extends Vue {
     groupId: '',
   }
   token: ''
-  cloudType = ''
+  cloudType =  ''
   showAlert = false
 
   @Prop()
   models
-  async created() {
+  async created(){
     const data = await getCloudType();
     this.CLOUD_TYPE_LIST = data.data.data.clouds;
     this.addServer.cloudType = this.CLOUD_TYPE_LIST[0]
@@ -44,16 +44,26 @@ export default class GroupControl extends Vue {
           />
         </v-flex>
         <v-flex shrink class='pr-2'>
-          <app-menu
-            activator={(on) => <v-btn color='success' onclick={on.click}>Replica: Enable All</v-btn>}
-            onconfirm={() => this.onClickEnableAll()}
-            title={`Enable All Groups: group-[${this.groupIdList.join(', ')}]`}
+        <app-menu
+          activator={(on) =><v-btn color='success' onclick={on.click}>Replica: Enable All</v-btn>}
+          onconfirm={() => this.onClickEnableAll()}
+          title={`Enable All Groups: group-[${this.groupIdList.join(', ')}]`}
+          content={
+            <div style="padding: 10px 0;">
+              <v-text-field label={'token'} v-model={this.token}></v-text-field>
+            </div>
+          }
           />
         </v-flex>
         <v-flex shrink class='pr-2'>
           <app-menu
             title={`disable all?:`}
             onconfirm={() => this.onClickDisableAll()}
+            content={
+              <div style="padding: 10px 0;">
+                <v-text-field label={'token'} v-model={this.token}></v-text-field>
+              </div>
+            }
             activator={(on) => <v-btn color='error' onclick={on.click}>Replica: disable All</v-btn>}
           />
         </v-flex>
@@ -79,15 +89,15 @@ export default class GroupControl extends Vue {
           />
         </v-flex>
         <v-flex shrink class='pr-2'>
-          <v-select
-            dense
-            style="width:220px"
-            items={SERVER_ROLE}
-            oninput={(val: string) => this.addServer.server_role = val}
-            value={this.addServer.server_role}
-            hide-details
-            outlined
-          />
+            <v-select
+              dense
+              style="width:220px"
+              items={SERVER_ROLE}
+              oninput={(val: string) => this.addServer.server_role = val}
+              value={this.addServer.server_role}
+              hide-details
+              outlined
+            />
         </v-flex>
         <v-flex shrink class='pr-2'>
           <v-text-field
@@ -114,11 +124,12 @@ export default class GroupControl extends Vue {
   }
 
   genAddGroup() {
-    return <v-layout align-center>
+    return (
+    <v-layout class='mt-3'>
       <v-flex shrink class='pr-2'>
         <v-btn disabled={!this.canAddGroup} color='primary' onclick={this.onClickAddGroup}>new group</v-btn>
       </v-flex>
-      <v-flex shrink>
+      <v-flex shrink class='pr-2'>
         <v-text-field
           hide-details
           dense
@@ -128,7 +139,22 @@ export default class GroupControl extends Vue {
           oninput={(val: string) => this.newGroupId = val}
         />
       </v-flex>
+      <v-flex shrink class='pr-2'>
+        <app-menu
+          activator={(on) =><v-btn color='success' onclick={on.click}>AUTO-GC: Enable</v-btn>}
+          onconfirm={() => this.onClickEnableAcAll()}
+            title={`Enable Auto Compact All?`}
+          />
+        </v-flex>
+        <v-flex shrink class='pr-2'>
+          <app-menu
+            title={`Disable Auto Compact All?`}
+            onconfirm={() => this.onClickDisableAcAll()}
+            activator={(on) => <v-btn color='error' onclick={on.click}>AUTO-GC: disable</v-btn>}
+          />
+        </v-flex>
     </v-layout>
+    )
   }
 
   get groupIdList(): string[] {
@@ -136,7 +162,7 @@ export default class GroupControl extends Vue {
   }
 
   get canAddServer() {
-    const { server, groupId } = this.addServer
+    const {server, groupId} = this.addServer
     return server && server.length && this.groupIdList.some((id) => id === groupId)
   }
 
@@ -146,6 +172,13 @@ export default class GroupControl extends Vue {
       Number(this.newGroupId) > 0 &&
       this.groupIdList.every((id) => id !== this.newGroupId)
   }
+  async draft() {
+    if (!this.cloudType || !this.token){
+      alert('cloud and token are required')
+      return
+    }
+    const data = await deraft(this.cloudType, this.token)
+  }
   @Emit('update')
   async onClickSyncAll() {
     await syncAll()
@@ -153,12 +186,30 @@ export default class GroupControl extends Vue {
 
   @Emit('update')
   async onClickEnableAll() {
-    await enableAll()
+    if (!this.token) {
+      alert('token is required')
+      return
+    }
+    await enableAll(this.token)
   }
 
   @Emit('update')
   async onClickDisableAll() {
-    await disableAll()
+    if (!this.token) {
+      alert('token is required')
+      return
+    }
+    await disableAll(this.token)
+  }
+
+  @Emit('update')
+  async onClickEnableAcAll() {
+    await enableAcAll()
+  }
+
+  @Emit('update')
+  async onClickDisableAcAll() {
+    await disableAcAll()
   }
 
   @Emit('update')

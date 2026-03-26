@@ -15,9 +15,9 @@
 package dbclient
 
 import (
-	"sync"
-
 	"github.com/zuoyebang/bitalostored/dashboard/internal/errors"
+	"github.com/zuoyebang/bitalostored/dashboard/internal/log"
+	"sync"
 
 	_ "github.com/go-sql-driver/mysql"
 	"gorm.io/gorm"
@@ -55,12 +55,17 @@ func (c *Client) Create(path string, data []byte) error {
 	return create(path, data)
 }
 
-func (c *Client) Update(path string, data []byte) error {
+func (c *Client) Update(path string, data []byte, force bool) error {
 	c.Lock()
 	defer c.Unlock()
 	if c.closed {
 		return errors.Trace(ErrClosedClient)
 	}
+	if !force && allowUpdate.IsFalse() {
+		log.ErrorErrorf(errors.New("backup dashboard could not update tblDashboard"), "drop update request.fullpath:%s,data:%s.", path, data)
+		return nil
+	}
+
 	return update(path, data)
 }
 
@@ -82,6 +87,15 @@ func (c *Client) Read(path string) ([]byte, error) {
 	}
 
 	return read(path)
+}
+
+func (c *Client) ReadTransaction(path string) ([]byte, error) {
+	c.Lock()
+	defer c.Unlock()
+	if c.closed {
+		return nil, errors.Trace(ErrClosedClient)
+	}
+	return readTransaction(path)
 }
 
 func (c *Client) List(path string) ([]string, error) {
@@ -109,4 +123,13 @@ func (c *Client) SubList(subPath string) (interface{}, error) {
 		return nil, errors.Trace(ErrClosedClient)
 	}
 	return getSubList(subPath)
+}
+
+func (c *Client) SubListGroup(subPath, group string) (interface{}, error) {
+	c.Lock()
+	defer c.Unlock()
+	if c.closed {
+		return nil, errors.Trace(ErrClosedClient)
+	}
+	return getSubListByGroup(subPath, group)
 }

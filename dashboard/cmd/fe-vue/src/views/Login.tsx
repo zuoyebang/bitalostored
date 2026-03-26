@@ -50,6 +50,7 @@ export default class Login extends Vue {
     try {
       const {response: {errmsg, data}} = await login$({username, password}).toPromise()
       if (!errmsg.cause) {
+        // navigate and persist role
         this.setRole(data.role)
         this.$router.push('/')
       }

@@ -17,9 +17,8 @@ package uredis
 import (
 	"errors"
 	"fmt"
-	"time"
-
 	"github.com/zuoyebang/bitalostored/dashboard/internal/log"
+	"time"
 
 	jsoniter "github.com/json-iterator/go"
 )
@@ -74,53 +73,46 @@ func (ms *MembershipV2) CheckNodeIsRemove(nodeId int) bool {
 	return ok
 }
 
-func (s *InfoCache) GetNodeRaftInfo(addr string, iswitness bool) (*NodeInfo, error) {
-	if nf, exist := s.loadNodeInfo(addr); exist {
+func (s *InfoCache) GetNodeRaftInfo(addr string, gid int, iswitness bool) (*NodeInfo, error) {
+	if nf, exist := s.loadNodeInfo(addr, gid); exist {
 		if nf.isDown {
 			return nil, errors.New("node is down err")
 		}
 		return nf, nil
 	}
-
 	nodeInfo := &NodeInfo{}
 
-	addrInfo := s.Get(addr, true)
-	if len(addrInfo["status"]) <= 0 {
+	sInfo := s.Get(addr, gid, true)
+	if len(sInfo) <= 0 {
 		time.Sleep(30 * time.Millisecond)
-		addrInfo = s.Get(addr, true)
+		sInfo = s.Get(addr, gid, true)
 	}
 
-	if len(addrInfo["status"]) <= 0 {
+	if len(sInfo) <= 0 {
 		if iswitness {
-			log.Warnf("GetNodeRaftInfo witness not alive [isdown:true] [addr:%s] [status:%v] [data:%v]", addr, nodeInfo.NodeStatus, addrInfo)
+			log.Warnf("GetNodeRaftInfo witness not alive [isdown:true] [addr:%s] [gid:%d] [data:%v]", addr, gid, sInfo)
 		} else {
-			log.Warnf("GetNodeRaftInfo not alive [isdown:true] [addr:%s] [status:%v] [data:%v]", addr, nodeInfo.NodeStatus, addrInfo)
+			log.Warnf("GetNodeRaftInfo not alive [isdown:true] [addr:%s] [gid:%d] [data:%v]", addr, gid, sInfo)
 		}
 		nodeInfo.isDown = true
-		s.storeNodeInfo(addr, nodeInfo)
+		s.storeNodeInfo(addr, gid, nodeInfo)
 		return nil, errors.New("node is down err")
 	}
 
-	nodeInfo.Role = addrInfo["role"]
-	nodeInfo.CurrentNodeId = addrInfo["current_node_id"]
+	nodeInfo.Role = sInfo["role"]
+	nodeInfo.CurrentNodeId = sInfo["current_node_id"]
 	nodeInfo.CurrentAddress = addr
-	nodeInfo.StartModel = addrInfo["start_model"]
-	nodeInfo.ClusterId = addrInfo["cluster_id"]
-	nodeInfo.LeaderNodeId = addrInfo["leader_node_id"]
-	nodeInfo.ClusterNodes = addrInfo["cluster_nodes"]
+	nodeInfo.StartModel = sInfo["start_model"]
+	nodeInfo.ClusterId = sInfo["cluster_id"]
+	nodeInfo.LeaderNodeId = sInfo["leader_node_id"]
+	nodeInfo.ClusterNodes = sInfo["cluster_nodes"]
 
-	if addrInfo["status"] == "true" {
+	if sInfo["status"] == "true" {
 		nodeInfo.NodeStatus = true
 	} else {
 		nodeInfo.NodeStatus = false
-		if iswitness {
-			log.Warnf("GetNodeRaftInfo witness not alive [isdown:false] [addr:%s] [status:%s] [data:%v]", addr, nodeInfo.NodeStatus, addrInfo)
-		} else {
-			log.Warnf("GetNodeRaftInfo not alive [isdown:false] [addr:%s] [status:%s] [data:%v]", addr, nodeInfo.NodeStatus, addrInfo)
-		}
 	}
-
-	s.storeNodeInfo(addr, nodeInfo)
+	s.storeNodeInfo(addr, gid, nodeInfo)
 	return nodeInfo, nil
 }
 
@@ -130,13 +122,16 @@ type RaftGroupStatusInfo struct {
 	MasterAddr   string
 }
 
+// addr => map[address]cloudtype or map[address]address
 func (s *InfoCache) GetRaftGroupStatusInfo(groupId int, addrs map[string]string) *RaftGroupStatusInfo {
 	pingNodeList := make(map[string]bool)
-	var leaderAddress, deraftAddr string
-	var hasDeraft bool
-
-	for addr := range addrs {
-		nodeInfo, err := s.GetNodeRaftInfo(addr, false)
+	hasDeraft := false
+	deraftAddr := ""
+	nodeInfoList := make(map[string]*NodeInfo, len(addrs))
+	var leaderAddress string
+	for addr, _ := range addrs {
+		nodeInfo, err := s.GetNodeRaftInfo(addr, groupId, false)
+		nodeInfoList[addr] = nodeInfo
 		if err == nil {
 			if nodeInfo.NodeStatus {
 				if nodeInfo.StartModel == "normal" {
@@ -157,21 +152,19 @@ func (s *InfoCache) GetRaftGroupStatusInfo(groupId int, addrs map[string]string)
 			pingNodeList[addr] = false
 		}
 	}
-
 	if hasDeraft && len(pingNodeList) == 1 {
 		leaderAddress = deraftAddr
 	}
-
 	return &RaftGroupStatusInfo{
-		MasterAddr: leaderAddress,
+		MasterAddr:   leaderAddress,
+		NodeInfoList: nodeInfoList,
 	}
 }
 
-func (s *InfoCache) GetRaftGroupMaster(groupId int, addrs map[string]string) (string, error) {
+func (s *InfoCache) GetRaftGroupInfo(groupId int, addrs map[string]string) (string, map[string]*NodeInfo, error) {
 	rgsi := s.GetRaftGroupStatusInfo(groupId, addrs)
-
 	if len(rgsi.MasterAddr) > 0 {
-		return rgsi.MasterAddr, nil
+		return rgsi.MasterAddr, rgsi.NodeInfoList, nil
 	}
-	return "", errors.New(fmt.Sprintf("group-[%d] raft status error", groupId))
+	return "", rgsi.NodeInfoList, fmt.Errorf("group-[%d] raft status error", groupId)
 }
