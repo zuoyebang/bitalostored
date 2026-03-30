@@ -270,7 +270,7 @@ CREATE TABLE IF NOT EXISTS `tblTask` (
     KEY `cos_file_id` (`cos_file_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COMMENT='任务列表';
 
-CREATE TABLE `tblLock` (
+CREATE TABLE IF NOT EXISTS `tblLock` (
    `id` int(10) unsigned NOT NULL AUTO_INCREMENT COMMENT '主键id',
    `lock_name` varchar(512) NOT NULL DEFAULT '' COMMENT '锁的名字',
    `create_time` int(10) unsigned NOT NULL DEFAULT '0' COMMENT '创建时间',
