@@ -29,4 +29,6 @@ var (
 	ErrNotInitProxy         = errors.New("not init proxy client")
 	ErrInvalidSlotId        = errors.New("use of invalid slot id")
 	ErrReturnNil            = errors.New("err return nil")
+
+	ErrKeySize = errors.New("invalid key size")
 )

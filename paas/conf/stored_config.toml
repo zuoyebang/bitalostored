@@ -1,0 +1,95 @@
+##################################################
+#                                                #
+#                  Bitalos Config                 #
+#                                                #
+##################################################
+[log]
+is_debug = false
+rotation_time = "Daily"
+
+[server]
+product_name = "{{.TaskExt.ClusterName}}"
+name = "bitalos-node{{.TaskExt.NodeIndex}}"
+address = ":{{.TaskExt.ServicePort}}"
+max_client = 15000
+keep_alive = "1800s"
+net_event_loop_num = 16
+db_path = "bitalosdb"
+slow_time = "30ms"
+slow_key_window_time = "2000ms"
+slow_shield = false
+slow_ttl  = "1s"
+slow_maxexec = 100
+slow_topn = 100
+token = "{{.TaskExt.DeraftToken}}"
+open_distributed_tx = false
+
+[plugin]
+open_raft = true
+open_panic = true
+open_pprof = false
+pprof_addr = ":26770"
+open_signal = true
+
+[bitalos]
+write_buffer_size = "1gb"
+enable_wal = false
+compact_start_time = 1
+compact_end_time = 8
+bithash_gc_threshold = 0.4
+enable_expired_deletion = true
+expired_deletion_interval = 60
+expired_deletion_qps_threshold = 20000
+enable_clock_cache = true
+vector_table_hash_size = 1000000
+compression_type = 1
+
+[raft_log]
+raft_log_level = "error"
+rsm_log_level = "warning"
+transhport_log_level = "warning"
+grpc_log_level = "warning"
+dragonboat_log_level = "warning"
+
+[raft_queue]
+workers = 32
+length = 10000
+
+[raft_cluster]
+cluster_id = {{.GroupId}}
+election_rtt = 35
+heartbeat_rtt = 1
+check_quorm = true
+snapshot_entries = 20000000
+compaction_overhead = 10000000
+snapshot_compression_type = 1
+entry_compression_type = 1
+disable_auto_compactions = false
+timeout = "2s"
+retry_times = 1
+async_propose = true
+is_observer = {{.TaskExt.IsObserver}}
+is_witness = {{.TaskExt.IsWitness}}
+
+[raft_nodehost]
+host_name = "{{.TaskExt.HostName}}"
+node_id = {{.TaskExt.NodeIndex}}
+raft_address = "{{.TaskExt.NodeListVal}}"
+init_raft_addrlist = {{.TaskExt.NodeListStr}}
+init_raft_nodelist = {{.TaskExt.NodeIdList}}
+join = false
+snapshot_timeout = "10s"
+rtt = 200
+deployment_id = 0
+max_send_queue_size = 0
+max_receive_queue_size = 0
+max_snapshot_send_bytes_persecod = "200mb"
+max_snapshot_recv_bytes_persecod = "200mb"
+
+[raft_state]
+interval = "3s"
+allow_max_offset = 100000
+
+[dynamic_deadline]
+client_ratio_threshold = [0,20,50,80,90]
+deadline_threshold = ["1800s","600s","180s","60s","10s"]

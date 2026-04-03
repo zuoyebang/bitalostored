@@ -16,6 +16,8 @@ package main
 
 import (
 	"fmt"
+	"github.com/zuoyebang/bitalostored/dashboard/dashcore"
+	"github.com/zuoyebang/bitalostored/dashboard/internal/consts"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -24,25 +26,25 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/zuoyebang/bitalostored/dashboard/dashcore"
-
-	"github.com/docopt/docopt-go"
 	"gorm.io/driver/sqlite"
 
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 
+	"github.com/docopt/docopt-go"
+
 	"github.com/zuoyebang/bitalostored/dashboard/internal/log"
 	"github.com/zuoyebang/bitalostored/dashboard/internal/utils"
 	"github.com/zuoyebang/bitalostored/dashboard/models"
+	dbclient "github.com/zuoyebang/bitalostored/dashboard/models/db"
 )
 
 func main() {
 	const usage = `
 Usage:
-	bitalos-dashboard [--ncpu=N] [--config=CONF] [--log=FILE] [--log-level=LEVEL] [--pidfile=FILE] [--database=ADDR|--sqlite=FILE] [--product_name=NAME] [--product_auth=AUTH]
-	bitalos-dashboard  --default-config
-	bitalos-dashboard  --version
+	stored-dashboard [--ncpu=N] [--config=CONF] [--log=FILE] [--log-level=LEVEL] [--host-admin=ADDR] [--pidfile=FILE] [--database=ADDR|--sqlite=FILE] [--product_name=NAME] [--product_auth=AUTH] [--remove-lock]
+	stored-dashboard  --default-config
+	stored-dashboard  --version
 
 Options:
 	--ncpu=N                    set runtime.GOMAXPROCS to N, default is runtime.NumCPU().
@@ -98,30 +100,32 @@ Options:
 			log.PanicErrorf(err, "load config %s failed", s)
 		}
 	}
+	if s, ok := utils.Argument(d, "--host-admin"); ok {
+		config.HostAdmin = s
+		log.Warnf("option --host-admin = %s", s)
+	}
 
 	var db *gorm.DB
 
 	switch {
 	case d["--database"] != nil:
-		config.CoordinatorName = "database"
-		config.CoordinatorAddr = utils.ArgumentMust(d, "--database")
+		config.CoordinatorName = consts.DbTypeMysql
+		config.CoordinatorAddr = consts.DbTypeMysql
 		log.Warnf("option --database = %s", config.CoordinatorAddr)
 		dsn := fmt.Sprintf("%s:%s@tcp(%s)/%s?charset=utf8mb4&parseTime=True&loc=Local",
 			config.Database.Username, config.Database.Password, config.Database.HostPort, config.Database.DBName)
 		db, err = gorm.Open(mysql.Open(dsn), &gorm.Config{})
 		if err != nil {
-			log.PanicErrorf(err, "connect db failed.%+v", err)
+			log.PanicErrorf(err, "connect db failed.%+v", config.Database)
 		}
 	case d["--sqlite"] != nil:
-		config.CoordinatorName = "sqlite"
+		config.CoordinatorName = consts.DbTypeSqlite
 		config.CoordinatorAddr = utils.ArgumentMust(d, "--sqlite")
 		db, err = gorm.Open(sqlite.Open(config.CoordinatorAddr), &gorm.Config{})
 		if err != nil {
 			log.PanicErrorf(err, "connect sqlite failed.%+v", err)
 		}
 		log.Warnf("option --sqlite = %s", config.CoordinatorAddr)
-	default:
-		log.Panicf("invalid coordinator")
 	}
 
 	if s, ok := utils.Argument(d, "--product_name"); ok {
@@ -138,6 +142,26 @@ Options:
 		log.PanicErrorf(err, "create '%s' client to '%s' failed", config.CoordinatorName, config.CoordinatorAddr)
 	}
 	defer client.Close()
+
+	if d["--remove-lock"].(bool) {
+		store := models.NewStore(client, config.ProductName)
+		defer store.Close()
+
+		log.Warnf("force remove-lock")
+		if dbclient.IsAllowUpdate() {
+			if err := store.Release(); err != nil {
+				log.WarnErrorf(err, "force remove-lock failed")
+			} else {
+				log.Warnf("force remove-lock OK")
+			}
+		} else {
+			if err := store.ReleaseBackUp(); err != nil {
+				log.WarnErrorf(err, "force remove-lock for backup dashboard failed")
+			} else {
+				log.Warnf("force remove-lock for backup dashboard OK")
+			}
+		}
+	}
 
 	s, err := dashcore.New(client, config)
 	if err != nil {
@@ -172,7 +196,8 @@ Options:
 	}()
 
 	for i := 0; !s.IsClosed() && !s.IsOnline(); i++ {
-		if err := s.Start(true); err != nil {
+		err = s.StartByDb(true)
+		if err != nil {
 			if i <= 15 {
 				log.Warnf("[%p] dashboard online failed [%d]", s, i)
 			} else {
@@ -180,7 +205,6 @@ Options:
 			}
 			time.Sleep(time.Second * 2)
 		}
-
 	}
 
 	log.Warnf("[%p] dashboard is working ...", s)

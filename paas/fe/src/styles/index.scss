@@ -1,0 +1,66 @@
+* {
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body {
+  height: 100%;
+  width: 100%;
+  min-width: 768px;
+}
+
+a {
+  color: #42C57A;
+  text-decoration: none;
+  -webkit-backface-visibility: hidden;
+}
+
+li {
+  list-style: none;
+  line-height: 1.8;
+}
+
+// p {
+//   line-height: 1.8;
+// }
+
+hr {
+  margin: 0;
+  padding: 0;
+}
+
+em, i{
+  font-style: normal;
+}
+input {
+  border: none;
+}
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track-piece {
+  background-color: #f7f8fb;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: rgba(131, 134, 143, .4);
+  border-radius: 8px;
+
+  &:vertical {
+    width: 8px;
+  }
+
+  &:horizontal {
+    height: 8px;
+  }
+
+  &:hover {
+    background-color: rgba(131, 134, 143, .8);
+  }
+}
+.el-form-item__label {
+  color: #000 !important;
+}

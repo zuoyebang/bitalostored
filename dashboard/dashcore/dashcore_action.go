@@ -17,14 +17,13 @@ package dashcore
 import (
 	"errors"
 	"fmt"
+	"github.com/zuoyebang/bitalostored/butils/math2"
+	"github.com/zuoyebang/bitalostored/dashboard/internal/sync2"
 	"strconv"
 	"time"
 
-	"github.com/zuoyebang/bitalostored/butils"
-	"github.com/zuoyebang/bitalostored/dashboard/internal/sync2"
-
-	"github.com/zuoyebang/bitalostored/butils/math2"
 	"github.com/zuoyebang/bitalostored/dashboard/internal/log"
+	"github.com/zuoyebang/bitalostored/dashboard/internal/utils"
 	"github.com/zuoyebang/bitalostored/dashboard/models"
 )
 
@@ -35,6 +34,7 @@ func (s *DashCore) ProcessSlotAction() error {
 			plans = make(map[int]bool)
 		)
 		var accept = func(m *models.SlotMapping) bool {
+			//log.Infof("ProcessSlotAction accept slotmapping: %s", m.Encode())
 			if marks[m.GroupId] || marks[m.Action.TargetId] {
 				return false
 			}
@@ -44,6 +44,7 @@ func (s *DashCore) ProcessSlotAction() error {
 			return true
 		}
 		var update = func(m *models.SlotMapping) bool {
+			//log.Infof("ProcessSlotAction update slotmapping: %s", m.Encode())
 			if m.GroupId != 0 {
 				marks[m.GroupId] = true
 			}
@@ -94,7 +95,7 @@ func (s *DashCore) processSlotAction(sid int) error {
 	begin := time.Now()
 	defer func() {
 		end := time.Now().Sub(begin)
-		log.Infof("slot-[%d] migrate action executor end, cost : %s", sid, butils.FmtDuration(end))
+		log.Infof("slot-[%d] migrate action executor end, cost : %s", sid, utils.FmtDuration(end))
 	}()
 	for s.IsOnline() {
 		if exec, err := s.newSlotActionExecutor(sid); err != nil {
@@ -162,7 +163,6 @@ func (s *DashCore) cronMonitorSlotActionComplete(sourceAddr string, sid int) *mo
 				time.Sleep(time.Second)
 			} else {
 				if retry == 0 {
-					//异常错误，结束定时探测，重新发送迁移命令
 					return migrateStatus
 				}
 				retry--

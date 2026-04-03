@@ -17,11 +17,16 @@ package dashcore
 import (
 	"encoding/json"
 	"fmt"
-	"sort"
-
+	"github.com/zuoyebang/bitalostored/dashboard/internal/consts"
 	"github.com/zuoyebang/bitalostored/dashboard/internal/errors"
 	"github.com/zuoyebang/bitalostored/dashboard/internal/log"
+	"github.com/zuoyebang/bitalostored/dashboard/internal/uredis"
+	"github.com/zuoyebang/bitalostored/dashboard/internal/utils"
 	"github.com/zuoyebang/bitalostored/dashboard/models"
+	"sort"
+	"time"
+
+	dbclient "github.com/zuoyebang/bitalostored/dashboard/models/db"
 
 	rbtree "github.com/emirpasic/gods/trees/redblacktree"
 )
@@ -119,6 +124,9 @@ func (s *DashCore) SlotCreateActionInit() error {
 	}
 
 	groupIds := ctx.getGroupIds()
+	if len(groupIds) == 0 {
+		return errors.Errorf("empty groups.")
+	}
 	if len(groupIds) >= MaxSlotNum {
 		return errors.Errorf("too many groups.%+v", groupIds)
 	}
@@ -130,7 +138,7 @@ func (s *DashCore) SlotCreateActionInit() error {
 	beg, end := 0, 0
 	must := true
 
-	for gid, _ := range groupIds {
+	for _, gid := range groupIds {
 		end = beg + quotient - 1
 		if remainder > 0 {
 			end++
@@ -313,7 +321,6 @@ func (s *DashCore) SlotActionPrepareFilter(accept, update func(m *models.SlotMap
 				}
 			}
 		}
-
 		return picked
 	}
 
@@ -331,7 +338,6 @@ func (s *DashCore) SlotActionPrepareFilter(accept, update func(m *models.SlotMap
 			return m.Action.State == models.ActionPending
 		})
 	}()
-
 	if m == nil {
 		return 0, false, nil
 	}
@@ -356,7 +362,6 @@ func (s *DashCore) SlotActionPrepareFilter(accept, update func(m *models.SlotMap
 		log.Warnf("slot-[%d] resync to preparing", m.Id)
 
 		m.Action.State = models.ActionPrepared
-
 		if err := s.storeUpdateSlotMapping(m); err != nil {
 			return 0, false, err
 		}
@@ -366,7 +371,6 @@ func (s *DashCore) SlotActionPrepareFilter(accept, update func(m *models.SlotMap
 		log.Warnf("slot-[%d] resync to prepared", m.Id)
 
 		m.Action.State = models.ActionMigrating
-
 		if err := s.storeUpdateSlotMapping(m); err != nil {
 			return 0, false, err
 		}
@@ -472,7 +476,6 @@ func (s *DashCore) newSlotActionExecutor(sid int) (func() (needMigrate bool, sou
 			if from == "" {
 				return false, from, m.GroupId, m.Action.TargetId, nil
 			}
-
 			if m.Action.NotMigrateData {
 				return false, from, m.GroupId, m.Action.TargetId, nil
 			}
@@ -522,6 +525,181 @@ func (s *DashCore) getSlotActionMigrateStatus(sourceAddr string, sid int) (*mode
 	}
 }
 
+func (s *DashCore) sendTransferSlots(sid, eid, toGid int) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	ctx, err := s.newContext()
+	if err != nil {
+		return err
+	}
+	slotInfo, err := ctx.getSlotMapping(sid)
+	if err != nil {
+		return err
+	}
+
+	srcSlots := ctx.getSlotMappingsByGroupId(slotInfo.GroupId)
+	slotMap := make(map[int]bool, len(srcSlots))
+	for _, slot := range srcSlots {
+		slotMap[slot.Id] = true
+	}
+
+	for checkSlotId := sid; checkSlotId <= eid; checkSlotId++ {
+		if _, ok := slotMap[checkSlotId]; !ok {
+			return errors.New("slot is not in the same group")
+		}
+	}
+	srcGroup, err := ctx.getGroup(slotInfo.GroupId)
+	if err != nil {
+		return err
+	}
+	if len(srcGroup.Servers) <= 0 {
+		return errors.Errorf("group-[%d] is empty", srcGroup.Id)
+	}
+
+	targetGroup, err := ctx.getGroup(toGid)
+	if err != nil {
+		return err
+	}
+	if len(targetGroup.Servers) == 0 {
+		return errors.Errorf("group-[%d] is empty", targetGroup.Id)
+	}
+
+	hasSameNode := false
+	for _, nodeInfo := range srcGroup.Servers {
+		for _, targetNode := range targetGroup.Servers {
+			if nodeInfo.Addr == targetNode.Addr {
+				hasSameNode = true
+				break
+			}
+		}
+	}
+	if !hasSameNode {
+		return errors.New(" target and source have no same node")
+	}
+
+	clusterName := s.model.ProductName
+	if err := dbclient.AddSlotAction(clusterName, consts.SlotActionTransfer, sid, eid, srcGroup.Id, targetGroup.Id); err != nil {
+		log.Errorf("add slot action. transfer, sid:%d eid:%d srcGroup:%d targetGroup:%d err:%s", sid, eid, srcGroup.Id, targetGroup.Id, err)
+	}
+
+	for _, node := range targetGroup.Servers {
+		if node.ServerRole == "witness" {
+			continue
+		}
+		if node.ServerRole == "observer" {
+			continue
+		}
+		cli, err := uredis.NewClient(node.Addr, s.config.ProductAuth, 5*time.Second)
+		if err != nil {
+			log.Warnf("create client[transferSlots] err:%s addr:%s", err, node.Addr)
+			return err
+		}
+		if err = cli.TransferSlots(sid, eid, toGid); err != nil {
+			log.Warnf("[transferSlots] err:%s addr:%s sid:%d eid:%d, gid:%d", err, node.Addr, sid, eid, toGid)
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *DashCore) sendRemoveSlots(sid, eid, gid int, token string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	ctx, err := s.newContext()
+	if err != nil {
+		return err
+	}
+
+	bindSlots := ctx.getSlotMappingsByGroupId(gid)
+	for _, s := range bindSlots {
+		if s.Id >= sid && s.Id <= eid {
+			return errors.New("slots is in the group, not allowed to be removed")
+		}
+	}
+
+	g, err := ctx.getGroup(gid)
+	if err != nil {
+		return err
+	}
+	if len(g.Servers) == 0 {
+		return errors.Errorf("group-[%d] is empty", g.Id)
+	}
+
+	// check node contains two raft or not. If more than one raft, DONOT remove slots
+	// If the status of some node in the group(gid) is true, slots should be removed;
+	// If the status of some node in the group(gid) is false, slots SHOULD NOT be removed.
+	excludeNodes := make(map[uint64]struct{}, 1)
+	for _, node := range g.Servers {
+		if node.ServerRole == "witness" {
+			continue
+		}
+		cli, err := uredis.NewClient(node.Addr, s.config.ProductAuth, 5*time.Second)
+		if err != nil {
+			log.Warnf("create client[removeSlots] err:%s addr:%s", err, node.Addr)
+			return err
+		}
+		defer cli.Close()
+		if clusterStr, err := cli.AllClusterInfo(); err != nil {
+			log.Warnf("[removeSlots] err:%s addr:%s sid:%d eid:%d, gid:%d", err, node.Addr, sid, eid, gid)
+			return err
+		} else {
+			clusters := make(map[uint64]string, 0)
+			err = json.Unmarshal([]byte(clusterStr), &clusters)
+			if err != nil {
+				log.Warnf("[removeSlots] err:%s addr:%s sid:%d eid:%d, gid:%d", err, node.Addr, sid, eid, gid)
+				return err
+			}
+			if len(clusters) >= 2 {
+				return errors.New(fmt.Sprintf("node(%s) has two raft", node.Addr))
+			}
+			if cinfo, ok := clusters[uint64(gid)]; ok {
+				m := utils.ConvertInfoMap(cinfo)
+				if m["status"] == "false" {
+					excludeNodes[node.NodeId] = struct{}{}
+				}
+			} else {
+				excludeNodes[node.NodeId] = struct{}{}
+			}
+		}
+	}
+
+	clusterName := s.model.ProductName
+	if err := dbclient.AddSlotAction(clusterName, consts.SlotActionRemove, sid, eid, g.Id, 0); err != nil {
+		log.Errorf("add slot action. remove, sid:%d eid:%d g.Id:%d err:%s", sid, eid, g.Id, err)
+	}
+
+	for _, node := range g.Servers {
+		if node.ServerRole == "witness" {
+			continue
+		}
+		if _, ok := excludeNodes[node.NodeId]; ok {
+			log.Infof("node continue because the node is not a member of the group (%s)", node.Addr)
+			continue
+		}
+		removeFunc := func() error {
+			cli, err := uredis.NewClient(node.Addr, s.config.ProductAuth, 5*time.Second)
+			if err != nil {
+				log.Warnf("create client[removeSlots] err:%s addr:%s", err, node.Addr)
+				return err
+			}
+			defer cli.Close()
+			if err = cli.RemoveSlots(sid, eid, token); err != nil {
+				log.Warnf("[removeSlots] err:%s addr:%s sid:%d eid:%d, gid:%d", err, node.Addr, sid, eid, gid)
+				return err
+			}
+			if err = cli.ResetSlots(); err != nil {
+				log.Warnf("[resetSlots] err:%s addr:%s", err, node.Addr)
+				return err
+			}
+			return nil
+		}
+		if err := removeFunc(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (s *DashCore) SlotsAssignGroup(slots []*models.SlotMapping) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -530,42 +708,30 @@ func (s *DashCore) SlotsAssignGroup(slots []*models.SlotMapping) error {
 		return err
 	}
 
+	// check group
 	for _, m := range slots {
+		log.Infof("process check group slot:%d", m.Id)
 		_, err := ctx.getSlotMapping(m.Id)
 		if err != nil {
+			log.Warnf("get slot mapping. err:%s slotId:%d", err, m.Id)
 			return err
 		}
 		g, err := ctx.getGroup(m.GroupId)
 		if err != nil {
+			log.Warnf("get group. err:%s slotId:%d gid:%d", err, m.Id, m.GroupId)
 			return err
 		}
 		if len(g.Servers) == 0 {
+			log.Warnf("get empty servers. err:%s slotId:%d gid:%d", err, m.Id, m.GroupId)
 			return errors.Errorf("group-[%d] is empty", g.Id)
-		}
-		if m.Action.State != models.ActionNothing {
-			return errors.Errorf("invalid slot-[%d] action = %s", m.Id, m.Action.State)
-		}
-	}
-
-	for i, m := range slots {
-		if g := ctx.group[m.GroupId]; !g.OutOfSync {
-			defer s.dirtyGroupCache(g.Id)
-			g.OutOfSync = true
-			if err := s.storeUpdateGroup(g); err != nil {
-				return err
-			}
-		}
-		slots[i] = &models.SlotMapping{
-			Id: m.Id, GroupId: m.GroupId,
 		}
 	}
 
 	for _, m := range slots {
 		defer s.dirtySlotsCache(m.Id)
-
-		log.Warnf("slot-[%d] will be mapped to group-[%d]", m.Id, m.GroupId)
-
+		log.Infof("slot-[%d] will be mapped to group-[%d]", m.Id, m.GroupId)
 		if err := s.storeUpdateSlotMapping(m); err != nil {
+			log.Warnf("slot-[%d] will be mapped to group-[%d]. err:%s", m.Id, m.GroupId, err)
 			return err
 		}
 	}
@@ -638,6 +804,7 @@ func (s *DashCore) SlotsRebalance(confirm bool) (map[int]int, error) {
 		return assigned[gid] + len(pendings[gid]) - moveout[gid]
 	}
 
+	// don't migrate slot if it's being migrated
 	for _, m := range ctx.slots {
 		if m.Action.State != models.ActionNothing {
 			assigned[m.Action.TargetId]++
@@ -646,6 +813,7 @@ func (s *DashCore) SlotsRebalance(confirm bool) (map[int]int, error) {
 
 	var lowerBound = MaxSlotNum / len(groupIds)
 
+	// don't migrate slot if groupSize < lowerBound
 	for _, m := range ctx.slots {
 		if m.Action.State != models.ActionNothing {
 			continue
@@ -674,6 +842,7 @@ func (s *DashCore) SlotsRebalance(confirm bool) (map[int]int, error) {
 		tree.Put(gid, nil)
 	}
 
+	// assign offline slots to the smallest group
 	for _, m := range ctx.slots {
 		if m.Action.State != models.ActionNothing {
 			continue
@@ -773,4 +942,29 @@ func (s *DashCore) SlotsRebalance(confirm bool) (map[int]int, error) {
 		}
 	}
 	return plans, nil
+}
+
+func (s *DashCore) TransferSlot(sid, gid int) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	ctx, err := s.newContext()
+	if err != nil {
+		return err
+	}
+
+	g, err := ctx.getGroup(gid)
+	if err != nil {
+		return err
+	}
+	if len(g.Servers) == 0 {
+		return errors.Errorf("group-[%d] is empty", gid)
+	}
+
+	m, err := ctx.getSlotMapping(sid)
+	if err != nil {
+		return err
+	}
+	m.GroupId = gid
+	defer s.dirtySlotsCache(m.Id)
+	return nil
 }

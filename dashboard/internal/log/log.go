@@ -29,9 +29,12 @@ import (
 )
 
 const (
+	Ldate         = log.Ldate
+	Llongfile     = log.Llongfile
 	Lmicroseconds = log.Lmicroseconds
 	Lshortfile    = log.Lshortfile
 	LstdFlags     = log.LstdFlags
+	Ltime         = log.Ltime
 )
 
 type (
@@ -437,12 +440,39 @@ func (l *Logger) output(traceskip int, err error, t LogType, s string) error {
 	return l.log.Output(traceskip+2, s)
 }
 
+func Flags() int {
+	return StdLog.Flags()
+}
+
+func Prefix() string {
+	return StdLog.Prefix()
+}
+
+func SetFlags(flags int) {
+	StdLog.SetFlags(flags)
+}
+
+func SetPrefix(prefix string) {
+	StdLog.SetPrefix(prefix)
+}
+
 func SetLevel(v LogLevel) {
 	StdLog.SetLevel(v)
 }
 
 func SetLevelString(s string) bool {
 	return StdLog.SetLevelString(s)
+}
+
+func SetTrace(v LogLevel) {
+	StdLog.SetTraceLevel(v)
+}
+
+func Panic(v ...interface{}) {
+	t := TYPE_PANIC
+	s := fmt.Sprint(v...)
+	StdLog.output(1, nil, t, s)
+	os.Exit(1)
 }
 
 func Panicf(format string, v ...interface{}) {
@@ -484,6 +514,15 @@ func Errorf(format string, v ...interface{}) {
 	StdLog.output(1, nil, t, s)
 }
 
+func ErrorError(err error, v ...interface{}) {
+	t := TYPE_ERROR
+	if StdLog.isDisabled(t) {
+		return
+	}
+	s := fmt.Sprint(v...)
+	StdLog.output(1, err, t, s)
+}
+
 func ErrorErrorf(err error, format string, v ...interface{}) {
 	t := TYPE_ERROR
 	if StdLog.isDisabled(t) {
@@ -509,6 +548,15 @@ func Warnf(format string, v ...interface{}) {
 	}
 	s := fmt.Sprintf(format, v...)
 	StdLog.output(1, nil, t, s)
+}
+
+func WarnError(err error, v ...interface{}) {
+	t := TYPE_WARN
+	if StdLog.isDisabled(t) {
+		return
+	}
+	s := fmt.Sprint(v...)
+	StdLog.output(1, err, t, s)
 }
 
 func WarnErrorf(err error, format string, v ...interface{}) {
@@ -538,6 +586,33 @@ func Infof(format string, v ...interface{}) {
 	StdLog.output(1, nil, t, s)
 }
 
+func InfoError(err error, v ...interface{}) {
+	t := TYPE_INFO
+	if StdLog.isDisabled(t) {
+		return
+	}
+	s := fmt.Sprint(v...)
+	StdLog.output(1, err, t, s)
+}
+
+func InfoErrorf(err error, format string, v ...interface{}) {
+	t := TYPE_INFO
+	if StdLog.isDisabled(t) {
+		return
+	}
+	s := fmt.Sprintf(format, v...)
+	StdLog.output(1, err, t, s)
+}
+
+func Debug(v ...interface{}) {
+	t := TYPE_DEBUG
+	if StdLog.isDisabled(t) {
+		return
+	}
+	s := fmt.Sprint(v...)
+	StdLog.output(1, nil, t, s)
+}
+
 func Debugf(format string, v ...interface{}) {
 	t := TYPE_DEBUG
 	if StdLog.isDisabled(t) {
@@ -545,4 +620,45 @@ func Debugf(format string, v ...interface{}) {
 	}
 	s := fmt.Sprintf(format, v...)
 	StdLog.output(1, nil, t, s)
+}
+
+func DebugError(err error, v ...interface{}) {
+	t := TYPE_DEBUG
+	if StdLog.isDisabled(t) {
+		return
+	}
+	s := fmt.Sprint(v...)
+	StdLog.output(1, err, t, s)
+}
+
+func DebugErrorf(err error, format string, v ...interface{}) {
+	t := TYPE_DEBUG
+	if StdLog.isDisabled(t) {
+		return
+	}
+	s := fmt.Sprintf(format, v...)
+	StdLog.output(1, err, t, s)
+}
+
+func Print(v ...interface{}) {
+	s := fmt.Sprint(v...)
+	StdLog.output(1, nil, 0, s)
+}
+
+func Printf(format string, v ...interface{}) {
+	s := fmt.Sprintf(format, v...)
+	StdLog.output(1, nil, 0, s)
+}
+
+func Println(v ...interface{}) {
+	s := fmt.Sprintln(v...)
+	StdLog.output(1, nil, 0, s)
+}
+
+func Access(remoteAddr string, usedTime int64, request []byte, err error) {
+	AccessLog.AccessLog(remoteAddr, usedTime, request, err)
+}
+
+func Slow(remoteAddr string, usedTimeUs int64, request []byte, err error) {
+	SlowLog.SlowLog(remoteAddr, usedTimeUs, request, err)
 }

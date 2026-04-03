@@ -23,7 +23,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/zuoyebang/bitalostored/butils"
 	"github.com/zuoyebang/bitalostored/proxy/internal/config"
 	"github.com/zuoyebang/bitalostored/proxy/internal/errn"
 	"github.com/zuoyebang/bitalostored/proxy/internal/log"
@@ -66,7 +65,7 @@ func New(cfg *config.Config) (*Proxy, error) {
 		Pid:         os.Getpid(),
 		Pwd:         pwd,
 		VersionTag:  utils.GetVersionTag(),
-		Hostname:    butils.Hostname,
+		Hostname:    utils.Hostname,
 	}
 
 	if b, err := exec.Command("uname", "-a").Output(); err == nil {
@@ -104,24 +103,18 @@ func (p *Proxy) setup(config *config.Config) error {
 		return err
 	}
 	p.lproxy = netutil.LimitListener(l, config.ProxyMaxClients)
-	proxyAddr, err := butils.ReplaceUnspecifiedIP(proto, p.ProxyAddress(), config.HostProxy)
-	if err != nil {
-		return err
-	}
+
 	p.model.ProtoType = proto
-	p.model.ProxyAddr = proxyAddr
-	p.model.HostPort = butils.GetLocalIp() + ":" + butils.GetPortByHostPort(config.ProxyAddr)
+	p.model.AdminAddr = utils.GetLocalIp() + ":" + utils.GetPortByHostPort(config.AdminAddr)
+	p.model.HostPort = utils.GetLocalIp() + ":" + utils.GetPortByHostPort(config.ProxyAddr)
+	p.model.ProxyAddr = p.model.HostPort
 
 	proto = "tcp"
 	p.ladmin, err = net.Listen(proto, config.AdminAddr)
 	if err != nil {
 		return err
 	}
-	adminAddr, err := butils.ReplaceUnspecifiedIP(proto, p.AdminAddress(), "")
-	if err != nil {
-		return err
-	}
-	p.model.AdminAddr = adminAddr
+
 	p.model.Token = rpc.NewToken(
 		config.ProductName,
 		p.model.Hostname,

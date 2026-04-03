@@ -15,23 +15,23 @@
 package models
 
 import (
-	"time"
-
 	"github.com/zuoyebang/bitalostored/dashboard/internal/errors"
-	mysqlclient "github.com/zuoyebang/bitalostored/dashboard/models/db"
-
+	dbclient "github.com/zuoyebang/bitalostored/dashboard/models/db"
 	"gorm.io/gorm"
+	"time"
 )
 
 type Client interface {
 	Create(path string, data []byte) error
-	Update(path string, data []byte) error
+	Update(path string, data []byte, force bool) error
 	Delete(path string) error
 
 	Read(path string) ([]byte, error)
 	List(path string) ([]string, error)
 	Details(path string) ([]string, error)
 	SubList(subPath string) (interface{}, error)
+	SubListGroup(subPath string, group string) (interface{}, error)
+	ReadTransaction(path string) ([]byte, error)
 
 	Close() error
 }
@@ -39,26 +39,27 @@ type Client interface {
 func NewClient(coordinator string, db *gorm.DB) (Client, error) {
 	switch coordinator {
 	case "db", "database":
-		return mysqlclient.New(db)
+		return dbclient.New(db)
 	case "sqlite":
 		SqliteInit(db)
-		return mysqlclient.New(db)
+		return dbclient.New(db)
 	}
 	return nil, errors.Errorf("invalid coordinator name = %s", coordinator)
 }
 
 func SqliteInit(db *gorm.DB) {
-	_ = db.AutoMigrate(&mysqlclient.TblDashboard{})
-	var res []*mysqlclient.TblDashboard
+	_ = db.AutoMigrate(&dbclient.TblDashboard{})
+	var res []*dbclient.TblDashboard
 	db = db.Where("product_name = ?", "admin").Find(&res)
 	if len(res) <= 0 {
-		dt := &mysqlclient.TblDashboard{
+		now := time.Now().Unix()
+		dt := &dbclient.TblDashboard{
 			ClusterName: "admin",
 			SubPath:     "demo",
 			FullPath:    "/stored/admin/demo",
 			Value:       "{\"username\":\"demo\",\"password\":\"demo\",\"role\":1}",
-			CreateTime:  time.Now().Unix(),
-			UpdateTime:  time.Now().Unix(),
+			CreateTime:  now,
+			UpdateTime:  now,
 		}
 		db.Create(dt)
 	}

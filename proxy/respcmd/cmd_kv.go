@@ -20,6 +20,7 @@ import (
 
 	"github.com/zuoyebang/bitalostored/butils/extend"
 	"github.com/zuoyebang/bitalostored/butils/unsafe2"
+	"github.com/zuoyebang/bitalostored/proxy/internal/utils"
 	"github.com/zuoyebang/bitalostored/proxy/resp"
 	"github.com/zuoyebang/bitalostored/proxy/router"
 
@@ -66,11 +67,6 @@ func init() {
 	resp.Register(resp.SETRANGE, SetRangeCommand)
 	resp.Register(resp.STRLEN, StrLenCommand)
 
-	resp.Register(resp.GETBIT, GetBitCommand)
-	resp.Register(resp.SETBIT, SetBitCommand)
-	resp.Register(resp.BITCOUNT, BitCountCommand)
-	resp.Register(resp.BITPOS, BitPosCommand)
-
 	resp.Register(resp.PKSETEXAT, PKSETEXATCommand)
 }
 
@@ -78,6 +74,9 @@ func AppendCommand(s *resp.Session) error {
 	args := s.Args
 	if len(args) != 2 {
 		return resp.CmdParamsErr(resp.APPEND)
+	}
+	if err := utils.CheckKeySize(len(args[0])); err != nil {
+		return err
 	}
 
 	if proxyClient, err := router.GetProxyClient(); err == nil {
@@ -103,6 +102,9 @@ func KPersistCommand(s *resp.Session) error {
 	if len(args) != 1 {
 		return resp.CmdParamsErr(resp.KPERSIST)
 	}
+	if err := utils.CheckKeySize(len(args[0])); err != nil {
+		return err
+	}
 	if proxyClient, err := router.GetProxyClient(); err == nil {
 		res, err := proxyClient.KPersist(s, args[0])
 		if s.TxCommandQueued {
@@ -125,6 +127,9 @@ func KExpireAtCommand(s *resp.Session) error {
 	args := s.Args
 	if len(args) != 2 {
 		return resp.CmdParamsErr(resp.KEXPIREAT)
+	}
+	if err := utils.CheckKeySize(len(args[0])); err != nil {
+		return err
 	}
 	when, err := extend.ParseInt64(unsafe2.String(args[1]))
 	if err != nil {
@@ -151,6 +156,9 @@ func KExpireCommand(s *resp.Session) error {
 	args := s.Args
 	if len(args) != 2 {
 		return resp.CmdParamsErr(resp.KEXPIRE)
+	}
+	if err := utils.CheckKeySize(len(args[0])); err != nil {
+		return err
 	}
 
 	duration, err := extend.ParseInt64(unsafe2.String(args[1]))
@@ -181,6 +189,9 @@ func KTtlCommand(s *resp.Session) error {
 	if len(args) != 1 {
 		return resp.CmdParamsErr(resp.KTTL)
 	}
+	if err := utils.CheckKeySize(len(args[0])); err != nil {
+		return err
+	}
 	if proxyClient, err := router.GetProxyClient(); err == nil {
 		res, err := proxyClient.KTtl(s, args[0])
 		if s.TxCommandQueued {
@@ -203,6 +214,9 @@ func KExistsCommand(s *resp.Session) error {
 	args := s.Args
 	if len(args) != 1 {
 		return resp.CmdParamsErr(resp.KEXISTS)
+	}
+	if err := utils.CheckKeySize(len(args[0])); err != nil {
+		return err
 	}
 
 	if proxyClient, err := router.GetProxyClient(); err == nil {
@@ -250,6 +264,9 @@ func GetCommand(s *resp.Session) error {
 	if len(args) != 1 {
 		return resp.CmdParamsErr(resp.GET)
 	}
+	if err := utils.CheckKeySize(len(args[0])); err != nil {
+		return err
+	}
 	if proxyClient, err := router.GetProxyClient(); err == nil {
 		res, err := proxyClient.Get(s, unsafe2.String(args[0]))
 		if s.TxCommandQueued {
@@ -280,6 +297,9 @@ func SetCommand(s *resp.Session) error {
 	args := s.Args
 	if len(args) < 2 {
 		return resp.CmdParamsErr(resp.SET)
+	}
+	if err := utils.CheckKeySize(len(args[0])); err != nil {
+		return err
 	}
 
 	exType, t, setCondition, err := resp.ParseSetArgs(args[2:])
@@ -358,6 +378,9 @@ func GetSetCommand(s *resp.Session) error {
 	if len(args) != 2 {
 		return resp.CmdParamsErr(resp.GETSET)
 	}
+	if err := utils.CheckKeySize(len(args[0])); err != nil {
+		return err
+	}
 	if proxyClient, err := router.GetProxyClient(); err == nil {
 		res, err := proxyClient.GetSet(s, unsafe2.String(args[0]), unsafe2.String(args[1]))
 		if s.TxCommandQueued {
@@ -379,6 +402,9 @@ func PKSETEXATCommand(s *resp.Session) error {
 	args := s.Args
 	if len(args) != 3 {
 		return resp.CmdParamsErr(resp.SETEX)
+	}
+	if err := utils.CheckKeySize(len(args[0])); err != nil {
+		return err
 	}
 	expireUnixTime, err := extend.ParseInt64(unsafe2.String(args[1]))
 	if err != nil {
@@ -411,6 +437,9 @@ func SetExCommand(s *resp.Session) error {
 	if len(args) != 3 {
 		return resp.CmdParamsErr(resp.SETEX)
 	}
+	if err := utils.CheckKeySize(len(args[0])); err != nil {
+		return err
+	}
 	sec, err := extend.ParseInt64(unsafe2.String(args[1]))
 	if err != nil {
 		return resp.ValueErr
@@ -437,6 +466,9 @@ func PSetExCommand(s *resp.Session) error {
 	args := s.Args
 	if len(args) != 3 {
 		return resp.CmdParamsErr(resp.PSETEX)
+	}
+	if err := utils.CheckKeySize(len(args[0])); err != nil {
+		return err
 	}
 	msec, err := extend.ParseInt64(unsafe2.String(args[1]))
 	if err != nil {
@@ -465,6 +497,9 @@ func SetNxCommand(s *resp.Session) error {
 	if len(args) != 2 {
 		return resp.CmdParamsErr(resp.SETNX)
 	}
+	if err := utils.CheckKeySize(len(args[0])); err != nil {
+		return err
+	}
 	if proxyClient, err := router.GetProxyClient(); err == nil {
 		res, err := proxyClient.SetNx(s, args[0], args[1])
 		if s.TxCommandQueued {
@@ -487,6 +522,9 @@ func ExistsCommand(s *resp.Session) error {
 	args := s.Args
 	if len(args) != 1 {
 		return resp.CmdParamsErr(resp.EXISTS)
+	}
+	if err := utils.CheckKeySize(len(args[0])); err != nil {
+		return err
 	}
 	if proxyClient, err := router.GetProxyClient(); err == nil {
 		res, err := proxyClient.Exists(s, args[0])
@@ -511,6 +549,9 @@ func IncrCommand(s *resp.Session) error {
 	if len(args) != 1 {
 		return resp.CmdParamsErr(resp.INCR)
 	}
+	if err := utils.CheckKeySize(len(args[0])); err != nil {
+		return err
+	}
 	if proxyClient, err := router.GetProxyClient(); err == nil {
 		res, err := proxyClient.Incr(s, s.Args[0])
 		if s.TxCommandQueued {
@@ -534,6 +575,9 @@ func DecrCommand(s *resp.Session) error {
 	if len(args) != 1 {
 		return resp.CmdParamsErr(resp.DECR)
 	}
+	if err := utils.CheckKeySize(len(args[0])); err != nil {
+		return err
+	}
 	if proxyClient, err := router.GetProxyClient(); err == nil {
 		res, err := proxyClient.Decr(s, s.Args[0])
 		if s.TxCommandQueued {
@@ -556,6 +600,9 @@ func IncrbyCommand(s *resp.Session) error {
 	args := s.Args
 	if len(args) != 2 {
 		return resp.CmdParamsErr(resp.INCRBY)
+	}
+	if err := utils.CheckKeySize(len(args[0])); err != nil {
+		return err
 	}
 
 	delta, err := extend.ParseInt64(unsafe2.String(args[1]))
@@ -585,6 +632,9 @@ func DecrbyCommand(s *resp.Session) error {
 	if len(args) != 2 {
 		return resp.CmdParamsErr(resp.DECRBY)
 	}
+	if err := utils.CheckKeySize(len(args[0])); err != nil {
+		return err
+	}
 
 	delta, err := extend.ParseInt64(unsafe2.String(args[1]))
 	if err != nil {
@@ -612,6 +662,9 @@ func IncrByFloatCommand(s *resp.Session) error {
 	args := s.Args
 	if len(args) != 2 {
 		return resp.CmdParamsErr(resp.INCRBYFLOAT)
+	}
+	if err := utils.CheckKeySize(len(args[0])); err != nil {
+		return err
 	}
 
 	score, err := extend.ParseFloat64(unsafe2.String(args[1]))
@@ -721,6 +774,9 @@ func ExpireCommand(s *resp.Session) error {
 	if len(args) != 2 {
 		return resp.CmdParamsErr(resp.EXPIRE)
 	}
+	if err := utils.CheckKeySize(len(args[0])); err != nil {
+		return err
+	}
 
 	duration, err := extend.ParseInt64(unsafe2.String(args[1]))
 	if err != nil {
@@ -748,6 +804,9 @@ func PExpireCommand(s *resp.Session) error {
 	args := s.Args
 	if len(args) != 2 {
 		return resp.CmdParamsErr(resp.PEXPIRE)
+	}
+	if err := utils.CheckKeySize(len(args[0])); err != nil {
+		return err
 	}
 
 	duration, err := extend.ParseInt64(unsafe2.String(args[1]))
@@ -777,6 +836,9 @@ func PExpireAtCommand(s *resp.Session) error {
 	if len(args) != 2 {
 		return resp.CmdParamsErr(resp.PEXPIREAT)
 	}
+	if err := utils.CheckKeySize(len(args[0])); err != nil {
+		return err
+	}
 	when, err := extend.ParseInt64(unsafe2.String(args[1]))
 	if err != nil {
 		return resp.ValueErr
@@ -803,6 +865,9 @@ func ExpireAtCommand(s *resp.Session) error {
 	if len(args) != 2 {
 		return resp.CmdParamsErr(resp.EXPIREAT)
 	}
+	if err := utils.CheckKeySize(len(args[0])); err != nil {
+		return err
+	}
 	when, err := extend.ParseInt64(unsafe2.String(args[1]))
 	if err != nil {
 		return resp.ValueErr
@@ -811,7 +876,7 @@ func ExpireAtCommand(s *resp.Session) error {
 	if err != nil {
 		return err
 	}
-	res, err := proxyClient.ExpireAt(s, resp.EXPIRE, args[0], when)
+	res, err := proxyClient.ExpireAt(s, resp.EXPIREAT, args[0], when)
 	if s.TxCommandQueued {
 		return s.SendTxQueued(err)
 	} else {
@@ -826,9 +891,11 @@ func ExpireAtCommand(s *resp.Session) error {
 
 func TtlCommand(s *resp.Session) error {
 	args := s.Args
-
 	if len(args) != 1 {
 		return resp.CmdParamsErr(resp.TTL)
+	}
+	if err := utils.CheckKeySize(len(args[0])); err != nil {
+		return err
 	}
 	if proxyClient, err := router.GetProxyClient(); err == nil {
 		res, err := proxyClient.TTL(resp.TTL, s, args[0])
@@ -850,9 +917,11 @@ func TtlCommand(s *resp.Session) error {
 
 func PTtlCommand(s *resp.Session) error {
 	args := s.Args
-
 	if len(args) != 1 {
 		return resp.CmdParamsErr(resp.PTTL)
+	}
+	if err := utils.CheckKeySize(len(args[0])); err != nil {
+		return err
 	}
 	if proxyClient, err := router.GetProxyClient(); err == nil {
 		res, err := proxyClient.TTL(resp.PTTL, s, args[0])
@@ -876,6 +945,9 @@ func PersistCommand(s *resp.Session) error {
 	args := s.Args
 	if len(args) != 1 {
 		return resp.CmdParamsErr(resp.PERSIST)
+	}
+	if err := utils.CheckKeySize(len(args[0])); err != nil {
+		return err
 	}
 	if proxyClient, err := router.GetProxyClient(); err == nil {
 		res, err := proxyClient.Persist(s, args[0])
@@ -952,6 +1024,9 @@ func SetRangeCommand(s *resp.Session) error {
 	if len(args) != 3 {
 		return resp.CmdParamsErr(resp.SETRANGE)
 	}
+	if err := utils.CheckKeySize(len(args[0])); err != nil {
+		return err
+	}
 
 	key := unsafe2.String(args[0])
 	offset, err := strconv.Atoi(unsafe2.String(args[1]))
@@ -985,6 +1060,9 @@ func StrLenCommand(s *resp.Session) error {
 	if len(s.Args) != 1 {
 		return resp.CmdParamsErr(resp.STRLEN)
 	}
+	if err := utils.CheckKeySize(len(s.Args[0])); err != nil {
+		return err
+	}
 	if proxyClient, err := router.GetProxyClient(); err == nil {
 		res, err := proxyClient.StrLen(s, s.Args[0])
 		if s.TxCommandQueued {
@@ -1006,6 +1084,9 @@ func GetBitCommand(s *resp.Session) error {
 	args := s.Args
 	if len(args) != 2 {
 		return resp.CmdParamsErr(resp.GETBIT)
+	}
+	if err := utils.CheckKeySize(len(args[0])); err != nil {
+		return err
 	}
 
 	key := args[0]
@@ -1039,6 +1120,9 @@ func SetBitCommand(s *resp.Session) error {
 	if len(args) != 3 {
 		return resp.CmdParamsErr(resp.SETBIT)
 	}
+	if err := utils.CheckKeySize(len(args[0])); err != nil {
+		return err
+	}
 
 	key := args[0]
 	offset, err := strconv.Atoi(unsafe2.String(args[1]))
@@ -1069,103 +1153,4 @@ func SetBitCommand(s *resp.Session) error {
 		return err
 	}
 	return nil
-}
-
-func BitCountCommand(s *resp.Session) error {
-	args := s.Args
-	if len(args) != 1 && len(args) != 3 {
-		return resp.CmdParamsErr(resp.SETBIT)
-	}
-
-	var start, end int
-	var err error
-	key := args[0]
-
-	if len(args) == 3 {
-		start, end, err = parseBitRange(args[1:])
-		if err != nil {
-			return resp.ValueErr
-		}
-	}
-
-	if proxyClient, err := router.GetProxyClient(); err == nil {
-		var v int64
-		var err error
-		var res interface{}
-
-		if len(args) == 1 {
-			res, err = proxyClient.BitCount(s, key)
-			if s.TxCommandQueued {
-				return s.SendTxQueued(err)
-			} else {
-				v, err = redis.Int64(res, err)
-			}
-		} else {
-			res, err = proxyClient.BitCount(s, key, start, end)
-			if s.TxCommandQueued {
-				return s.SendTxQueued(err)
-			} else {
-				v, err = redis.Int64(res, err)
-			}
-
-		}
-		if err != nil {
-			return err
-		} else {
-			s.RespWriter.WriteInteger(v)
-		}
-	} else {
-		return err
-	}
-	return nil
-}
-
-func BitPosCommand(s *resp.Session) error {
-	args := s.Args
-	if len(args) < 2 {
-		return resp.CmdParamsErr(resp.BITPOS)
-	}
-
-	key := args[0]
-	bit, err := strconv.Atoi(string(args[1]))
-	if err != nil {
-		return resp.ValueErr
-	}
-	start, end, err := parseBitRange(args[2:])
-	if err != nil {
-		return resp.ValueErr
-	}
-
-	if proxyClient, err := router.GetProxyClient(); err == nil {
-		res, err := proxyClient.BitPos(s, key, bit, start, end)
-		if s.TxCommandQueued {
-			return s.SendTxQueued(err)
-		} else {
-			if v, err := redis.Int64(res, err); err != nil {
-				return err
-			} else {
-				s.RespWriter.WriteInteger(v)
-			}
-		}
-	} else {
-		return err
-	}
-	return nil
-}
-
-func parseBitRange(args [][]byte) (start int, end int, err error) {
-	start = 0
-	end = -1
-	if len(args) > 0 {
-		if start, err = strconv.Atoi(unsafe2.String(args[0])); err != nil {
-			return
-		}
-	}
-
-	if len(args) == 2 {
-		if end, err = strconv.Atoi(unsafe2.String(args[1])); err != nil {
-			return
-		}
-	}
-	return
 }

@@ -21,9 +21,21 @@ export interface HomeDataResponse {
     sys: string
     token: string
   }
+  master: string
+  backup: string[]
   stats: StateDataResponse
   version: string
   cgroup: string
+  monitorLink: {
+    tx: string
+    ali: string
+    bd: string
+  }
+}
+
+
+export interface V8SlotHistoryResponse {
+  list: V8SlotHistoryItem[]
 }
 
 export interface GroupModelsServer {
@@ -49,6 +61,7 @@ export interface GroupModels {
   is_degrade_group: boolean
   is_expanding: boolean
   out_of_sync: boolean
+  sync_failed: boolean
   promoting: any
   servers: GroupModelsServer[]
 }
@@ -117,9 +130,14 @@ export interface GroupStats {
     server_address: string
     start_time: string
     status: string
+    auto_compact: string
     uptime_in_days: string
     uptime_in_seconds: string
     use_lru_cache: string
+    vmtable_flush_last_cost: string
+    vmtable_flush_avg_cost: string
+    memtable_flush_last_cost: string
+    memtable_flush_avg_cost: string
 
     hash_data_free_page: number
     hash_meta_free_page: number
@@ -159,6 +177,11 @@ export interface GroupStats {
     string_data_bithash_file: string
     list_data_bithash_file: string
     hash_data_bithash_file: string
+
+    bituple_disk_fmt_size: string
+    bitpage_disk_fmt_size: string
+    bithash_disk_fmt_size: string
+    major_version: string
   }
   version_tag?: string
 }
@@ -283,6 +306,13 @@ export interface PcConfigItem {
   }
 }
 
+export interface DkItem {
+  key: string
+  dataType: string
+  shardNum: number
+  groupKeys: string[]
+}
+
 export interface MigrateTableItem {
   create_time: string
   isRootInsert: true
@@ -311,4 +341,17 @@ export interface MigrateTableItem {
   to: string
   total: number
   unixtime: number
+}
+
+
+export interface V8SlotHistoryItem {
+  isRootInsert: true
+  cluster_name: string
+  action: string
+  slot_start: number
+  slot_end: number
+  src_group: number
+  dst_group: number
+  create_time: string
+  update_time: string
 }

@@ -85,14 +85,15 @@ func newApiServer(p *Proxy) http.Handler {
 		r.Get("/stats/:xauth", api.Stats)
 		r.Get("/stats/:xauth/:flags", api.Stats)
 		r.Get("/slots/:xauth", api.Slots)
-		r.Get("/pconfig/:xauth", api.GetPconfigs)
 		r.Put("/start/:xauth", api.Start)
 		r.Put("/stats/reset/:xauth", api.ResetStats)
 		r.Put("/forcegc/:xauth", api.ForceGC)
 		r.Put("/shutdown/:xauth", api.Shutdown)
 		r.Put("/readcrosscloud/:xauth/:flag", api.SetReadCrossCloudFlag)
 		r.Put("/fillslots/:xauth", binding.Json([]*models.Slot{}), api.FillSlots)
-		r.Put("/fillpconfigs/:xauth", binding.Json([]*models.Pconfig{}), api.FillPconfigs)
+		r.Put("/filldks/:xauth", binding.Json([]*models.DkItem{}), api.FillDks)
+		r.Put("/createdk/:xauth", binding.Json(models.DkItem{}), api.CreateDk)
+		r.Put("/removedk/:key/:xauth", api.RemoveDk)
 	})
 
 	m.MapTo(r, (*martini.Routes)(nil))
@@ -151,14 +152,6 @@ func (s *apiServer) Slots(params martini.Params) (int, string) {
 		return rpc.ApiResponseError(err)
 	} else {
 		return s.SlotsNoXAuth()
-	}
-}
-
-func (s *apiServer) GetPconfigs(params martini.Params) (int, string) {
-	if err := s.verifyXAuth(params); err != nil {
-		return rpc.ApiResponseError(err)
-	} else {
-		return rpc.ApiResponseJson(Pconfigs())
 	}
 }
 
@@ -228,13 +221,34 @@ func (s *apiServer) FillSlots(slots []*models.Slot, params martini.Params) (int,
 	return rpc.ApiResponseJson("OK")
 }
 
-func (s *apiServer) FillPconfigs(pconfigs []*models.Pconfig, params martini.Params) (int, string) {
+func (s *apiServer) CreateDk(dk models.DkItem, params martini.Params) (int, string) {
 	if err := s.verifyXAuth(params); err != nil {
 		return rpc.ApiResponseError(err)
 	}
-	log.Infof("FillPconfigs : %v", pconfigs)
 
-	if err := FillPconfigs(pconfigs); err != nil {
+	if err := CreateDk(&dk); err != nil {
+		return rpc.ApiResponseError(err)
+	}
+	return rpc.ApiResponseJson("OK")
+}
+
+func (s *apiServer) RemoveDk(params martini.Params) (int, string) {
+	if err := s.verifyXAuth(params); err != nil {
+		return rpc.ApiResponseError(err)
+	}
+
+	if err := RemoveDk(params["key"]); err != nil {
+		return rpc.ApiResponseError(err)
+	}
+	return rpc.ApiResponseJson("OK")
+}
+
+func (s *apiServer) FillDks(dks []*models.DkItem, params martini.Params) (int, string) {
+	if err := s.verifyXAuth(params); err != nil {
+		return rpc.ApiResponseError(err)
+	}
+
+	if err := FillDks(dks); err != nil {
 		return rpc.ApiResponseError(err)
 	}
 	return rpc.ApiResponseJson("OK")

@@ -1,0 +1,13 @@
+#!/bin/sh
+
+version=`git describe --tags 2>/dev/null`
+
+# rm -f config/version.go
+
+cat << EOF | gofmt > agent/internal/utils/version.go
+package utils
+
+const (
+    Version = "$version"
+)
+EOF

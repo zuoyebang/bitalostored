@@ -17,6 +17,8 @@ package dbclient
 import (
 	"errors"
 	"fmt"
+	"github.com/zuoyebang/bitalostored/dashboard/internal/log"
+	"github.com/zuoyebang/bitalostored/dashboard/internal/sync2/atomic2"
 	"strings"
 	"time"
 
@@ -100,6 +102,16 @@ func getSubList(subPath string) (interface{}, error) {
 	return res, db.Error
 }
 
+func getSubListByGroup(subPath, group string) (interface{}, error) {
+	db, err := getDB()
+	if err != nil {
+		return nil, err
+	}
+	var res []*TblDashboard
+	db = db.Where("sub_path = ?", subPath).Group(group).Group("id").Find(&res)
+	return res, db.Error
+}
+
 func deleteData(path string) error {
 	db, err := getDB()
 	if err != nil {
@@ -148,6 +160,24 @@ func read(path string) ([]byte, error) {
 		return nil, nil
 	}
 	return []byte(res.Value), db.Error
+}
+
+func readTransaction(path string) ([]byte, error) {
+	db, err := getDB()
+	if err != nil {
+		return []byte{}, nil
+	}
+	res := &TblDashboard{}
+	tx := db.Begin()
+	tx.Where("full_path = ?", path).First(res)
+	tx.Commit()
+	if errors.Is(tx.Error, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if len(res.Value) <= 0 {
+		return nil, nil
+	}
+	return []byte(res.Value), tx.Error
 }
 
 func create(path string, data []byte) error {
@@ -203,4 +233,21 @@ func extractPath(path string) (string, string) {
 		return pathEles[1], pathEles[2]
 	}
 	return "", ""
+}
+
+var allowUpdate atomic2.Bool
+
+func ChangeAllowUpdateStatus(role bool) {
+	if allowUpdate.IsTrue() != role {
+		log.Info("dashboard role change to backup dashboard:", !role)
+		allowUpdate.Set(role)
+	}
+}
+
+func IsAllowUpdate() bool {
+	return allowUpdate.IsTrue()
+}
+
+func IsDBInit() bool {
+	return global != nil
 }

@@ -27,10 +27,11 @@ import (
 	"time"
 
 	redigo "github.com/gomodule/redigo/redis"
-
 	"github.com/zuoyebang/bitalostored/butils/math2"
+
 	"github.com/zuoyebang/bitalostored/dashboard/internal/errors"
 	"github.com/zuoyebang/bitalostored/dashboard/internal/log"
+	"github.com/zuoyebang/bitalostored/dashboard/internal/utils"
 )
 
 type Client struct {
@@ -41,15 +42,14 @@ type Client struct {
 	Database int
 
 	LastUse time.Time
-	Timeout time.Duration
 }
 
 type NodeInfo struct {
-	NodeStatus     bool
+	NodeStatus     bool // true or false
 	CurrentNodeId  string
 	CurrentAddress string
-	StartModel     string
-	Role           string
+	StartModel     string // normal , observer, witness
+	Role           string // master, slave, witness
 	ClusterId      string
 	LeaderNodeId   string
 	LeaderAddress  string
@@ -75,15 +75,15 @@ func NewClient(addr string, auth string, timeout time.Duration) (*Client, error)
 	c, err := redigo.Dial("tcp", addr, []redigo.DialOption{
 		redigo.DialConnectTimeout(math2.MinDuration(200*time.Millisecond, timeout)),
 		redigo.DialPassword(auth),
-		redigo.DialReadTimeout(math2.MinDuration(time.Second, timeout)),
-		redigo.DialWriteTimeout(math2.MinDuration(time.Second, timeout)),
+		redigo.DialReadTimeout(math2.MinDuration(10*time.Second, timeout)),
+		redigo.DialWriteTimeout(math2.MinDuration(10*time.Second, timeout)),
 	}...)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 	return &Client{
 		conn: c, Addr: addr, Auth: auth,
-		LastUse: time.Now(), Timeout: timeout,
+		LastUse: time.Now(),
 	}, nil
 }
 
@@ -117,19 +117,6 @@ func (c *Client) Receive() (interface{}, error) {
 	return r, nil
 }
 
-func (c *Client) Select(database int) error {
-	if c.Database == database {
-		return nil
-	}
-	_, err := c.Do("SELECT", database)
-	if err != nil {
-		c.Close()
-		return errors.Trace(err)
-	}
-	c.Database = database
-	return nil
-}
-
 func (c *Client) Shutdown() error {
 	_, err := c.Do("SHUTDOWN")
 	if err != nil {
@@ -139,10 +126,15 @@ func (c *Client) Shutdown() error {
 	return nil
 }
 
-func (c *Client) LogCompact() error {
+func (c *Client) LogCompact(gid int) error {
 	_, err := c.Do("setex", "test@#$!stored_logcompact", 1, "1")
 	if err != nil {
 		return err
+	}
+	_, err = c.Do("logcompact", gid)
+	if err == nil {
+		c.Close()
+		return nil
 	}
 	_, err = c.Do("logcompact")
 	if err != nil {
@@ -152,28 +144,73 @@ func (c *Client) LogCompact() error {
 	return nil
 }
 
-func (c *Client) Info() (map[string]string, error) {
-	text, err := redigo.String(c.Do("INFO"))
+func (c *Client) SlotInfo() (string, error) {
+	text, err := redigo.String(c.Do("slotinfo"))
+	if err != nil {
+		return "", errors.Trace(err)
+	}
+	return text, nil
+}
 
+func (c *Client) DiskInfo() (map[string]string, error) {
+	text, err := redigo.String(c.Do("diskinfo"))
+	if err != nil {
+		return nil, err
+	}
+	return utils.ConvertInfoMap(text), nil
+}
+
+func (c *Client) AllClusterInfo() (string, error) {
+	text, err := redigo.String(c.Do("clusterinfo"))
+	if err != nil {
+		return "", errors.Trace(err)
+	}
+	return text, nil
+}
+
+func (c *Client) Info(gid int) (map[string]string, error) {
+	text, err := redigo.String(c.Do("INFO"))
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	info := make(map[string]string)
-	for _, line := range strings.Split(text, "\n") {
-		kv := strings.SplitN(line, ":", 2)
-		if len(kv) != 2 {
-			continue
-		}
-		if key := strings.TrimSpace(kv[0]); key != "" {
-			info[key] = strings.TrimSpace(kv[1])
+	t1 := utils.ConvertInfoMap(text)
+	// INFO command do not return "status" field when version >= v7
+	if _, ok := t1["status"]; ok {
+		return t1, nil
+	}
+	if gid == 0 {
+		return t1, nil
+	}
+
+	text2, _ := redigo.String(c.Do("clusterinfo", gid))
+	if len(text2) <= 0 {
+		return t1, nil
+	}
+	t2 := utils.ConvertInfoMap(text2)
+	if len(t2) > 0 {
+		for k, v := range t2 {
+			t1[k] = v
 		}
 	}
-	return info, nil
+	return t1, nil
 }
 
-func (c *Client) ClusterInfo() (map[string]string, error) {
-	text, err := redigo.String(c.Do("INFO", "clusterinfo"))
+func (c *Client) GetMajorVersion() int {
+	sinfo, err := c.SimpleInfo()
+	if err != nil {
+		log.WarnErrorf(err, "get info fail(%s). err:%s", c.Addr, err)
+		return 0
+	}
 
+	majorVersion := 0
+	if v, ok := sinfo["major_version"]; ok {
+		majorVersion = utils.GetMajorVersion(v)
+	}
+	return majorVersion
+}
+
+func (c *Client) SimpleInfo() (map[string]string, error) {
+	text, err := redigo.String(c.Do("INFO"))
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -209,8 +246,8 @@ func (c *Client) DebugInfo() (map[string]string, error) {
 	return info, nil
 }
 
-func (c *Client) InfoFull() (map[string]string, error) {
-	if info, err := c.Info(); err != nil {
+func (c *Client) InfoFull(gid int) (map[string]string, error) {
+	if info, err := c.Info(gid); err != nil {
 		return nil, errors.Trace(err)
 	} else {
 		host := info["master_host"]
@@ -223,6 +260,37 @@ func (c *Client) InfoFull() (map[string]string, error) {
 	}
 }
 
+func (c *Client) InfoV7WithRaft(gid int) (map[string]string, error) {
+	info := make(map[string]string, 1000)
+	if gid > 0 {
+		allClusters, _ := c.AllClusterInfo()
+		info["all_cluster"] = allClusters
+		slotInfo, _ := c.SlotInfo()
+		info["slots"] = slotInfo
+		disks, _ := c.DiskInfo()
+		for k, v := range disks {
+			info[k] = v
+		}
+		return info, nil
+	} else {
+		return info, nil
+	}
+}
+
+func (c *Client) InfoWithRaft(gid int) (map[string]string, error) {
+	if info, err := c.Info(gid); err != nil {
+		return nil, errors.Trace(err)
+	} else if gid > 0 {
+		allClusters, _ := c.AllClusterInfo()
+		info["all_cluster"] = allClusters
+		slotInfo, _ := c.SlotInfo()
+		info["slots"] = slotInfo
+		return info, nil
+	} else {
+		return info, nil
+	}
+}
+
 func (c *Client) DebugInfoFull() (map[string]string, error) {
 	if info, err := c.DebugInfo(); err != nil {
 		return nil, errors.Trace(err)
@@ -231,49 +299,45 @@ func (c *Client) DebugInfoFull() (map[string]string, error) {
 	}
 }
 
-func (c *Client) PromoteMaster() error {
-	if info, err := c.Info(); err != nil {
-		return errors.Trace(err)
+func (c *Client) GetNodeStatus(gid int) (string, error) {
+	if info, err := c.Info(gid); err != nil {
+		return "", errors.Trace(err)
 	} else {
 		currentStatus := info["status"]
 		currentRaftNodeId := info["current_node_id"]
 		if currentStatus == "true" && len(currentRaftNodeId) > 0 {
-			if ok, err := redigo.String(c.Do("transfer", currentRaftNodeId)); err == nil && strings.ToLower(ok) == "ok" {
-				return nil
-			} else if err != nil {
-				return err
-			} else {
-				return errors.New(fmt.Sprintf("do promote server err, master : %s repley : %s", c.Addr, ok))
-			}
+			return currentRaftNodeId, nil
 		}
 	}
-	return nil
+	return "", errors.New("node status false")
 }
 
-func (c *Client) SetMaster(master string) error {
-	host, port, err := net.SplitHostPort(master)
-	log.Infof("SplitHostPort host:%s,port:%s,err", host, port, err)
-	if err != nil {
-		return errors.Trace(err)
+func (c *Client) PromoteMasterV6(currentRaftNodeId string, gid int) error {
+	var err error
+	var ok string
+	ok, err = redigo.String(c.Do("transfer", currentRaftNodeId))
+	log.Infof("addr:%s cmd:transfer node:%s gid:%d", c.Addr, currentRaftNodeId, gid)
+	if err == nil && strings.ToLower(ok) == "ok" {
+		return nil
+	} else if err != nil {
+		return err
+	} else {
+		return errors.New(fmt.Sprintf("do promote server err, master : %s repley : %s", c.Addr, ok))
 	}
-	if _, err := c.Do("CONFIG", "SET", "masterauth", c.Auth); err != nil {
-		log.Infof("CONFIG host:%s,port:%s,err", host, port, err)
-		return errors.Trace(err)
-	}
-
-	if _, err := c.Do("SLAVEOF", host, port); err != nil {
-		log.Infof("SLAVEOF host:%s,port:%s,err", host, port, err)
-		return errors.Trace(err)
-	}
-
-	return nil
 }
 
-func (c *Client) MigrateCallback(callback_url string) error {
-	if _, err := c.Do("MIGRATECALLBACK", callback_url); err != nil {
-		return errors.Trace(err)
+func (c *Client) PromoteMasterV7(currentRaftNodeId string, gid int) error {
+	var err error
+	var ok string
+	ok, err = redigo.String(c.Do("transfer", currentRaftNodeId, gid))
+	log.Infof("addr:%s cmd:transfer node:%s gid:%d", c.Addr, currentRaftNodeId, gid)
+	if err == nil && strings.ToLower(ok) == "ok" {
+		return nil
+	} else if err != nil {
+		return err
+	} else {
+		return errors.New(fmt.Sprintf("do promote server err, master : %s repley : %s", c.Addr, ok))
 	}
-	return nil
 }
 
 func (c *Client) MigrateStatus(slotId int) ([]byte, error) {
@@ -298,28 +362,84 @@ func (c *Client) MigrateEnd(slotId int) error {
 	return nil
 }
 
-func (c *Client) AddObserver(raftAddress string, nodeId int) error {
+// addobserver localhost:64004 4
+func (c *Client) AddObserverV6(raftAddress string, nodeId, gid int) error {
+	if _, err := c.Do("addobserver", raftAddress, nodeId, gid); err == nil {
+		return nil
+	}
 	if _, err := c.Do("addobserver", raftAddress, nodeId); err != nil {
 		return errors.Trace(err)
 	}
 	return nil
 }
 
-func (c *Client) AddWitness(raftAddress string, nodeId int) error {
+func (c *Client) AddObserverV7(raftAddress string, nodeId, gid int) error {
+	if _, err := c.Do("addobserver", raftAddress, nodeId, gid); err == nil {
+		return nil
+	}
+	if _, err := c.Do("addobserver", raftAddress, nodeId); err != nil {
+		return errors.Trace(err)
+	}
+	return nil
+}
+
+// addwitness localhost:64004 4
+func (c *Client) AddWitnessV6(raftAddress string, nodeId, gid int) error {
 	if _, err := c.Do("addwitness", raftAddress, nodeId); err != nil {
 		return errors.Trace(err)
 	}
 	return nil
 }
 
-func (c *Client) RemoveRaftNode(nodeId int) error {
+func (c *Client) AddWitnessV7(raftAddress string, nodeId, gid int) error {
+	if _, err := c.Do("addwitness", raftAddress, nodeId, gid); err == nil {
+		return nil
+	} else {
+		return errors.Trace(err)
+	}
+}
+
+// v7: stopnode nodeId [clusterId]
+func (c *Client) StopNodeV7(nodeId, gid int) error {
+	if _, err := c.Do("stopnode", nodeId, gid); err == nil {
+		return nil
+	} else if strings.Contains(err.Error(), "empty command") {
+		return nil
+	} else {
+		return err
+	}
+}
+
+// remove 4
+func (c *Client) RemoveRaftNodeV6(nodeId, gid int) error {
 	if _, err := c.Do("remove", nodeId); err != nil {
 		return errors.Trace(err)
 	}
 	return nil
 }
 
-func (c *Client) GetClusterMemberShip() (*MembershipV2, error) {
+func (c *Client) RemoveRaftNodeV7(nodeId, gid int) error {
+	if _, err := c.Do("remove", nodeId, gid); err == nil {
+		return nil
+	} else {
+		return errors.Trace(err)
+	}
+}
+
+func (c *Client) GetClusterMemberShipV7(gid int) (*MembershipV2, error) {
+	var data []byte
+	var err error
+	if data, err = redigo.Bytes(c.Do("getclustermembership", gid)); err != nil {
+		return nil, errors.Trace(err)
+	}
+	membership := &MembershipV2{}
+	if err := json.Unmarshal(data, membership); err != nil {
+		return nil, err
+	}
+	return membership, nil
+}
+
+func (c *Client) GetClusterMemberShipV6(gid int) (*MembershipV2, error) {
 	var data []byte
 	var err error
 	if data, err = redigo.Bytes(c.Do("getclustermembership")); err != nil {
@@ -332,9 +452,8 @@ func (c *Client) GetClusterMemberShip() (*MembershipV2, error) {
 	return membership, nil
 }
 
-func (c *Client) DeRaft(token string) error {
-	var err error
-	if _, err = c.Do("deraft", token); err != nil {
+func (c *Client) DeRaft(gid int, token string) error {
+	if _, err := c.Do("deraft", token); err != nil {
 		return errors.Trace(err)
 	}
 	return nil
@@ -356,6 +475,14 @@ func (c *Client) Compact(dbType string) error {
 	return nil
 }
 
+func (c *Client) AutoCompact(value int) error {
+	var err error
+	if _, err = c.Do("config", "SET", "AUTOCOMPACT", value); err != nil {
+		return errors.Trace(err)
+	}
+	return nil
+}
+
 func (c *Client) GetNodeHostInfo() (string, error) {
 	if data, err := redigo.String(c.Do("getnodehostinfo")); err != nil {
 		return "", errors.Trace(err)
@@ -364,11 +491,22 @@ func (c *Client) GetNodeHostInfo() (string, error) {
 	}
 }
 
-func (c *Client) AddToSlave(raftAddress string, nodeId int) error {
-	if _, err := c.Do("add", raftAddress, nodeId); err != nil {
+// add localhost:64004 4
+func (c *Client) AddToSlaveV7(raftAddress string, nodeId, gid int) error {
+	if _, err := c.Do("add", raftAddress, nodeId, gid); err == nil {
+		return nil
+	} else {
 		return errors.Trace(err)
 	}
-	return nil
+
+}
+
+func (c *Client) AddToSlaveV6(raftAddress string, nodeId, gid int) error {
+	if _, err := c.Do("add", raftAddress, nodeId); err == nil {
+		return nil
+	} else {
+		return errors.Trace(err)
+	}
 }
 
 func (c *Client) MigrateSlots(slotid int, target string) error {
@@ -377,6 +515,27 @@ func (c *Client) MigrateSlots(slotid int, target string) error {
 		return errors.Trace(err)
 	}
 	if _, err := c.Do("MIGRATESLOTS", host, port, slotid); err != nil {
+		return errors.Trace(err)
+	}
+	return nil
+}
+
+func (c *Client) TransferSlots(sid, eid, target int) error {
+	if _, err := c.Do("TRANSFERSLOTS", sid, eid, target); err != nil {
+		return errors.Trace(err)
+	}
+	return nil
+}
+
+func (c *Client) RemoveSlots(sid, eid int, token string) error {
+	if _, err := c.Do("removeslots", sid, eid, token); err != nil {
+		return errors.Trace(err)
+	}
+	return nil
+}
+
+func (c *Client) ResetSlots() error {
+	if _, err := c.Do("resetslots"); err != nil {
 		return errors.Trace(err)
 	}
 	return nil
@@ -561,31 +720,22 @@ func (p *Pool) PutClient(c *Client) {
 	}
 }
 
-func (p *Pool) Info(addr string) (map[string]string, error) {
+func (p *Pool) Info(addr string, gid int) (map[string]string, error) {
 	c, err := p.GetClient(addr)
 	if err != nil {
 		return nil, err
 	}
 	defer p.PutClient(c)
-	return c.Info()
+	return c.Info(gid)
 }
 
-func (p *Pool) ClusterInfo(addr string) (map[string]string, error) {
+func (p *Pool) InfoFull(addr string, gid int) (map[string]string, error) {
 	c, err := p.GetClient(addr)
 	if err != nil {
 		return nil, err
 	}
 	defer p.PutClient(c)
-	return c.ClusterInfo()
-}
-
-func (p *Pool) InfoFull(addr string) (map[string]string, error) {
-	c, err := p.GetClient(addr)
-	if err != nil {
-		return nil, err
-	}
-	defer p.PutClient(c)
-	return c.InfoFull()
+	return c.InfoFull(gid)
 }
 
 type InfoCache struct {
@@ -610,71 +760,75 @@ func NewInfoCache(auth string, timeout time.Duration, pool *Pool) *InfoCache {
 	}
 }
 
-func (s *InfoCache) load(addr string) map[string]string {
+func (s *InfoCache) load(addr string, gid int) map[string]string {
+	longaddr := utils.ServerGroupKey(addr, gid)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.data != nil {
-		return s.data[addr]
+		return s.data[longaddr]
 	}
 	return nil
 }
 
-func (s *InfoCache) loadNodeInfo(addr string) (*NodeInfo, bool) {
+func (s *InfoCache) loadNodeInfo(addr string, gid int) (*NodeInfo, bool) {
+	longaddr := utils.ServerGroupKey(addr, gid)
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if _, ok := s.nodeInfo[addr]; ok {
-		return s.nodeInfo[addr], true
+	if _, ok := s.nodeInfo[longaddr]; ok {
+		return s.nodeInfo[longaddr], true
 	}
 	return nil, false
 }
 
-func (s *InfoCache) storeNodeInfo(addr string, nf *NodeInfo) {
+func (s *InfoCache) storeNodeInfo(addr string, gid int, nf *NodeInfo) {
+	longaddr := utils.ServerGroupKey(addr, gid)
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.nodeInfo[addr] = nf
+	s.nodeInfo[longaddr] = nf
 }
 
-func (s *InfoCache) store(addr string, info map[string]string) map[string]string {
+func (s *InfoCache) store(addr string, gid int, info map[string]string) map[string]string {
+	longaddr := utils.ServerGroupKey(addr, gid)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.data == nil {
 		s.data = make(map[string]map[string]string)
 	}
 	if info != nil {
-		s.data[addr] = info
-	} else if s.data[addr] == nil {
-		s.data[addr] = make(map[string]string)
+		s.data[longaddr] = info
+	} else if s.data[longaddr] == nil {
+		s.data[longaddr] = make(map[string]string)
 	}
-	return s.data[addr]
+	return s.data[longaddr]
 }
 
-func (s *InfoCache) Get(addr string, force bool) (info map[string]string) {
+func (s *InfoCache) Get(addr string, gid int, force bool) (info map[string]string) {
 	if !force {
-		info = s.load(addr)
+		info = s.load(addr, gid)
 		if info != nil {
 			return info
 		}
 	}
 	var err error
-	if info, err = s.getInfo(addr); err != nil {
+	if info, err = s.getInfo(addr, gid); err != nil {
 		log.Warnf("get info fail, addr : %s, err : %s", addr, err.Error())
 	}
-	return s.store(addr, info)
+	return s.store(addr, gid, info)
 }
 
 func (s *InfoCache) GetProcessId(addr string) string {
-	return s.Get(addr, false)["process_id"]
+	return s.Get(addr, 0, false)["process_id"]
 }
 
-func (s *InfoCache) getInfo(addr string) (map[string]string, error) {
+func (s *InfoCache) getInfo(addr string, gid int) (map[string]string, error) {
 	if s.pool == nil {
 		c, err := NewClient(addr, s.Auth, s.Timeout)
 		if err != nil {
 			return nil, err
 		}
 		defer c.Close()
-		return c.Info()
+		return c.Info(gid)
 	} else {
-		return s.pool.Info(addr)
+		return s.pool.Info(addr, gid)
 	}
 }

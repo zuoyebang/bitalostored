@@ -40,5 +40,14 @@ func GetOverview(s *Proxy, flags StatsFlags) *Overview {
 	if flags.HasBit(StatsSlots) {
 		o.Slots = ShortSlots()
 	}
+	dstConfig := &config.Config{}
+	err := config.JsonDeepCopy(o.Config, dstConfig)
+	if err == nil {
+		o.Config = dstConfig
+		o.Config.DashboardPassword = ""
+		o.Config.DashboardUsername = ""
+		o.Config.ProxyAuthAdmin = ""
+		o.Config.ProxyAuthPassword = ""
+	}
 	return o
 }

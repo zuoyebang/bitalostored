@@ -1,0 +1,7 @@
+*.swp
+bin/
+log/
+var/
+.idea
+fe/node_modules
+agent/internal/utils/version.go

@@ -15,9 +15,8 @@
 package proxy
 
 import (
-	"time"
-
 	"go.uber.org/atomic"
+	"time"
 )
 
 type Stats struct {

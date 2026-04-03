@@ -16,13 +16,15 @@ package dashcore
 
 import (
 	"net"
+	"sort"
 	"sync"
 	"time"
 
-	"github.com/zuoyebang/bitalostored/butils"
 	"github.com/zuoyebang/bitalostored/butils/math2"
+
 	"github.com/zuoyebang/bitalostored/dashboard/internal/errors"
 	"github.com/zuoyebang/bitalostored/dashboard/internal/log"
+	"github.com/zuoyebang/bitalostored/dashboard/internal/utils"
 	"github.com/zuoyebang/bitalostored/dashboard/models"
 )
 
@@ -31,7 +33,7 @@ const MaxSlotNum = models.MaxSlotNum
 type context struct {
 	slots   []*models.SlotMapping
 	group   map[int]*models.Group
-	pconfig map[string]*models.Pconfig
+	dk      map[string]*models.DkItem
 	proxy   map[string]*models.Proxy
 	migrate map[int]*models.Migrate
 
@@ -105,7 +107,7 @@ func (ctx *context) toSlot(m *models.SlotMapping, p *models.Proxy) *models.Slot 
 		Id:     m.Id,
 		Locked: ctx.isSlotLocked(m),
 	}
-
+	// TODO: rewrite state transition implementation details
 	switch m.Action.State {
 	case models.ActionNothing, models.ActionPending:
 		slot.MasterAddr = ctx.getGroupMaster(m.GroupId)
@@ -136,7 +138,7 @@ func (ctx *context) lookupIPAddr(addr string) net.IP {
 	defer ctx.hosts.Unlock()
 	ip, ok := ctx.hosts.m[addr]
 	if !ok {
-		if tcpAddr := butils.ResolveTCPAddrTimeout(addr, 50*time.Millisecond); tcpAddr != nil {
+		if tcpAddr := utils.ResolveTCPAddrTimeout(addr, 50*time.Millisecond); tcpAddr != nil {
 			ctx.hosts.m[addr] = tcpAddr.IP
 			return tcpAddr.IP
 		} else {
@@ -199,10 +201,10 @@ func (ctx *context) toSlotSlice(slots []*models.SlotMapping, p *models.Proxy) []
 	return slice
 }
 
-func (ctx *context) toPconfigSlice(pconfigs map[string]*models.Pconfig) []*models.Pconfig {
-	var slice = make([]*models.Pconfig, len(pconfigs))
+func (ctx *context) toDkSlice(dks map[string]*models.DkItem) []*models.DkItem {
+	var slice = make([]*models.DkItem, len(dks))
 	index := 0
-	for _, m := range pconfigs {
+	for _, m := range dks {
 		slice[index] = m
 		index++
 	}
@@ -281,11 +283,16 @@ func (ctx *context) getGroupMasters() map[int]string {
 	return masters
 }
 
-func (ctx *context) getGroupIds() map[int]bool {
-	var groups = make(map[int]bool)
+func (ctx *context) getGroupIds() []int {
+	var groups = make([]int, 0, len(ctx.group))
 	for _, g := range ctx.group {
-		groups[g.Id] = true
+		if g.Id > 0 {
+			groups = append(groups, g.Id)
+		}
 	}
+	sort.Slice(groups, func(i, j int) bool {
+		return groups[i] < groups[j]
+	})
 	return groups
 }
 

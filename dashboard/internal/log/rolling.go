@@ -81,7 +81,6 @@ func (r *rollingFile) roll() error {
 			return nil
 		}
 	}
-
 	suffix := time.Now().Format(string(r.rolling))
 	if r.file != nil {
 		if suffix == r.fileFrag {

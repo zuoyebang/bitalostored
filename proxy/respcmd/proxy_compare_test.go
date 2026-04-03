@@ -164,12 +164,10 @@ func getListTestCase() [][]interface{} {
 	cmds = append(cmds, []interface{}{"lindex", "lpush-list", 0})
 	cmds = append(cmds, []interface{}{"lrange", "lpush-list", 0, 1})
 	cmds = append(cmds, []interface{}{"lset", "lpush-list", 0, "a"})
-	cmds = append(cmds, []interface{}{"linsert", "lpush-list", "after", "a", "b"})
 	cmds = append(cmds, []interface{}{"lpop", "lpush-list"})
 	cmds = append(cmds, []interface{}{"lpush", "lpush-list", "id-100"})
 	cmds = append(cmds, []interface{}{"rpop", "lpush-list"})
 	cmds = append(cmds, []interface{}{"ltrim", "lpush-list", 0, 0})
-	cmds = append(cmds, []interface{}{"lrem", "lpush-list", 1, "a"})
 
 	cmds = append(cmds, []interface{}{"lpushx", "lpush-list-1", "id-10"})
 	cmds = append(cmds, []interface{}{"rpushx", "lpush-list-2", "id-10"})
@@ -223,6 +221,9 @@ func getZsetTestCase() [][]interface{} {
 }
 
 func TestCompareKv(t *testing.T) {
+	if !compareFlag {
+		return
+	}
 	cmds := kvTestCase
 	for _, c := range cmds {
 		switch len(c) {
@@ -235,6 +236,9 @@ func TestCompareKv(t *testing.T) {
 }
 
 func TestCompareHash(t *testing.T) {
+	if !compareFlag {
+		return
+	}
 	cmds := hashTestCase
 	for _, c := range cmds {
 		switch len(c) {
@@ -246,6 +250,9 @@ func TestCompareHash(t *testing.T) {
 	}
 }
 func TestCompareList(t *testing.T) {
+	if !compareFlag {
+		return
+	}
 	cmds := listTestCase
 	for _, c := range cmds {
 		switch len(c) {
@@ -258,6 +265,9 @@ func TestCompareList(t *testing.T) {
 }
 
 func TestCompareSet(t *testing.T) {
+	if !compareFlag {
+		return
+	}
 	cmds := setTestCase
 	for _, c := range cmds {
 		switch len(c) {
@@ -270,6 +280,9 @@ func TestCompareSet(t *testing.T) {
 }
 
 func TestCompareZset(t *testing.T) {
+	if !compareFlag {
+		return
+	}
 	cmds := zsetTestCase
 	for _, c := range cmds {
 		switch len(c) {

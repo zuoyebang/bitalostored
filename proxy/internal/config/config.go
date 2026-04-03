@@ -17,6 +17,7 @@ package config
 import (
 	"bytes"
 	"errors"
+	jsoniter "github.com/json-iterator/go"
 	"time"
 
 	"github.com/zuoyebang/bitalostored/butils/bytesize"
@@ -165,6 +166,7 @@ type Config struct {
 	PprofSwitch  int    `toml:"pprof_switch" json:"pprof_switch"`
 	PprofAddress string `toml:"pprof_address" json:"pprof_address"`
 
+	BreakerOpenRequest    int               `toml:"breaker_open_request" json:"breaker_open_request"`
 	BreakerStopTimeout    timesize.Duration `toml:"breaker_stop_timeout" json:"breaker_stop_timeout"`
 	BreakerOpenFailRate   float64           `toml:"breaker_open_fail_rate" json:"breaker_open_fail_rate"`
 	BreakerRestoreRequest int               `toml:"breaker_restore_request" json:"breaker_restore_request"`
@@ -177,9 +179,17 @@ type Config struct {
 
 	Log LogConfig `toml:"log" json:"log"`
 
-	RedisDefaultConf models.RedisConnConf `json:"redis_default_conf"`
+	RedisDefaultConf models.RedisConnConf `toml:"redis_default_conf" json:"redis_default_conf"`
 
 	DynamicDeadline DynamicDeadline `toml:"dynamic_deadline" json:"dynamic_deadline"`
+}
+
+func JsonDeepCopy(src, dst *Config) error {
+	buf, err := jsoniter.Marshal(&src)
+	if err != nil {
+		return err
+	}
+	return jsoniter.Unmarshal(buf, dst)
 }
 
 func NewDefaultConfig() *Config {
@@ -299,6 +309,9 @@ func (c *Config) Validate() error {
 		switcher.ReadCrossCloud.Store(false)
 	}
 
+	if c.BreakerOpenRequest <= 0 {
+		c.BreakerOpenRequest = 10
+	}
 	if c.BreakerOpenFailRate <= 0.0 || c.BreakerOpenFailRate > 0.05 {
 		c.BreakerOpenFailRate = 0.05
 	}

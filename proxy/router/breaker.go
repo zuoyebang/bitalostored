@@ -37,6 +37,7 @@ func NewGroupBreaker(conf *config.Config) *GroupBreaker {
 	opt := &BreakerOption{}
 	opt.BreakerOpenFailRate = conf.BreakerOpenFailRate
 	opt.BreakerRestoreRequest = conf.BreakerRestoreRequest
+	opt.BreakerOpenRequest = uint32(conf.BreakerOpenRequest)
 	opt.BreakerStopTimeout = conf.BreakerStopTimeout.Duration()
 
 	gb := &GroupBreaker{
@@ -100,6 +101,7 @@ type BreakerOption struct {
 	BreakerStopTimeout    time.Duration
 	BreakerOpenFailRate   float64
 	BreakerRestoreRequest int
+	BreakerOpenRequest    uint32
 }
 
 type Breaker struct {
@@ -128,7 +130,7 @@ func (b *Breaker) AddBreakerByAddrs(addrs ...string) int {
 		MaxRequests: uint32(b.opt.BreakerRestoreRequest),
 		Interval:    time.Second,
 		ReadyToTrip: func(counts gobreaker.Counts) bool {
-			if counts.Requests <= MinBreakerOpenRequest {
+			if counts.Requests <= b.opt.BreakerOpenRequest {
 				return false
 			}
 			failureRate := float64(counts.TotalFailures) / float64(counts.Requests)

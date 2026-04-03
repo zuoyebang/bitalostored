@@ -16,7 +16,9 @@ PROXY_PORT=8790
 DASHBOARD_PORT=18080
 FE_PORT=8080
 PRODUCT_NAME=bitalos-demo
-AUTH=56391ed147981d58b6c72a60c010b9f0
+DH_AUTH=56391ed147981d58b6c72a60c010b9f0
+DH_TOKEN=236f5b4d462ba72d3d0542985a69d73f
+TOKEN=c529542e24d29ad124c684db8b758a27 #md5(PRODUCT_NAME)
 USERNAME=demo
 PASSWORD=demo
 
@@ -32,6 +34,14 @@ CREATE TABLE IF NOT EXISTS tblDashboard (
     value text,
     create_time int unsigned NOT NULL DEFAULT '0',
     update_time int unsigned NOT NULL DEFAULT '0'
+);
+EOF
+    sqlite3 $DB_FILE <<EOF
+CREATE TABLE tblLock (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  lock_name TEXT NOT NULL DEFAULT '',
+  create_time INTEGER NOT NULL DEFAULT 0,
+  UNIQUE(lock_name)
 );
 EOF
     sqlite3 $DB_FILE "delete from tblDashboard;"
@@ -58,6 +68,42 @@ username = "admin"
 password = "admin"
 hostport = "127.0.0.1:13306"
 dbname = "bitalos-demo"
+EOF
+}
+
+generateFeConf() {
+  cat <<EOF > $DEMO_CONF_DIR/bitalosfe.toml
+ncpu = 2
+env = "demo"
+
+white_users = []
+
+check_host = ""
+check_refer = ""
+grafana_url = ""
+paas_domain = "http://127.0.0.1"
+main_url = "http://127.0.0.1/#/dashboard"
+
+db = "sqlite"
+sqlite = "$DEMO_ROOT_DIR/${PRODUCT_NAME}.db"
+cloud = "txcloud"
+[database]
+username = ""
+password = ""
+hostport = ""
+dbname = ""
+
+[ips]
+appId = ""
+secret = ""
+
+[stored]
+txcloud = []
+ali = []
+baidu = []
+txzns = ""
+alizns = ""
+bdzns = ""
 EOF
 }
 
@@ -146,7 +192,7 @@ slow_shield = true
 slow_ttl  = "1s"
 slow_maxexec = 100
 slow_topn = 100
-token = "token"
+token = "$TOKEN"
 degrade_signle_node = false
 open_distributed_tx = false
 
@@ -232,11 +278,12 @@ checkSqlite() {
 
 deployDh() {
     #checkSqlite
-    #createSqlite $DEMO_ROOT_DIR/$PRODUCT_NAME.db
+    createSqlite $DEMO_ROOT_DIR/$PRODUCT_NAME.db
     generateDashboardConf
-    nohup bin/bitalosfe --assets-dir=bin/dist "--sqlite=$DEMO_ROOT_DIR/${PRODUCT_NAME}.db" --log=$DEMO_FE_LOG_DIR/fe.log --pidfile=$DEMO_ROOT_DIR/bitalosfe.pid --log-level=INFO --listen=0.0.0.0:$FE_PORT >> $DEMO_FE_LOG_DIR/fe.out 2>&1 &
+    generateFeConf
+    nohup bin/bitalosfe --assets-dir=bin/dist --config=$DEMO_CONF_DIR/bitalosfe.toml --log=$DEMO_FE_LOG_DIR/fe.log --pidfile=$DEMO_ROOT_DIR/bitalosfe.pid --log-level=INFO --listen=0.0.0.0:$FE_PORT >> $DEMO_FE_LOG_DIR/fe.out 2>&1 &
     nohup bin/bitalosdashboard --config=$DEMO_CONF_DIR/bitalosdashboard.toml  "--sqlite=$DEMO_ROOT_DIR/${PRODUCT_NAME}.db" --log=$DEMO_DASHBOARD_LOG_DIR/dashboard.log --log-level=INFO --pidfile=$DEMO_ROOT_DIR/bitalosdashboard.pid >> $DEMO_DASHBOARD_LOG_DIR/dashboard.out 2>&1 &
-    sleep 5
+    sleep 10
     getLoginCookies
 }
 
@@ -247,7 +294,7 @@ deployServer() {
     for ((g=1; g<=$3; g++))
     do
         raftPortInit=$raftPort
-        res=$(curl -b $DEMO_COOKIES_FILE -s -X PUT 127.0.0.1:$DASHBOARD_PORT/api/topom/group/create/$AUTH/$g)
+        res=$(curl -b $DEMO_COOKIES_FILE -s -X PUT 127.0.0.1:$DASHBOARD_PORT/api/topom/group/create/$DH_AUTH/$g)
         echo "Create group $g. Response $res"
         raftAddress=""
         nodeList=""
@@ -267,7 +314,7 @@ deployServer() {
             echo "Start group $g normal node 127.0.0.1:$serverPort"
             nohup $DEMO_BIN_DIR/bitalostored-$g-$s --conf.file=$DEMO_CONF_DIR/bitalostored-$g-$s.toml >> $DEMO_STORED_LOG_DIR/stored-$g-$s.out 2>&1 & echo $! > $DEMO_ROOT_DIR/bitalostored-$g-$s.pid
             sleep 10
-            res=$(curl -b $DEMO_COOKIES_FILE -s -X PUT 127.0.0.1:$DASHBOARD_PORT/api/topom/group/add/$AUTH/$g/127.0.0.1:$serverPort/txcloud/master_slave_node)
+            res=$(curl -b $DEMO_COOKIES_FILE -s -X PUT 127.0.0.1:$DASHBOARD_PORT/api/topom/group/add/$DH_AUTH/$g/127.0.0.1:$serverPort/txcloud/master_slave_node)
             echo "Add normal node 127.0.0.1:$serverPort to group $g. Response $res"
             serverPort=$((serverPort+1))
             raftPortInit=$((raftPortInit+1))
@@ -280,10 +327,10 @@ deployServer() {
             echo "Start group $g witness node 127.0.0.1:$serverPort"
             nohup $DEMO_BIN_DIR/bitalostored-$g-$w --conf.file=$DEMO_CONF_DIR/bitalostored-$g-$w.toml >> $DEMO_STORED_LOG_DIR/stored-$g-$w.out 2>&1 & echo $! > $DEMO_ROOT_DIR/bitalostored-$g-$w.pid
             sleep 10
-            res=$(curl -b $DEMO_COOKIES_FILE -s -X PUT 127.0.0.1:$DASHBOARD_PORT/api/topom/group/add/$AUTH/$g/127.0.0.1:$serverPort/txcloud/witness_node)
+            res=$(curl -b $DEMO_COOKIES_FILE -s -X PUT 127.0.0.1:$DASHBOARD_PORT/api/topom/group/add/$DH_AUTH/$g/127.0.0.1:$serverPort/txcloud/witness_node)
             echo "Add witness node 127.0.0.1:$serverPort to group $g. Response $res"
             sleep 2
-            res=$(curl -b $DEMO_COOKIES_FILE -s -X PUT 127.0.0.1:$DASHBOARD_PORT/api/topom/group/mount/$AUTH/$g/127.0.0.1:$serverPort/127.0.0.1:$raftPortInit/$w/4)
+            res=$(curl -b $DEMO_COOKIES_FILE -s -X PUT 127.0.0.1:$DASHBOARD_PORT/api/topom/group/mount/$DH_AUTH/$g/127.0.0.1:$serverPort/127.0.0.1:$raftPortInit/$w/4)
             echo "Mount witness node 127.0.0.1:$serverPort to group $g. Response $res"
             serverPort=$((serverPort+1))
             raftPortInit=$((raftPortInit+1))
@@ -405,13 +452,13 @@ main() {
     sleep 5
     deployProxy
     sleep 15
-    res=$(curl -b $DEMO_COOKIES_FILE -s -X PUT 127.0.0.1:$DASHBOARD_PORT/api/topom/group/replica-groups-all/$AUTH/1)
+    res=$(curl -b $DEMO_COOKIES_FILE -s -X PUT 127.0.0.1:$DASHBOARD_PORT/api/topom/group/replica-groups-all/$DH_AUTH/1/$DH_TOKEN)
     echo "Replica all groups. Response $res"
     sleep 5
-    res=$(curl -b $DEMO_COOKIES_FILE -s -X PUT 127.0.0.1:$DASHBOARD_PORT/api/topom/group/resync-all/$AUTH)
+    res=$(curl -b $DEMO_COOKIES_FILE -s -X PUT 127.0.0.1:$DASHBOARD_PORT/api/topom/group/resync-all/$DH_AUTH)
     echo "Resync all groups. Response $res"
     sleep 5
-    res=$(curl -b $DEMO_COOKIES_FILE -s -X PUT 127.0.0.1:$DASHBOARD_PORT/api/topom/slots/action/create/init/$AUTH)
+    res=$(curl -b $DEMO_COOKIES_FILE -s -X PUT 127.0.0.1:$DASHBOARD_PORT/api/topom/slots/action/create/init/$DH_AUTH)
     echo "Slots init. response $res"
     sleep 10
     echoInfo

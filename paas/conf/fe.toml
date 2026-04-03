@@ -1,0 +1,37 @@
+
+##################################################
+#                                                #
+#                  Bitalos-FE                    #
+#                                                #
+##################################################
+ncpu = 2
+env = "demo"
+
+white_users = []
+
+check_host = ""
+check_refer = ""
+grafana_url = ""
+paas_domain = "http://127.0.0.1"
+main_url = "http://127.0.0.1/#/dashboard"
+
+db = "database"
+sqlite = ""
+cloud = "txcloud"
+[database]
+username = ""
+password = ""
+hostport = ""
+dbname = ""
+
+[ips]
+appId = ""
+secret = ""
+
+[stored]
+txcloud = []
+ali = []
+baidu = []
+txzns = ""
+alizns = ""
+bdzns = ""

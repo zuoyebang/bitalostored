@@ -1,4 +1,5 @@
 import store from '../store'
+import Cookies from 'js-cookie'
 import {SET_BITALOSPROXY} from '@/store/types'
 import {getUToken} from '@/commons'
 

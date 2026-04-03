@@ -1,6 +1,6 @@
 import Vue from 'vue'
-import { getStoreList$ } from '@/api'
-import { map } from 'rxjs/operators'
+import {getStoreList$} from '@/api'
+import {map} from 'rxjs/operators'
 import LogDialog from '@/views/app/log-dialog'
 import LogView from '@/views/app/log-view'
 import Login from '@/views/Login'
@@ -9,17 +9,19 @@ const Main = Vue.extend({
   subscriptions() {
     return {
       navList: getStoreList$()
-        .pipe(map(({ data: d }) => d.data)),
+        .pipe(map(({data: d}) => d.data)),
     }
   },
   render() {
     return <v-app>
       {this.$route.name !== 'Login' && <v-navigation-drawer
         permanent={true}
-        app={true}
+        app={true} 
         width={200}
       >
-        <v-toolbar color="primary darken-1" dark={true} short={true}>Bitalosdashboard</v-toolbar>
+        <v-toolbar color="primary darken-1" dark={true} short={true}>
+          Bitalosdashboard
+        </v-toolbar>
         <v-list>
           <v-list-item to={'index'}>
             Home
@@ -44,7 +46,7 @@ const Main = Vue.extend({
               </v-list-group>)
           }
         </v-list>
-        <LogView />
+        <LogView/>
       </v-navigation-drawer>}
       {this.$route.name !== 'Login' && <v-app-bar
         app
@@ -54,16 +56,16 @@ const Main = Vue.extend({
         <v-spacer></v-spacer>
       </v-app-bar>}
       <v-main>
-        <router-view key={this.$route.path + new Date().getTime()} />
+        <router-view key={ this.$route.path + new Date().getTime() } />
       </v-main>
-      <LogDialog />
+      <LogDialog/>
     </v-app>
   },
 })
 
 export default Vue.extend({
   render() {
-    return this.$route.name !== 'Login' ? <Main /> : <Login />
+    return this.$route.name !== 'Login' ? <Main/> : <Login/>
   },
 })
 

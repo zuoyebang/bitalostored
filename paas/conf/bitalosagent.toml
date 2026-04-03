@@ -1,0 +1,26 @@
+serverAddress = "http://127.0.0.1/bitalospaas/"
+deployPath = "/home/homework/bitalos-paas/bitalos-data"
+agentPath = "/home/homework/bitalos-paas/bitalos-agent"
+proxyLogPath = "/home/homework/clog/bitalosproxy/"
+sqlitePath = "/home/homework/bitalos-paas/bitalos-agent/test.db"
+webPort = "8080"
+disableLogCollect = true
+
+[cos]
+ak = "{{.ak}}"
+sk = "{{.sk}}"
+url = "{{.cos.url}}"
+
+[db]
+server = "{{.db.host}}"
+port = "{{.db.port}}"
+username = "{{.db.username}}"
+password = "{{.db.password}}"
+database = "{{.db.database}}"
+
+[bsdb]
+server = "{{.bsdb.host}}"
+port = "{{.bsdb.port}}"
+username = "{{.bsdb.username}}"
+password = "{{.bsdb.password}}"
+database = "{{.bsdb.database}}"

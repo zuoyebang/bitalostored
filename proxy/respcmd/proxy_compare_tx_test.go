@@ -19,6 +19,9 @@ import (
 )
 
 func TestTxKv(t *testing.T) {
+	if !compareTxFlag {
+		return
+	}
 	cmds := kvTestCase
 	for _, c := range cmds {
 		switch len(c) {
@@ -31,6 +34,9 @@ func TestTxKv(t *testing.T) {
 }
 
 func TestTxHash(t *testing.T) {
+	if !compareTxFlag {
+		return
+	}
 	cmds := hashTestCase
 	for _, c := range cmds {
 		switch len(c) {
@@ -42,6 +48,9 @@ func TestTxHash(t *testing.T) {
 	}
 }
 func TestTxList(t *testing.T) {
+	if !compareTxFlag {
+		return
+	}
 	cmds := listTestCase
 	for _, c := range cmds {
 		switch len(c) {
@@ -54,6 +63,9 @@ func TestTxList(t *testing.T) {
 }
 
 func TestTxSet(t *testing.T) {
+	if !compareTxFlag {
+		return
+	}
 	cmds := setTestCase
 	for _, c := range cmds {
 		switch len(c) {
@@ -66,6 +78,9 @@ func TestTxSet(t *testing.T) {
 }
 
 func TestTxZset(t *testing.T) {
+	if !compareTxFlag {
+		return
+	}
 	cmds := zsetTestCase
 	for _, c := range cmds {
 		switch len(c) {

@@ -1,0 +1,36 @@
+
+##################################################
+#                                                #
+#                  Stored-Dashboard              #
+#                                                #
+##################################################
+coordinator_name = "database"
+coordinator_addr = "/home/homework/bitalosproxy"
+coordinator_auth = ""
+
+# Set Stored Product Name/Auth.
+product_name = "{{.TaskExt.ClusterName}}"
+product_auth = "{{.TaskExt.StoredAuth}}"
+
+# Set bind address for admin(rpc), tcp only.
+admin_addr = "0.0.0.0:{{.TaskExt.ServicePort}}"
+admin_model= "raft"
+paas_host = "127.0.0.1:1000"
+dh_refer = "http://127.0.0.1:1000/"
+area = "ch"
+env = "demo"
+cloud = "{{.TaskExt.CloudType}}"
+
+[database]
+username = ""
+password = ""
+hostport = ""
+dbname = ""
+
+[stored]
+txcloud = []
+ali = []
+baidu = []
+txzns = ""
+alizns = ""
+bdzns = ""

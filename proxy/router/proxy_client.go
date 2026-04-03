@@ -15,8 +15,10 @@
 package router
 
 import (
+	"errors"
 	"sync"
 
+	"github.com/zuoyebang/bitalostored/butils/unsafe2"
 	"github.com/zuoyebang/bitalostored/proxy/internal/config"
 	"github.com/zuoyebang/bitalostored/proxy/internal/errn"
 	"github.com/zuoyebang/bitalostored/proxy/internal/log"
@@ -31,14 +33,12 @@ type ProxyClient struct {
 	mu       sync.Mutex
 	readOnly bool
 	router   *Router
-	pconfig  *PclientConfig
 }
 
 func NewProxyClient(cfg *config.Config) *ProxyClient {
 	doOnce.Do(func() {
 		globalProxyClient = &ProxyClient{
 			router:   NewRouter(cfg),
-			pconfig:  newPclientConfig(),
 			readOnly: cfg.ReadOnlyProxy,
 		}
 	})
@@ -87,13 +87,6 @@ func (pc *ProxyClient) Slots() []*models.Slot {
 	return pc.router.GetSlots()
 }
 
-func (pc *ProxyClient) Pconfigs() []*models.Pconfig {
-	pc.mu.Lock()
-	defer pc.mu.Unlock()
-
-	return pc.pconfig.pconfigs()
-}
-
 func (pc *ProxyClient) FillSlot(slot *models.Slot) error {
 	pc.mu.Lock()
 	defer pc.mu.Unlock()
@@ -103,27 +96,6 @@ func (pc *ProxyClient) FillSlot(slot *models.Slot) error {
 	}
 
 	return nil
-}
-
-func (pc *ProxyClient) FillPconfigs(pconfigs []*models.Pconfig) error {
-	pc.mu.Lock()
-	defer pc.mu.Unlock()
-
-	for _, m := range pconfigs {
-		log.Infof("fill pconfig %s", string(m.Encode()))
-		if err := pc.pconfig.fillPconfig(m); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (pc *ProxyClient) CheckIsBlackKey(key string) bool {
-	return pc.pconfig.checkIsBlackKey(key)
-}
-
-func (pc *ProxyClient) CheckIsWhiteKey(key string) bool {
-	return pc.pconfig.checkIsWhiteKey(key)
 }
 
 func (pc *ProxyClient) FillSlots(slots []*models.Slot) error {
@@ -143,29 +115,100 @@ func (pc *ProxyClient) DoProbeNode() {
 	pc.router.probe.doCheck()
 }
 
-func (pc *ProxyClient) checkKeyIsProxyCache(key string) bool {
-	if pc.pconfig.checkIsBlackCache(key) {
-		return false
-	}
-	if pc.pconfig.checkIsWhiteCache(key) {
-		return true
-	}
-	return false
-}
+func (pc *ProxyClient) FillDks(dks []*models.DkItem) error {
+	pc.mu.Lock()
+	defer pc.mu.Unlock()
 
-func (pc *ProxyClient) checkKeysSaveCache(keys ...interface{}) (bool, []string) {
-	needCacheKey := make([]string, 0, len(keys))
-	for _, key := range keys {
-		if val, ok := key.(string); ok {
-			if pc.checkKeyIsProxyCache(val) {
-				needCacheKey = append(needCacheKey, val)
-			}
+	for _, d := range dks {
+		if len(d.Key) <= 0 {
+			continue
+		}
+		_, shardNum, _, _, err := pc.GetDkInfo(d.Key)
+		if err != nil {
+			return err
+		}
+		if shardNum > 0 {
+			_ = pc.SetSimpleCacheWithExpire(d.Key, shardNum, DkExpireTime)
+		} else {
+			pc.RemoveSimpleCache(d.Key)
 		}
 	}
+	return nil
+}
 
-	if len(needCacheKey) <= 0 {
-		return false, nil
+func (pc *ProxyClient) CreateDk(dk *models.DkItem) error {
+	pc.mu.Lock()
+	defer pc.mu.Unlock()
+
+	if dk.ShardNum <= 0 || len(dk.Key) <= 0 {
+		return errors.New("shardnum or key error")
+	}
+	if !dk.CheckDt() {
+		return errors.New("dt error")
+	}
+	sn, _ := pc.GetSimpleCache(dk.Key)
+	if sn != nil {
+		return nil
+	}
+	return pc.CreateDkToServer(unsafe2.ByteSlice(dk.Key), dk.ShardNum, dk.DataType)
+}
+
+func (pc *ProxyClient) CreateDkToServer(key []byte, shardNum uint32, dataType string) error {
+	var j uint32
+	groupKeys := make([]interface{}, 0, shardNum)
+	for j = 0; j < shardNum; j++ {
+		k := EncodeDkGroupKey(key, j)
+		groupKeys = append(groupKeys, k)
+	}
+	res, _ := pc.DkCreateShard(dataType, groupKeys...)
+	r := res.([]interface{})
+	for _, rt := range r {
+		switch rt.(type) {
+		case error:
+			pc.Del(nil, groupKeys...)
+			return rt.(error)
+		}
+	}
+	_, err := pc.DkCreate(key, shardNum, dataType)
+	if err != nil {
+		pc.Del(nil, groupKeys...)
+		return err
+	}
+	return nil
+}
+
+func (pc *ProxyClient) RemoveDk(key string) error {
+	pc.mu.Lock()
+	defer pc.mu.Unlock()
+
+	if len(key) <= 0 {
+		return errors.New("key error")
 	}
 
-	return true, needCacheKey
+	return pc.RemoveDkToServer(key)
+}
+
+func (pc *ProxyClient) RemoveDkToServer(key string) error {
+	cacheSn, err := pc.GetDkShardNum(key)
+	if err != nil {
+		return err
+	}
+	if cacheSn <= 0 {
+		return nil
+	}
+	var j uint32
+	byteKey := unsafe2.ByteSlice(key)
+	groupKeys := make([]interface{}, 0, cacheSn)
+	for j = 0; j < cacheSn; j++ {
+		k := EncodeDkGroupKey(byteKey, j)
+		groupKeys = append(groupKeys, k)
+	}
+	res, _ := pc.Del(nil, groupKeys...)
+	n := res.(int64)
+	if n <= 0 {
+		return nil
+	}
+	pc.RemoveSimpleCache(key)
+	res, _ = pc.Del(nil, key)
+	return nil
 }

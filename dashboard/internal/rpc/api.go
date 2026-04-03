@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net"
 	"net/http"
 	"net/url"
@@ -27,6 +28,7 @@ import (
 
 	"github.com/zuoyebang/bitalostored/dashboard/internal/errors"
 	"github.com/zuoyebang/bitalostored/dashboard/internal/log"
+	"github.com/zuoyebang/bitalostored/dashboard/internal/sync2/atomic2"
 	"github.com/zuoyebang/bitalostored/dashboard/internal/trace"
 )
 
@@ -53,9 +55,15 @@ func NewApiResByData(status int, data interface{}, errmsg *RemoteError) *ApiRes 
 var client *http.Client
 
 func init() {
+	var dials atomic2.Int64
 	tr := &http.Transport{}
 	tr.Dial = func(network, addr string) (net.Conn, error) {
-		return net.DialTimeout(network, addr, time.Second)
+		c, err := net.DialTimeout(network, addr, time.Second)
+		if err == nil {
+			log.Debugf("rpc: dial new connection to [%d] %s - %s",
+				dials.Incr()-1, network, addr)
+		}
+		return c, err
 	}
 	client = &http.Client{
 		Transport: tr,
@@ -99,7 +107,7 @@ func NewRemoteError(err error) *RemoteError {
 }
 
 func responseBodyAsBytes(rsp *http.Response) ([]byte, error) {
-	b, err := io.ReadAll(rsp.Body)
+	b, err := ioutil.ReadAll(rsp.Body)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -150,7 +158,7 @@ func apiRequestJson(method string, url string, args, reply interface{}) error {
 		return errors.Trace(err)
 	}
 	defer func() {
-		io.Copy(io.Discard, rsp.Body)
+		io.Copy(ioutil.Discard, rsp.Body)
 		rsp.Body.Close()
 		if method == "PUT" {
 			log.Infof("call rpc [%s] %s in %v", method, url, time.Since(start))
@@ -206,6 +214,16 @@ func ApiResponseError(err error) (int, string) {
 		return 800, ""
 	} else {
 		return 800, string(b)
+	}
+}
+
+func ApiResponseLogin(loginUrl string) (int, string) {
+	apiRes := NewApiResByData(30003, loginUrl, NewRemoteError(nil))
+	b, err := apiMarshalJson(apiRes)
+	if err != nil {
+		return 30003, ""
+	} else {
+		return 30003, string(b)
 	}
 }
 

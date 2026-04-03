@@ -1,5 +1,9 @@
 # fe-vue
 
+## Project compile
+
+yarn build
+
 ## Project setup
 ```
 npm install

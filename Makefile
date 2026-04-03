@@ -38,7 +38,7 @@ bitalosfe: bitalos-deps
 	@cp -rf dashboard/cmd/fe-vue/dist bin/
 
 bitalosproxy: bitalos-deps
-	CGO_ENABLED=1 $(CGOLDFLAGS) $(GOBUILD) -o bin/bitalosproxy ./proxy/cmd
+	$(GOBUILD) -o bin/bitalosproxy ./proxy/cmd
 
 bitalostored: bitalos-deps
 	CGO_ENABLED=1 $(DEBUG) $(EXPERIMENT) $(CGOLDFLAGS) $(GOBUILD) -o bin/bitalostored ./stored/cmd

@@ -1,6 +1,6 @@
 module github.com/zuoyebang/bitalostored
 
-go 1.25
+go 1.25.0
 
 require (
 	github.com/BurntSushi/toml v1.3.2
@@ -10,7 +10,7 @@ require (
 	github.com/emirpasic/gods v1.12.0
 	github.com/go-martini/martini v0.0.0-20170121215854-22fa46961aab
 	github.com/go-sql-driver/mysql v1.7.0
-	github.com/goccy/go-json v0.10.2
+	github.com/goccy/go-json v0.10.5
 	github.com/gomodule/redigo v2.0.0+incompatible
 	github.com/json-iterator/go v1.1.12
 	github.com/lestrrat-go/file-rotatelogs v2.4.0+incompatible
@@ -23,15 +23,15 @@ require (
 	github.com/shopspring/decimal v1.3.1
 	github.com/sony/gobreaker v0.5.0
 	github.com/spf13/pflag v1.0.5
-	github.com/stretchr/testify v1.10.0
+	github.com/stretchr/testify v1.11.1
 	github.com/yuin/gopher-lua v1.1.1
 	github.com/zuoyebang/bitalosdb/v2 v2.0.0
 	github.com/zuoyebang/bitalosraft v1.0.0
 	go.uber.org/atomic v1.7.0
 	go.uber.org/zap v1.27.0
-	golang.org/x/net v0.38.0
-	golang.org/x/sys v0.31.0
-	google.golang.org/protobuf v1.33.0
+	golang.org/x/net v0.51.0
+	golang.org/x/sys v0.41.0
+	google.golang.org/protobuf v1.36.10
 	gorm.io/driver/mysql v1.5.2
 	gorm.io/driver/sqlite v1.5.4
 	gorm.io/gorm v1.25.6
@@ -84,8 +84,8 @@ require (
 	github.com/valyala/histogram v1.0.1 // indirect
 	github.com/zuoyebang/bitaloslog v1.0.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	golang.org/x/sync v0.12.0 // indirect
-	golang.org/x/text v0.23.0 // indirect
+	golang.org/x/sync v0.19.0 // indirect
+	golang.org/x/text v0.34.0 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

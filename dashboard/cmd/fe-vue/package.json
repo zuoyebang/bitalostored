@@ -2,6 +2,17 @@
   "name": "fe-vue",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=18"
+  },
+  "resolutions": {
+    "@achrinza/node-ipc": "9.2.10",
+    "vue-template-compiler": "2.6.14"
+  },
+  "overrides": {
+    "@achrinza/node-ipc": "9.2.10",
+    "vue-template-compiler": "2.6.14"
+  },
   "scripts": {
     "serve": "vue-cli-service serve",
     "build": "vue-cli-service build",
@@ -12,6 +23,7 @@
     "axios": "0.22.0",
     "chart.js": "2.9.4",
     "core-js": "^3.6.5",
+    "echarts": "^4.8.0",
     "element-ui": "2.13.0",
     "js-cookie": "^2.2.1",
     "moment": "2.29.4",
@@ -24,6 +36,7 @@
     "vue-property-decorator": "^8.4.2",
     "vue-router": "3.2.0",
     "vue-rx": "^6.2.0",
+    "vue-template-compiler": "2.6.14",
     "vuetify": "2.6.10",
     "vuex": "^3.4.0",
     "vuex-class": "^0.3.2"
@@ -42,7 +55,6 @@
     "eslint-plugin-vue": "^6.2.2",
     "sass": "^1.26.5",
     "sass-loader": "^8.0.2",
-    "typescript": "~3.9.3",
-    "vue-template-compiler": "^2.6.14"
+    "typescript": "~3.9.3"
   }
 }

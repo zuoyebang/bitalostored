@@ -1,0 +1,82 @@
+
+##################################################
+#                                                #
+#                  Stored-Proxy                   #
+#                                                #
+##################################################
+
+# Set Stored Product Name/Auth.
+product_name = "{{.TaskExt.ClusterName}}"
+product_auth = "{{.TaskExt.StoredAuth}}"
+
+# set storedproxy auth
+proxy_auth_enabled = false
+proxy_auth_password = "bitalosproxy.clustername"
+proxy_auth_admin = "bitalosproxy.clustername.admin"
+
+dashboard_proto_type = "http"
+dashboard_username = ""
+dashboard_password = ""
+
+# Set bind address for admin(rpc), tcp only.
+admin_addr = "0.0.0.0:{{.TaskExt.ClusterPort}}"
+
+# Set bind address for proxy, proto_type can be "tcp", "tcp4", "tcp6", "unix" or "unixpacket".
+proto_type = "tcp4"
+proxy_addr = "0.0.0.0:{{.TaskExt.ServicePort}}"
+
+# Set model and cloudtype of proxy. sentinel or raft
+proxy_model     = "raft"
+proxy_cloudtype = "{{.TaskExt.CloudType}}"
+
+# Set max number of alive sessions.
+proxy_max_clients = 3600
+
+max_procs = 4
+net_event_loop_num = 8
+conn_idle_timeout = "900s"
+
+# Set conn buffer, conn keepalive time
+conn_read_buffersize = "4kb"
+conn_write_buffersize = "4kb"
+
+# pprof switch and address
+pprof_switch = 0
+pprof_address = ":8313"
+
+# Set log report , proxy will report metrics to log.
+metrics_report_log_switch = 1
+metrics_report_log_period = "5s"
+metrics_reset_cycle = 2
+
+breaker_stop_timeout = "200ms"
+breaker_open_fail_rate = 0.05
+breaker_restore_request = 50
+
+[log]
+is_debug = false
+rotation_time = "Hourly"
+log_file = "/home/homework/clog/bitalosproxy/{{.TaskExt.ClusterName}}/bitalos-proxy.log"
+stats_log_file = "/home/homework/clog/bitalosproxy/{{.TaskExt.ClusterName}}/bitalos-proxy-stats.log"
+access_log = false
+access_log_file = "/home/homework/clog/bitalosproxy/{{.TaskExt.ClusterName}}/bitalos.access.log"
+slow_log = true
+slow_log_cost = "40ms"
+slow_log_file = "/home/homework/clog/bitalosproxy/{{.TaskExt.ClusterName}}/proxy.slow.log"
+
+[redis_default_conf]
+max_idle = 50
+max_active = 50
+idle_timeout = "900s"
+conn_lifetime = "0s"
+password = ""
+database = 0
+conn_timeout = "50ms"
+read_timeout = "500ms"
+write_timeout = "500ms"
+
+# client session deadline
+[dynamic_deadline]
+# the ratio of alive client to max client
+client_ratio_threshold = [0,30,60,80,90]
+deadline_threshold = ["360s","180s","60s","6s","2s"]

@@ -15,6 +15,7 @@ proxy/internal/utils/version.go
 stored/internal/utils/version.go
 dashboard/internal/utils/version.go
 stored/engine/bitsdb/bitsdb/test_cores
+paas/agent/internal/utils/version.go
 bitalostored-data
 bin
 output

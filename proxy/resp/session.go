@@ -261,7 +261,9 @@ func (s *Session) Perform(startUnixNano int64) error {
 			s.RespWriter.WriteBulk(nil)
 			err = nil
 		} else {
-			s.Stats.IncrOpFails(s.Cmd, err)
+			if err != NotFoundErr {
+				s.Stats.IncrOpFails(s.Cmd, err)
+			}
 			s.RespWriter.WriteError(err)
 		}
 	}
